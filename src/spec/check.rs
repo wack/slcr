@@ -313,6 +313,10 @@ fn dangling_references(
 
 /// `refines` is acyclic, and `dependsOn` is acyclic. Only Requirements have
 /// outgoing edges, so only they can lie on a cycle.
+///
+/// Reports one cycle for each strongly connected component that has one, so
+/// independent cycles are all reported at once, while the many cycles that
+/// share nodes in a single tangle are reported once.
 fn cycles(requirements: &[&Requirement]) -> Vec<Violation> {
     let refines = edges(requirements, |requirement| requirement.refines().clone());
     let depends_on = edges(requirements, |requirement| {
@@ -331,8 +335,10 @@ fn cycles(requirements: &[&Requirement]) -> Vec<Violation> {
         (Relation::DependsOn, depends_on),
     ]
     .into_iter()
-    .filter_map(|(relation, edges)| {
-        find_cycle(&edges).map(|path| Violation::Cycle { relation, path })
+    .flat_map(|(relation, edges)| {
+        find_cycles(&edges)
+            .into_iter()
+            .map(move |path| Violation::Cycle { relation, path })
     })
     .collect()
 }
@@ -358,57 +364,129 @@ fn edges(
     edges
 }
 
-/// Find a cycle in a directed graph, or `None` if it is acyclic.
-///
-/// Repeatedly removes nodes with no outgoing edges. Every node left after
-/// that has an edge to another node left, so walking those edges from any
-/// of them must revisit a node, closing a cycle. Iterative, so a long chain
-/// can't overflow the stack.
-fn find_cycle(edges: &BTreeMap<RequirementId, Vec<RequirementId>>) -> Option<Vec<RequirementId>> {
-    let mut predecessors: HashMap<RequirementId, Vec<RequirementId>> = HashMap::new();
-    let mut out_degree: HashMap<RequirementId, usize> = HashMap::new();
-    for (source, targets) in edges {
-        out_degree.insert(*source, targets.len());
-        for target in targets {
-            predecessors.entry(*target).or_default().push(*source);
-        }
-    }
-
-    let mut sinks: Vec<_> = out_degree
-        .iter()
-        .filter(|(_, degree)| **degree == 0)
-        .map(|(node, _)| *node)
+/// Find one cycle in each strongly connected component of a directed graph
+/// that has one, ordered by the smallest ID in the component. An acyclic
+/// graph has none.
+fn find_cycles(edges: &BTreeMap<RequirementId, Vec<RequirementId>>) -> Vec<Vec<RequirementId>> {
+    // Number the nodes in ID order, so components and cycles come out in a
+    // deterministic order.
+    let nodes: Vec<RequirementId> = edges.keys().copied().collect();
+    let numbers: HashMap<RequirementId, usize> =
+        nodes.iter().enumerate().map(|(n, id)| (*id, n)).collect();
+    let successors: Vec<Vec<usize>> = edges
+        .values()
+        .map(|targets| targets.iter().map(|target| numbers[target]).collect())
         .collect();
-    while let Some(sink) = sinks.pop() {
-        out_degree.remove(&sink);
-        for predecessor in predecessors.get(&sink).into_iter().flatten() {
-            if let Some(degree) = out_degree.get_mut(predecessor) {
-                *degree -= 1;
-                if *degree == 0 {
-                    sinks.push(*predecessor);
-                }
-            }
-        }
-    }
 
-    // Start from the smallest remaining ID so the report is deterministic.
-    let start = edges.keys().find(|node| out_degree.contains_key(node))?;
-    let mut path = vec![*start];
-    let mut position = HashMap::from([(*start, 0)]);
-    let mut node = *start;
+    let mut components = strongly_connected_components(&successors);
+    components.retain(|component| {
+        component.len() > 1 || successors[component[0]].contains(&component[0])
+    });
+    components.sort_by_key(|component| component.iter().min().copied());
+    components
+        .iter()
+        .map(|component| {
+            cycle_within(component, &successors)
+                .into_iter()
+                .map(|node| nodes[node])
+                .collect()
+        })
+        .collect()
+}
+
+/// A cycle among the nodes of a strongly connected component that has one,
+/// starting and ending with the same node.
+///
+/// Every node in such a component has an edge to another node in it, so
+/// walking those edges from its smallest node must revisit a node, closing
+/// a cycle.
+fn cycle_within(component: &[usize], successors: &[Vec<usize>]) -> Vec<usize> {
+    let members: HashSet<usize> = component.iter().copied().collect();
+    let start = *component.iter().min().expect("components are non-empty");
+    let mut path = vec![start];
+    let mut position = HashMap::from([(start, 0)]);
+    let mut node = start;
     loop {
-        node = *edges[&node]
+        node = *successors[node]
             .iter()
-            .find(|next| out_degree.contains_key(next))
-            .expect("every remaining node has an edge to another remaining node");
+            .find(|next| members.contains(next))
+            .expect("every node in the component has an edge within it");
         if let Some(&index) = position.get(&node) {
             let mut cycle = path.split_off(index);
             cycle.push(node);
-            return Some(cycle);
+            return cycle;
         }
         position.insert(node, path.len());
         path.push(node);
     }
+}
+
+/// The strongly connected components of a directed graph whose nodes are
+/// `0..successors.len()`, by Tarjan's algorithm.
+///
+/// Iterative rather than recursive, so a long chain can't overflow the
+/// stack.
+fn strongly_connected_components(successors: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    const UNVISITED: usize = usize::MAX;
+    let count = successors.len();
+    // The order in which each node was first visited.
+    let mut order = vec![UNVISITED; count];
+    // The earliest-visited node reachable from each node's subtree that is
+    // still on the stack.
+    let mut low = vec![0; count];
+    let mut on_stack = vec![false; count];
+    let mut stack = Vec::new();
+    let mut components = Vec::new();
+    let mut visited = 0;
+
+    for root in 0..count {
+        if order[root] != UNVISITED {
+            continue;
+        }
+        // Each frame is a node and how many of its edges are explored.
+        let mut frames = vec![(root, 0)];
+        order[root] = visited;
+        low[root] = visited;
+        visited += 1;
+        stack.push(root);
+        on_stack[root] = true;
+
+        while let Some((node, explored)) = frames.last_mut() {
+            let node = *node;
+            if let Some(&next) = successors[node].get(*explored) {
+                *explored += 1;
+                if order[next] == UNVISITED {
+                    order[next] = visited;
+                    low[next] = visited;
+                    visited += 1;
+                    stack.push(next);
+                    on_stack[next] = true;
+                    frames.push((next, 0));
+                } else if on_stack[next] {
+                    low[node] = low[node].min(order[next]);
+                }
+                continue;
+            }
+
+            frames.pop();
+            if let Some(&(parent, _)) = frames.last() {
+                low[parent] = low[parent].min(low[node]);
+            }
+            if low[node] == order[node] {
+                let mut component = Vec::new();
+                loop {
+                    let member = stack.pop().expect("the node is on the stack");
+                    on_stack[member] = false;
+                    component.push(member);
+                    if member == node {
+                        break;
+                    }
+                }
+                components.push(component);
+            }
+        }
+    }
+    components
 }
 
 /// The requirements that refine each requirement, in document order.
@@ -754,6 +832,103 @@ mod tests {
                 },
             ]
         );
+    }
+
+    /// Requirements REQ-001 to REQ-`count`, where each `(from, to)` pair is
+    /// a `dependsOn` edge.
+    fn depending(count: u32, pairs: &[(u32, u32)]) -> Value {
+        let mut targets: HashMap<u32, Vec<String>> = HashMap::new();
+        for (from, to) in pairs {
+            targets
+                .entry(*from)
+                .or_default()
+                .push(format!("REQ-{to:03}"));
+        }
+        let requirements = (1..=count)
+            .map(|number| {
+                let mut requirement = req(&format!("REQ-{number:03}"), "It MUST work.", "MUST");
+                if let Some(targets) = targets.remove(&number) {
+                    requirement["dependsOn"] = json!(targets);
+                }
+                requirement
+            })
+            .collect();
+        graph(requirements, vec![])
+    }
+
+    fn depends_on_cycle(path: &[u32]) -> Violation {
+        Violation::Cycle {
+            relation: Relation::DependsOn,
+            path: path.iter().copied().map(rid).collect(),
+        }
+    }
+
+    #[test]
+    fn independent_cycles_are_all_reported() {
+        let value = depending(5, &[(4, 5), (5, 4), (1, 2), (2, 1), (3, 1)]);
+        assert_eq!(
+            violations(value),
+            [depends_on_cycle(&[1, 2, 1]), depends_on_cycle(&[4, 5, 4])]
+        );
+    }
+
+    #[test]
+    fn cycles_sharing_a_node_are_reported_once() {
+        // A figure eight: REQ-001 ⇄ REQ-002 and REQ-002 ⇄ REQ-003.
+        let value = depending(3, &[(1, 2), (2, 1), (2, 3), (3, 2)]);
+        assert_eq!(violations(value), [depends_on_cycle(&[1, 2, 1])]);
+    }
+
+    #[test]
+    fn a_cycle_need_not_pass_through_the_smallest_node_of_its_tangle() {
+        // REQ-001 → REQ-002 → REQ-003 → REQ-002, and REQ-003 → REQ-001.
+        let value = depending(3, &[(1, 2), (2, 3), (3, 2), (3, 1)]);
+        assert_eq!(violations(value), [depends_on_cycle(&[2, 3, 2])]);
+    }
+
+    #[test]
+    fn self_loops_and_longer_cycles_are_reported_side_by_side() {
+        let value = depending(4, &[(4, 4), (1, 3), (3, 1), (2, 2)]);
+        assert_eq!(
+            violations(value),
+            [
+                depends_on_cycle(&[1, 3, 1]),
+                depends_on_cycle(&[2, 2]),
+                depends_on_cycle(&[4, 4]),
+            ]
+        );
+    }
+
+    #[test]
+    fn long_cycles_do_not_overflow_the_stack() {
+        let count = 20_000;
+        let ring: Vec<(u32, u32)> = (1..=count)
+            .map(|number| (number, number % count + 1))
+            .collect();
+        let found = violations(depending(count, &ring));
+        let [Violation::Cycle { path, .. }] = found.as_slice() else {
+            panic!("expected one cycle, found {found:?}");
+        };
+        assert_eq!(path.len(), count as usize + 1);
+        assert_eq!(path.first(), Some(&rid(1)));
+        assert_eq!(path.last(), Some(&rid(1)));
+    }
+
+    #[test]
+    fn strongly_connected_components_partition_the_graph() {
+        // 0 → 1 → 2 → 0 is one component; 3 → 4 are singletons; 5 loops.
+        let successors = vec![vec![1], vec![2], vec![0, 3], vec![4], vec![], vec![5]];
+        let mut components = strongly_connected_components(&successors);
+        for component in &mut components {
+            component.sort_unstable();
+        }
+        components.sort();
+        assert_eq!(components, [vec![0, 1, 2], vec![3], vec![4], vec![5]]);
+    }
+
+    #[test]
+    fn an_empty_graph_has_no_cycles() {
+        assert!(find_cycles(&BTreeMap::new()).is_empty());
     }
 
     #[test]
