@@ -5,8 +5,6 @@ cargo build --release          # Production build
 cargo make check-format        # Format check (CI runs this)
 cargo make clippy              # Lint — canonical blocking gate (== CI and bacon)
 cargo make test                # Run all tests (== CI's nextest run)
-cargo make clippy-jev          # Lint the jev decision engine (== clippy, + --features jev)
-cargo make test-jev            # Run all tests with the jev feature enabled
 ```
 
 Always prefer `cargo make <task>` over invoking `cargo clippy`/`cargo test` directly.
