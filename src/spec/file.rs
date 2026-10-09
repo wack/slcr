@@ -6,25 +6,23 @@ use thiserror::Error;
 use super::graph::SpecGraph;
 use crate::fs::{File, FileSystem};
 
-/// A specification graph stored at a caller-chosen path. The path's
-/// extension selects the format: YAML (`.yaml` or `.yml`), JSON (`.json`),
-/// or TOML (`.toml`).
+/// An SLCR requirements file: a specification graph stored at a
+/// caller-chosen path. The path's extension selects the format: YAML
+/// (`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SpecGraphFile {
+pub(crate) struct RequirementsFile {
     path: PathBuf,
 }
 
 /// The error returned when a path's extension names no supported format.
 #[derive(Debug, Error, Diagnostic)]
 #[error("{} is not a YAML, JSON, or TOML file", .path.display())]
-#[diagnostic(help(
-    "a specification graph's file name must end in `.yaml`, `.yml`, `.json`, or `.toml`"
-))]
+#[diagnostic(help("a requirements file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`"))]
 pub struct UnsupportedFormat {
     path: PathBuf,
 }
 
-impl SpecGraphFile {
+impl RequirementsFile {
     /// The extensions [FileSystem] knows how to read and write.
     const EXTENSIONS: [&str; 4] = ["yaml", "yml", "json", "toml"];
 
@@ -42,7 +40,7 @@ impl SpecGraphFile {
     }
 }
 
-impl File for SpecGraphFile {
+impl File for RequirementsFile {
     type Data = SpecGraph;
 
     fn extension(&self) -> &str {
@@ -82,7 +80,7 @@ mod tests {
     fn load(jail: &mut Jail, name: &str, contents: &str) -> Result<SpecGraph> {
         jail.create_file(name, contents).unwrap();
         let fs = FileSystem::new().unwrap();
-        fs.load_file(SpecGraphFile::new(name).unwrap())
+        fs.load_file(RequirementsFile::new(name).unwrap())
     }
 
     #[test]
@@ -95,7 +93,7 @@ mod tests {
             ("todo-api.spec.json", "json"),
             ("nested/dir/spec.toml", "toml"),
         ] {
-            let file = SpecGraphFile::new(name).unwrap();
+            let file = RequirementsFile::new(name).unwrap();
             assert_eq!(file.extension(), extension, "{name}");
         }
     }
@@ -110,7 +108,7 @@ mod tests {
             ".json",
             "spec.",
         ] {
-            let err = SpecGraphFile::new(name).unwrap_err();
+            let err = RequirementsFile::new(name).unwrap_err();
             assert_eq!(
                 err.to_string(),
                 format!("{name} is not a YAML, JSON, or TOML file")
@@ -122,7 +120,7 @@ mod tests {
     fn the_path_is_returned_as_given() {
         Jail::expect_with(|_| {
             let fs = FileSystem::new().unwrap();
-            let file = SpecGraphFile::new("specs/todo-api.yaml").unwrap();
+            let file = RequirementsFile::new("specs/todo-api.yaml").unwrap();
             assert_eq!(
                 file.path(&fs).unwrap(),
                 PathBuf::from("specs/todo-api.yaml")
@@ -169,7 +167,7 @@ mod tests {
         Jail::expect_with(|_| {
             let fs = FileSystem::new().unwrap();
             for name in ["out.json", "out.yaml", "out.yml", "out.toml"] {
-                let file = SpecGraphFile::new(name).unwrap();
+                let file = RequirementsFile::new(name).unwrap();
                 fs.save_file(&file, &canon()).unwrap();
                 assert_eq!(fs.load_file(file).unwrap(), canon(), "{name}");
             }
@@ -181,7 +179,7 @@ mod tests {
     fn saved_json_is_canonical() {
         Jail::expect_with(|jail| {
             let fs = FileSystem::new().unwrap();
-            fs.save_file(&SpecGraphFile::new("out.json").unwrap(), &canon())
+            fs.save_file(&RequirementsFile::new("out.json").unwrap(), &canon())
                 .unwrap();
             let saved = std::fs::read_to_string(jail.directory().join("out.json")).unwrap();
             let saved: Value = serde_json::from_str(&saved).unwrap();
@@ -232,7 +230,7 @@ mod tests {
         Jail::expect_with(|_| {
             let fs = FileSystem::new().unwrap();
             assert!(
-                fs.load_file(SpecGraphFile::new("absent.yaml").unwrap())
+                fs.load_file(RequirementsFile::new("absent.yaml").unwrap())
                     .is_err()
             );
             Ok(())
