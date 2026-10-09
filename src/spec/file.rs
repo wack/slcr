@@ -3,7 +3,7 @@ use std::{ffi::OsStr, path::PathBuf};
 use miette::{Diagnostic, Result};
 use thiserror::Error;
 
-use super::graph::SpecGraph;
+use super::graph::SlcrRequirementsDocument;
 use crate::fs::{File, FileSystem};
 
 /// An SLCR requirements file: a specification graph stored at a
@@ -41,7 +41,7 @@ impl RequirementsFile {
 }
 
 impl File for RequirementsFile {
-    type Data = SpecGraph;
+    type Data = SlcrRequirementsDocument;
 
     fn extension(&self) -> &str {
         // `new` only accepts paths with a supported, UTF-8 extension.
@@ -72,12 +72,12 @@ mod tests {
     const TODO_API_YAML: &str = include_str!("../../tests/fixtures/todo-api.spec.yaml");
     const TODO_API_TOML: &str = include_str!("../../tests/fixtures/todo-api.spec.toml");
 
-    fn canon() -> SpecGraph {
+    fn canon() -> SlcrRequirementsDocument {
         serde_json::from_str(TODO_API_JSON).unwrap()
     }
 
     /// Write `contents` to `name` in the jail and load it as a graph.
-    fn load(jail: &mut Jail, name: &str, contents: &str) -> Result<SpecGraph> {
+    fn load(jail: &mut Jail, name: &str, contents: &str) -> Result<SlcrRequirementsDocument> {
         jail.create_file(name, contents).unwrap();
         let fs = FileSystem::new().unwrap();
         fs.load_file(RequirementsFile::new(name).unwrap())
