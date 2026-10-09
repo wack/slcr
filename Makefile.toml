@@ -1,0 +1,130 @@
+[config]
+default_to_workspace = false
+
+[env]
+CARGO_MAKE_COVERAGE_PROVIDER = "llvm-cov"
+CARGO_MAKE_CARGO_BUILD_TEST_FLAGS = ""
+# This is the directory where we generate the CLI's reference
+# documentation.
+CLI_REFERENCE_DIR = "target/debug/"
+# This is the name of the file containing the CLI's reference
+# documentation.
+CLI_REFERENCE_FILE_NAME = "reference.md"
+
+[env.development]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+
+[tasks.dev-test-flow]
+dependencies = [
+  "pre-build",
+  "format-flow",
+  "clippy-flow",
+  "build",
+  "post-build",
+  "pre-docs",
+  "docs",
+  "post-docs",
+  "test-flow",
+]
+
+# Canonical clippy command — the single source of truth shared by CI
+# (ci-flow -> clippy-flow) and the bacon clippy job. Overrides cargo-make's
+# built-in `clippy` task so both paths run the IDENTICAL command. `-- -D warnings`
+# makes any clippy or rustc warning fail both CI and the bacon monitor, so a
+# clean monitor run predicts a clean CI clippy run exactly. `workspace = false`
+# is explicit (the command iterates the workspace itself via `--workspace`).
+[tasks.clippy]
+description = "Canonical clippy command — shared by CI (ci-flow) and bacon."
+category = "Development"
+workspace = false
+command = "cargo"
+args = [
+  "clippy",
+  "--all-targets",
+  "--workspace",
+  "--locked",
+  "--",
+  "-D",
+  "warnings",
+]
+
+[tasks.ci-flow]
+dependencies = [
+  "pre-ci-flow",
+  "print-env-flow",
+  "pre-build",
+  "check-format-flow",
+  "clippy-flow",
+  "build",
+  "post-build",
+  "pre-docs",
+  "docs",
+  "post-docs",
+  "test-flow",
+  "coverage-flow",
+  "post-ci-flow",
+]
+
+[tasks.test]
+workspace = true
+description = "Run our test suite"
+command = "cargo"
+args = [
+  "nextest",
+  "run",
+  "--locked",
+  "@@remove-empty(CARGO_MAKE_CARGO_VERBOSE_FLAGS)",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+]
+
+[tasks.help]
+command = "cargo"
+description = "List help text for the slcr executable"
+category = "Development"
+args = [
+  "run",
+  "@@remove-empty(CARGO_MAKE_CARGO_VERBOSE_FLAGS)",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+  "--",
+  "--help",
+]
+
+[tasks.fmt]
+workspace = true
+alias = "format"
+
+[tasks.check-format]
+workspace = true
+
+[tasks.wc]
+description = "Calculate the LoC in src."
+category = "Development"
+command = "tokei"
+args = ["."]
+
+[tasks.gen-cli-reference]
+description = "Generate the CLI's reference documentation in Markdown format"
+category = "Development"
+script_runner = "@shell"
+script = '''
+  mkdir -p $CLI_REFERENCE_DIR || true
+  cargo run --bin mkdown-docs --features=markdown > $CLI_REFERENCE_DIR/$CLI_REFERENCE_FILE_NAME
+'''
+
+[tasks.bacon]
+description = "Watch tests and rerun on file change."
+category = "Development"
+command = "bacon"
+args = [
+  "nextest",
+  "--",
+  "--workspace",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+]
+
+[tasks.monitor]
+description = "Run bacon headless for Claude Code's Monitor tool (no TTY, summary output on each change)."
+category = "Development"
+workspace = false
+command = "bacon"
+args = ["--headless", "--summary", "--no-help-line"]
