@@ -2,7 +2,12 @@ use directories::ProjectDirs;
 use miette::{Diagnostic, IntoDiagnostic, Result, miette};
 use thiserror::Error;
 
-use std::{io::Write, path::PathBuf};
+use std::{
+    fmt::Display,
+    fs::OpenOptions,
+    io::{ErrorKind, Write},
+    path::PathBuf,
+};
 
 pub(crate) use file::File;
 // Re-exported so modules outside of `fs` can declare their own `StaticFile`
@@ -38,6 +43,41 @@ pub struct ReadError {
     path: PathBuf,
     #[source]
     source: std::io::Error,
+}
+
+/// The error returned when a file to be created already exists.
+#[derive(Debug, Error, Diagnostic)]
+#[error("{} already exists", .path.display())]
+#[diagnostic(help("choose another path, or delete the existing file first"))]
+pub struct AlreadyExists {
+    path: PathBuf,
+}
+
+/// The error returned when a file can't be written.
+#[derive(Debug, Error)]
+#[error("could not write {}", .path.display())]
+pub struct WriteError {
+    path: PathBuf,
+    #[source]
+    source: std::io::Error,
+}
+
+impl Diagnostic for WriteError {
+    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        // A missing directory is the likeliest cause, and the one a user
+        // fixes by hand.
+        if self.source.kind() != ErrorKind::NotFound {
+            return None;
+        }
+        let directory = self.path.parent()?;
+        if directory.as_os_str().is_empty() {
+            return None;
+        }
+        Some(Box::new(format!(
+            "create the directory {} first",
+            directory.display()
+        )))
+    }
 }
 
 /// The format a file's extension names.
@@ -97,6 +137,37 @@ impl FileSystem {
         Ok(())
     }
 
+    /// Store the file at its canonical path, which must not exist yet.
+    ///
+    /// Unlike [FileSystem::save_file], this never overwrites anything:
+    /// whatever is at the path, even a dangling symlink, makes it fail with
+    /// [AlreadyExists]. The check and the creation are one atomic step, so
+    /// nothing can appear at the path in between.
+    pub(crate) fn create_file<F: File>(&self, file: &F, blob: &F::Data) -> Result<()> {
+        let format = format_of(file)?;
+        let path = file.path(self)?;
+        // Serialize first, so a failure can't leave an empty file behind.
+        let marshalled = format.serialize(blob)?;
+        let mut handle = match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(handle) => handle,
+            Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+                return Err(AlreadyExists { path }.into());
+            }
+            Err(source) => return Err(WriteError { path, source }.into()),
+        };
+        let written = handle
+            .write_all(marshalled.as_bytes())
+            .and_then(|()| handle.sync_all());
+        if let Err(source) = written {
+            drop(handle);
+            // Don't leave a partial file behind. The write error is the one
+            // worth reporting, so a failure to clean up is ignored.
+            let _ = std::fs::remove_file(&path);
+            return Err(WriteError { path, source }.into());
+        }
+        Ok(())
+    }
+
     /// Returns the expected directory for this particular file type.
     fn dir(&self, typ: DirectoryType) -> Result<PathBuf> {
         match typ {
@@ -152,6 +223,7 @@ mod tests {
 
     use super::format::ParseError;
     use super::*;
+    use crate::terminal::render_plain;
     use figment::Jail;
     use serde::{Deserialize, Serialize};
 
@@ -399,8 +471,198 @@ mod tests {
         Jail::expect_with(|_| {
             let fs = FileSystem::new().unwrap();
             assert!(fs.save_file(&UnknownSettings, &sample()).is_err());
+            assert!(fs.create_file(&UnknownSettings, &sample()).is_err());
+            assert!(!std::path::Path::new("settings.ini").exists());
             assert!(fs.load_file(UnknownSettings).is_err());
             Ok(())
         });
+    }
+
+    /// A file of `T` at a caller-chosen path, whose extension names its
+    /// format.
+    struct At<T>(PathBuf, std::marker::PhantomData<T>);
+
+    fn at<T>(path: &str) -> At<T> {
+        At(PathBuf::from(path), std::marker::PhantomData)
+    }
+
+    impl<T: serde::de::DeserializeOwned + Serialize> File for At<T> {
+        type Data = T;
+
+        fn extension(&self) -> &str {
+            self.0.extension().unwrap().to_str().unwrap()
+        }
+
+        fn path(&self, _fs: &FileSystem) -> Result<PathBuf> {
+            Ok(self.0.clone())
+        }
+    }
+
+    /// Data that always fails to serialize.
+    #[derive(Debug, Deserialize)]
+    struct Unserializable;
+
+    impl Serialize for Unserializable {
+        fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+            Err(serde::ser::Error::custom("refused"))
+        }
+    }
+
+    #[test]
+    fn create_file_writes_a_new_file_in_its_format() {
+        Jail::expect_with(|jail| {
+            let fs = FileSystem::new().unwrap();
+            for (file, format) in [
+                (at::<Settings>("new.json"), Format::Json),
+                (at("new.yaml"), Format::Yaml),
+                (at("new.toml"), Format::Toml),
+            ] {
+                fs.create_file(&file, &sample()).unwrap();
+                let written = std::fs::read_to_string(jail.directory().join(&file.0)).unwrap();
+                assert_eq!(written, format.serialize(&sample()).unwrap(), "{format}");
+                assert_eq!(fs.load_file(file).unwrap(), sample(), "{format}");
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn create_file_never_overwrites_a_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("settings.json", "keep me")?;
+            let fs = FileSystem::new().unwrap();
+            let err = fs.create_file(&JsonSettings, &sample()).unwrap_err();
+            let exists = err.downcast_ref::<AlreadyExists>().expect("already exists");
+            assert!(exists.path.ends_with("settings.json"), "{err}");
+            let contents = std::fs::read_to_string(jail.directory().join("settings.json")).unwrap();
+            assert_eq!(contents, "keep me");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn create_file_fails_the_second_time() {
+        Jail::expect_with(|_| {
+            let fs = FileSystem::new().unwrap();
+            fs.create_file(&YamlSettings, &sample()).unwrap();
+            let err = fs.create_file(&YamlSettings, &sample()).unwrap_err();
+            assert!(err.downcast_ref::<AlreadyExists>().is_some(), "{err}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn create_file_never_replaces_a_directory() {
+        Jail::expect_with(|jail| {
+            jail.create_dir("settings.toml")?;
+            let fs = FileSystem::new().unwrap();
+            let err = fs.create_file(&TomlSettings, &sample()).unwrap_err();
+            assert!(err.downcast_ref::<AlreadyExists>().is_some(), "{err}");
+            assert!(jail.directory().join("settings.toml").is_dir());
+            Ok(())
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_file_never_follows_a_symlink() {
+        Jail::expect_with(|jail| {
+            let link = jail.directory().join("settings.json");
+            std::os::unix::fs::symlink(jail.directory().join("target.json"), &link).unwrap();
+            let fs = FileSystem::new().unwrap();
+            let err = fs.create_file(&JsonSettings, &sample()).unwrap_err();
+            assert!(err.downcast_ref::<AlreadyExists>().is_some(), "{err}");
+            // The link still dangles: nothing was written through it.
+            assert!(!jail.directory().join("target.json").exists());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn create_file_does_not_create_a_missing_directory() {
+        Jail::expect_with(|jail| {
+            let fs = FileSystem::new().unwrap();
+            let err = fs
+                .create_file(&at::<Settings>("missing/settings.json"), &sample())
+                .unwrap_err();
+            let write = err.downcast_ref::<WriteError>().expect("a write error");
+            assert_eq!(write.path, PathBuf::from("missing/settings.json"));
+            assert_eq!(write.source.kind(), std::io::ErrorKind::NotFound);
+            assert!(!jail.directory().join("missing").exists());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn create_file_fails_when_the_parent_is_not_a_directory() {
+        Jail::expect_with(|jail| {
+            jail.create_file("plain", "")?;
+            let fs = FileSystem::new().unwrap();
+            let err = fs
+                .create_file(&at::<Settings>("plain/settings.json"), &sample())
+                .unwrap_err();
+            let write = err.downcast_ref::<WriteError>().expect("a write error");
+            assert_eq!(write.source.kind(), std::io::ErrorKind::NotADirectory);
+            assert!(write.help().is_none());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn create_file_leaves_nothing_behind_when_serialization_fails() {
+        Jail::expect_with(|jail| {
+            let fs = FileSystem::new().unwrap();
+            for name in ["bad.json", "bad.yaml", "bad.toml"] {
+                assert!(
+                    fs.create_file(&at::<Unserializable>(name), &Unserializable)
+                        .is_err(),
+                    "{name}"
+                );
+                assert!(!jail.directory().join(name).exists(), "{name}");
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn already_exists_renders_its_help() {
+        let err = AlreadyExists {
+            path: PathBuf::from("SPEC.slcr.yml"),
+        };
+        assert_eq!(
+            render_plain(&err),
+            "  × SPEC.slcr.yml already exists\n  \
+             help: choose another path, or delete the existing file first\n"
+        );
+    }
+
+    #[test]
+    fn a_missing_directory_renders_with_help_to_create_it() {
+        let err = WriteError {
+            path: PathBuf::from("specs/api/SPEC.slcr.yml"),
+            source: std::io::Error::from(std::io::ErrorKind::NotFound),
+        };
+        assert_eq!(
+            render_plain(&err),
+            "  × could not write specs/api/SPEC.slcr.yml\n  \
+             ╰─▶ entity not found\n  \
+             help: create the directory specs/api first\n"
+        );
+    }
+
+    #[test]
+    fn write_errors_offer_help_only_for_a_missing_directory() {
+        let error = |path: &str, kind| WriteError {
+            path: PathBuf::from(path),
+            source: std::io::Error::from(kind),
+        };
+        let help = |err: WriteError| err.help().map(|help| help.to_string());
+        assert_eq!(
+            help(error("a/b.yml", ErrorKind::NotFound)).as_deref(),
+            Some("create the directory a first")
+        );
+        // A file in the working directory has no directory to create.
+        assert_eq!(help(error("b.yml", ErrorKind::NotFound)), None);
+        assert_eq!(help(error("a/b.yml", ErrorKind::PermissionDenied)), None);
     }
 }

@@ -1,6 +1,6 @@
 // Remove this `expect` once the first async command calls `block_on`.
 pub use check::{Check, CheckArgs};
-pub use init::Init;
+pub use init::{Init, InitArgs};
 pub use not_implemented::NotImplemented;
 pub use render::Render;
 #[expect(unused_imports, reason = "no async command exists yet")]
