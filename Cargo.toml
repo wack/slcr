@@ -28,3 +28,8 @@ figment = { version = "0.10", default-features = false, features = ["env", "test
 
 [lints.rust]
 unsafe_code = "forbid"
+
+# The profile `dist` builds release artifacts with.
+[profile.dist]
+inherits = "release"
+lto = "thin"
