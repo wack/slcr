@@ -91,6 +91,9 @@ so field order and omission rules matter.
 ## Filesystem (`src/fs/`)
 
 `FileSystem` wraps XDG project dirs and does all serde I/O, dispatching on
-`File::extension()` to TOML / JSON / YAML (`serde-saphyr`). Implement `File` for
+`File::extension()` to TOML / JSON / YAML (`serde-saphyr`). A file that can't be
+read fails with a `ReadError` naming its path; one that can't be deserialized
+fails with a `ParseError` that labels the problem in the file's source when the
+deserializer reports a location. Implement `File` for
 files at dynamic paths, or `StaticFile` for fixed-name files under a
 `DirectoryType` (whose parent dir is created on demand).
