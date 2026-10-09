@@ -1,0 +1,106 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--format"
+    - json
+    - ok.yaml
+    - warned.yaml
+    - broken.yaml
+    - malformed.yaml
+    - invalid.yaml
+    - missing.yaml
+    - notes.md
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "files": [
+    {
+      "path": "ok.yaml",
+      "passed": true,
+      "violations": 0,
+      "warnings": 0,
+      "findings": []
+    },
+    {
+      "path": "warned.yaml",
+      "passed": true,
+      "violations": 0,
+      "warnings": 1,
+      "findings": [
+        {
+          "code": "modality-not-stated",
+          "requirement": "REQ-003",
+          "modality": "MUST",
+          "severity": "warning",
+          "message": "the body of REQ-003 does not contain its modality keyword, MUST"
+        }
+      ]
+    },
+    {
+      "path": "broken.yaml",
+      "passed": false,
+      "violations": 1,
+      "warnings": 0,
+      "findings": [
+        {
+          "code": "missing-refinement",
+          "requirement": "REQ-001",
+          "refiner": "REQ-002",
+          "severity": "error",
+          "message": "REQ-001 is refined by REQ-002 but has no `refinement`",
+          "help": "set `refinement` to AND, OR, or XOR"
+        }
+      ]
+    },
+    {
+      "path": "malformed.yaml",
+      "passed": false,
+      "error": {
+        "message": "could not parse malformed.yaml as YAML: unclosed bracket '['"
+      }
+    },
+    {
+      "path": "invalid.yaml",
+      "passed": false,
+      "error": {
+        "message": "could not parse invalid.yaml as YAML",
+        "labels": [
+          {
+            "message": "`SEC-1` is not a valid section ID",
+            "line": 7,
+            "column": 3,
+            "offset": 184,
+            "length": 0
+          }
+        ]
+      }
+    },
+    {
+      "path": "missing.yaml",
+      "passed": false,
+      "error": {
+        "message": "could not read missing.yaml",
+        "causes": [
+          "No such file or directory (os error 2)"
+        ]
+      }
+    },
+    {
+      "path": "notes.md",
+      "passed": false,
+      "error": {
+        "message": "notes.md is not a YAML, JSON, or TOML file",
+        "help": "a requirements file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`"
+      }
+    }
+  ]
+}
+
+----- stderr -----
+Error:   × the check failed for 5 of 7 files

@@ -1,0 +1,17 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - SPEC.md
+    - "--name"
+    - todo-api
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × SPEC.md is not a YAML, JSON, or TOML file
+  help: a requirements file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`

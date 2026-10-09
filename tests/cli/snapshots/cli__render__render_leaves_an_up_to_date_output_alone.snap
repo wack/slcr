@@ -1,0 +1,13 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+---
+success: true
+exit_code: 0
+----- stdout -----
+SPEC.md: up to date
+
+----- stderr -----

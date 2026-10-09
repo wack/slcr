@@ -1,0 +1,17 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "--output"
+    - "./SPEC.slcr.yml"
+    - "--force"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × ./SPEC.slcr.yml is the requirements file being rendered
+  help: choose another file with `--output`

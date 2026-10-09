@@ -1,0 +1,18 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - todo-api.yaml
+    - todo-api.json
+    - todo-api.toml
+---
+success: true
+exit_code: 0
+----- stdout -----
+todo-api.yaml: ok
+todo-api.json: ok
+todo-api.toml: ok
+
+----- stderr -----

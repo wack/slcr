@@ -1,0 +1,15 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "--output"
+    - docs/API.md
+---
+success: true
+exit_code: 0
+----- stdout -----
+docs/API.md: rendered todo-api
+
+----- stderr -----

@@ -198,17 +198,29 @@ impl FileSystem {
             // A bare file name is in the working directory.
             _ => Path::new("."),
         };
-        let mut builder = tempfile::Builder::new();
-        builder.prefix(".slcr-").suffix(".tmp");
-        // A temporary file is private by default; give the new file the
-        // permissions any other new file gets, subject to the umask.
-        #[cfg(unix)]
-        builder.permissions(std::os::unix::fs::PermissionsExt::from_mode(0o666));
+        // The temporary file is opened here, and written through its
+        // `File`, because `tempfile`'s own opener and writer add the
+        // temporary file's random path to their errors, which would leak it
+        // into what the user sees. Its `persist` adds no path.
+        //
         // Dropping the temporary file on any failure below deletes it.
-        let mut temporary = builder.tempfile_in(directory).map_err(fail)?;
-        temporary
-            .write_all(contents.as_bytes())
-            .and_then(|()| temporary.as_file().sync_all())
+        let mut temporary = tempfile::Builder::new()
+            .prefix(".slcr-")
+            .suffix(".tmp")
+            .make_in(directory, |path| {
+                let mut options = OpenOptions::new();
+                options.write(true).create_new(true);
+                // Not private, as temporary files usually are: the file
+                // gets the permissions any new file gets, subject to the
+                // umask.
+                #[cfg(unix)]
+                std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o666);
+                options.open(path)
+            })
+            .map_err(fail)?;
+        let file = temporary.as_file_mut();
+        file.write_all(contents.as_bytes())
+            .and_then(|()| file.sync_all())
             .map_err(fail)?;
         temporary.persist(path).map_err(|err| fail(err.error))?;
         Ok(())
@@ -776,6 +788,12 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.path, PathBuf::from("docs/SPEC.md"));
             assert_eq!(err.source.kind(), ErrorKind::NotFound);
+            // The OS's own error, without the temporary file's path.
+            assert_eq!(
+                err.source.to_string(),
+                std::io::Error::from_raw_os_error(err.source.raw_os_error().unwrap()).to_string()
+            );
+            assert!(!err.source.to_string().contains(".slcr-"), "{}", err.source);
             assert_eq!(
                 err.help().map(|help| help.to_string()).as_deref(),
                 Some("create the directory docs first")
@@ -795,6 +813,7 @@ mod tests {
                 .replace_file(Path::new("SPEC.md"), "# Spec\n")
                 .unwrap_err();
             assert_eq!(err.to_string(), "could not write SPEC.md");
+            assert!(!err.source.to_string().contains(".slcr-"), "{}", err.source);
             assert!(jail.directory().join("SPEC.md/keep").is_file());
             // The temporary file is cleaned up.
             assert_eq!(entries(jail), ["SPEC.md"]);

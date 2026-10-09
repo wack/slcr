@@ -59,6 +59,15 @@ impl Output {
     }
 }
 
+impl Display for Output {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Stdout => f.write_str("stdout"),
+            Self::File(path) => write!(f, "{}", path.display()),
+        }
+    }
+}
+
 /// The Markdown file a requirements file renders to by default: its
 /// [base_name] plus `.md`, in the same directory.
 fn default_output(input: &Path) -> Result<PathBuf, NoOutputPath> {
@@ -100,7 +109,7 @@ impl Render {
             return Err(NothingToCompare.into());
         }
 
-        tracing::debug!(path = %path.display(), ?output, "rendering a requirements file");
+        tracing::debug!(path = %path.display(), %output, "rendering a requirements file");
         let fs = FileSystem::new()?;
         let unchecked = fs.load_file(file.unchecked())?;
         let report = unchecked.report();
@@ -458,6 +467,15 @@ mod tests {
         assert_eq!(
             Output::new(input, Some(PathBuf::from("./-"))),
             Ok(Output::File(PathBuf::from("./-")))
+        );
+    }
+
+    #[test]
+    fn outputs_display_as_where_they_go() {
+        assert_eq!(Output::Stdout.to_string(), "stdout");
+        assert_eq!(
+            Output::File(PathBuf::from("docs/SPEC.md")).to_string(),
+            "docs/SPEC.md"
         );
     }
 

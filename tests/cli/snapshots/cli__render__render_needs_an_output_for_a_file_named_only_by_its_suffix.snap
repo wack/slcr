@@ -1,0 +1,15 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - ".spec.yaml"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not name the Markdown file for .spec.yaml
+  help: pass one with `--output`, e.g. `--output SPEC.md`

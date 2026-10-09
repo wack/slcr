@@ -1,0 +1,13 @@
+---
+source: tests/cli/version.rs
+info:
+  program: slcr
+  args:
+    - version
+---
+success: true
+exit_code: 0
+----- stdout -----
+v[VERSION]
+
+----- stderr -----

@@ -1,0 +1,13 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+---
+success: true
+exit_code: 0
+----- stdout -----
+SPEC.slcr.yml: created specification todo-api
+
+----- stderr -----

@@ -1,0 +1,38 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--format"
+    - json
+    - "--deny-warnings"
+    - warned.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "files": [
+    {
+      "path": "warned.yaml",
+      "passed": false,
+      "violations": 0,
+      "warnings": 1,
+      "findings": [
+        {
+          "code": "modality-not-stated",
+          "requirement": "REQ-003",
+          "modality": "MUST",
+          "severity": "warning",
+          "message": "the body of REQ-003 does not contain its modality keyword, MUST"
+        }
+      ]
+    }
+  ]
+}
+
+----- stderr -----
+Error:   × the check failed for 1 of 1 file
+  help: `--deny-warnings` makes a warning fail the check
