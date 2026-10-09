@@ -12,7 +12,7 @@ fn mixed() -> Workspace {
         .file("warned.yaml", with_warning())
         .file("broken.yaml", with_violation())
         // Syntax the parser can't place, and grammar it can.
-        .file("malformed.yaml", "root: [unclosed\n")
+        .file("malformed.yaml", "[unclosed\n")
         .file(
             "invalid.yaml",
             TODO_API_YAML.replacen("id: SEC-001", "id: SEC-1", 1),

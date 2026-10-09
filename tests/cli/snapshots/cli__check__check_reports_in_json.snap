@@ -73,10 +73,10 @@ exit_code: 1
         "labels": [
           {
             "message": "`SEC-1` is not a valid section ID",
-            "line": 7,
-            "column": 3,
-            "offset": 184,
-            "length": 0
+            "line": 8,
+            "column": 7,
+            "offset": 204,
+            "length": 5
           }
         ]
       }

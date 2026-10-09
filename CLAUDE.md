@@ -98,6 +98,12 @@ truth for field names, grammar, and the `x-checkInvariants` list.
   struct-level tag when deserializing, nodes use `#[serde(remote = "Self")]` plus
   the `tagged!` macro so the tag is actually checked. Follow that pattern for new
   node types.
+- `tagged.rs` — how `tagged!` (and `SectionChild`) check the tag: the `kind` is
+  read first, then the rest of the node's map streams to its derived
+  deserializer, so a parse error is labeled where it is. Never deserialize nodes
+  through a serde tagged enum (`#[serde(tag = ...)]` on an enum): serde buffers
+  the whole map to read the tag, which relocates every error inside it to the
+  root. Only fields written before a non-canonical, late `kind` are buffered.
 - `id.rs` — typed IDs (`Id<kind::Requirement>` etc., e.g. `REQ-042`) with strict
   canonical spelling; `DependencyId` is a cross-kind reference.
 - `text.rs` — validated newtypes (`Title`, `Markdown`, `SpecName`) via `TryFrom<String>`.

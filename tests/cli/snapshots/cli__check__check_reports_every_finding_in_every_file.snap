@@ -38,12 +38,12 @@ Error:
   × could not parse malformed.yaml as YAML: unclosed bracket '['
 
   × could not parse invalid.yaml as YAML
-   ╭─[invalid.yaml:7:3]
- 6 │ root:
+   ╭─[invalid.yaml:8:7]
  7 │   kind: section
-   ·   ▲
-   ·   ╰── `SEC-1` is not a valid section ID
  8 │   id: SEC-1
+   ·       ──┬──
+   ·         ╰── `SEC-1` is not a valid section ID
+ 9 │   title: TodoList API
    ╰────
 
   × could not read missing.yaml
