@@ -56,7 +56,7 @@ impl FileSystem {
 
     /// Open the file and deserialize it with serde.
     pub(crate) fn load_file<F: File>(&self, file: F) -> Result<F::Data> {
-        match F::EXTENSION {
+        match file.extension() {
             "toml" => self.read_toml_file(file),
             "json" => self.read_json_file(file),
             "yaml" | "yml" => self.read_yaml_file(file),
@@ -107,9 +107,9 @@ impl FileSystem {
     pub(crate) fn save_file<F: File>(&self, file: &F, blob: &F::Data) -> Result<()> {
         // • Get the path to the file.
         let path = file.path(self)?;
-        // • Create the file if it doesn't exist.
-        let mut file = std::fs::File::create(path).into_diagnostic()?;
-        let marshalled = match F::EXTENSION {
+        // • Serialize before touching the disk, so a failure can't
+        //   truncate an existing file.
+        let marshalled = match file.extension() {
             "toml" => toml::to_string_pretty(blob).into_diagnostic()?,
             "json" => serde_json::to_string_pretty(blob).into_diagnostic()?,
             "yaml" | "yml" => serde_saphyr::to_string(blob).into_diagnostic()?,
@@ -119,6 +119,8 @@ impl FileSystem {
                 ));
             }
         };
+        // • Create the file if it doesn't exist.
+        let mut file = std::fs::File::create(path).into_diagnostic()?;
         file.write_all(marshalled.as_bytes()).into_diagnostic()?;
         file.sync_all().into_diagnostic()?;
         Ok(())
