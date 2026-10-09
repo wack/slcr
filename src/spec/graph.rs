@@ -14,10 +14,10 @@ use super::text::SpecName;
 ///
 /// Deserializing a graph enforces the grammar of the specification graph's
 /// JSON Schema and every invariant listed in its `x-checkInvariants`, other
-/// than those that are only warnings; see [SpecGraph::warnings].
+/// than those that are only warnings; see [SlcrRequirementsDocument::warnings].
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
 #[serde(remote = "Self", rename_all = "camelCase", deny_unknown_fields)]
-pub struct SpecGraph {
+pub struct SlcrRequirementsDocument {
     /// The JSON Schema this document claims to conform to.
     #[serde(
         rename = "$schema",
@@ -37,7 +37,7 @@ pub struct SpecGraph {
     glossary: Glossary,
 }
 
-impl SpecGraph {
+impl SlcrRequirementsDocument {
     /// Every Section in the containment tree, in document order. The
     /// Glossary is not included.
     pub fn sections(&self) -> Vec<&Section> {
@@ -88,15 +88,15 @@ impl SpecGraph {
     }
 }
 
-impl Serialize for SpecGraph {
+impl Serialize for SlcrRequirementsDocument {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        SpecGraph::serialize(self, serializer)
+        SlcrRequirementsDocument::serialize(self, serializer)
     }
 }
 
-impl<'de> Deserialize<'de> for SpecGraph {
+impl<'de> Deserialize<'de> for SlcrRequirementsDocument {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let graph = SpecGraph::deserialize(deserializer)?;
+        let graph = SlcrRequirementsDocument::deserialize(deserializer)?;
         check::invariants(&graph).map_err(D::Error::custom)?;
         Ok(graph)
     }
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn the_canon_example_deserializes() {
-        let graph: SpecGraph = serde_json::from_str(TODO_API).unwrap();
+        let graph: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
         assert_eq!(
             graph.schema().as_deref(),
             Some("https://slcr.io/reference/schemas/spec/v1.schema.json")
@@ -146,13 +146,13 @@ mod tests {
 
     #[test]
     fn the_canon_example_serializes_back_to_itself() {
-        let graph: SpecGraph = serde_json::from_str(TODO_API).unwrap();
+        let graph: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
         assert_eq!(serde_json::to_value(&graph).unwrap(), todo_api());
     }
 
     #[test]
     fn sections_are_listed_in_document_order() {
-        let graph: SpecGraph = serde_json::from_str(TODO_API).unwrap();
+        let graph: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
         let ids: Vec<SectionId> = graph.sections().iter().map(|s| *s.id()).collect();
         let expected: Vec<SectionId> = (1..=5).map(SectionId::new).collect();
         assert_eq!(ids, expected);
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn requirements_are_listed_in_document_order() {
-        let graph: SpecGraph = serde_json::from_str(TODO_API).unwrap();
+        let graph: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
         let ids: Vec<u32> = graph
             .requirements()
             .iter()
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn the_canon_example_has_no_warnings() {
-        let graph: SpecGraph = serde_json::from_str(TODO_API).unwrap();
+        let graph: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
         assert!(graph.warnings().is_empty());
     }
 
@@ -180,7 +180,7 @@ mod tests {
     fn the_schema_reference_is_optional() {
         let mut value = todo_api();
         value.as_object_mut().unwrap().remove("$schema");
-        let graph: SpecGraph = serde_json::from_value(value.clone()).unwrap();
+        let graph: SlcrRequirementsDocument = serde_json::from_value(value.clone()).unwrap();
         assert!(graph.schema().is_none());
         assert_eq!(serde_json::to_value(&graph).unwrap(), value);
     }
@@ -190,7 +190,7 @@ mod tests {
         for field in ["formatVersion", "spec", "root", "glossary"] {
             let mut value = todo_api();
             value.as_object_mut().unwrap().remove(field);
-            let err = serde_json::from_value::<SpecGraph>(value).unwrap_err();
+            let err = serde_json::from_value::<SlcrRequirementsDocument>(value).unwrap_err();
             assert!(
                 err.to_string()
                     .contains(&format!("missing field `{field}`")),
@@ -203,7 +203,7 @@ mod tests {
     fn unknown_top_level_fields_are_rejected() {
         let mut value = todo_api();
         value["status"] = json!({});
-        assert!(serde_json::from_value::<SpecGraph>(value).is_err());
+        assert!(serde_json::from_value::<SlcrRequirementsDocument>(value).is_err());
     }
 
     #[test]
@@ -211,7 +211,7 @@ mod tests {
         for version in [json!("2"), json!(1), json!("1.0")] {
             let mut value = todo_api();
             value["formatVersion"] = version;
-            assert!(serde_json::from_value::<SpecGraph>(value).is_err());
+            assert!(serde_json::from_value::<SlcrRequirementsDocument>(value).is_err());
         }
     }
 
@@ -219,28 +219,28 @@ mod tests {
     fn spec_names_are_validated() {
         let mut value = todo_api();
         value["spec"]["name"] = json!("Todo API");
-        assert!(serde_json::from_value::<SpecGraph>(value).is_err());
+        assert!(serde_json::from_value::<SlcrRequirementsDocument>(value).is_err());
     }
 
     #[test]
     fn spec_metadata_rejects_unknown_fields() {
         let mut value = todo_api();
         value["spec"]["version"] = json!("1.0.0");
-        assert!(serde_json::from_value::<SpecGraph>(value).is_err());
+        assert!(serde_json::from_value::<SlcrRequirementsDocument>(value).is_err());
     }
 
     #[test]
     fn the_root_must_be_a_section() {
         let mut value = todo_api();
         value["root"]["kind"] = json!("requirement");
-        assert!(serde_json::from_value::<SpecGraph>(value).is_err());
+        assert!(serde_json::from_value::<SlcrRequirementsDocument>(value).is_err());
     }
 
     #[test]
     fn the_glossary_must_be_a_section() {
         let mut value = todo_api();
         value["glossary"]["kind"] = json!("glossary");
-        assert!(serde_json::from_value::<SpecGraph>(value).is_err());
+        assert!(serde_json::from_value::<SlcrRequirementsDocument>(value).is_err());
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("refinement");
-        let err = serde_json::from_value::<SpecGraph>(value).unwrap_err();
+        let err = serde_json::from_value::<SlcrRequirementsDocument>(value).unwrap_err();
         assert!(
             err.to_string()
                 .contains("REQ-001 is refined by REQ-002 but has no `refinement`"),
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn requirement_lookup_reflects_nesting() {
-        let graph: SpecGraph = serde_json::from_str(TODO_API).unwrap();
+        let graph: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
         let authenticated = graph
             .requirements()
             .into_iter()
