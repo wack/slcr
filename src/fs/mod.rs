@@ -6,7 +6,7 @@ use std::{
     fmt::Display,
     fs::OpenOptions,
     io::{ErrorKind, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 pub(crate) use file::File;
@@ -165,6 +165,52 @@ impl FileSystem {
             let _ = std::fs::remove_file(&path);
             return Err(WriteError { path, source }.into());
         }
+        Ok(())
+    }
+
+    /// The bytes of the file at `path`, or `None` if nothing is there.
+    pub(crate) fn read_bytes(&self, path: &Path) -> Result<Option<Vec<u8>>, ReadError> {
+        match std::fs::read(path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+            Err(source) => Err(ReadError {
+                path: path.to_path_buf(),
+                source,
+            }),
+        }
+    }
+
+    /// Write `contents` to the file at `path`, replacing whatever file is
+    /// there.
+    ///
+    /// The replacement is atomic: `contents` goes to a temporary file in the
+    /// same directory, which is then renamed over `path`, so a failure
+    /// leaves any existing file intact and nothing else behind. A symlink at
+    /// `path` is replaced, never written through. The directory is never
+    /// created.
+    pub(crate) fn replace_file(&self, path: &Path, contents: &str) -> Result<(), WriteError> {
+        let fail = |source| WriteError {
+            path: path.to_path_buf(),
+            source,
+        };
+        let directory = match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent,
+            // A bare file name is in the working directory.
+            _ => Path::new("."),
+        };
+        let mut builder = tempfile::Builder::new();
+        builder.prefix(".slcr-").suffix(".tmp");
+        // A temporary file is private by default; give the new file the
+        // permissions any other new file gets, subject to the umask.
+        #[cfg(unix)]
+        builder.permissions(std::os::unix::fs::PermissionsExt::from_mode(0o666));
+        // Dropping the temporary file on any failure below deletes it.
+        let mut temporary = builder.tempfile_in(directory).map_err(fail)?;
+        temporary
+            .write_all(contents.as_bytes())
+            .and_then(|()| temporary.as_file().sync_all())
+            .map_err(fail)?;
+        temporary.persist(path).map_err(|err| fail(err.error))?;
         Ok(())
     }
 
@@ -620,6 +666,155 @@ mod tests {
                 );
                 assert!(!jail.directory().join(name).exists(), "{name}");
             }
+            Ok(())
+        });
+    }
+
+    /// The names of the entries in the jail's directory, sorted.
+    fn entries(jail: &Jail) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(jail.directory())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn read_bytes_reads_a_file() {
+        Jail::expect_with(|jail| {
+            jail.create_file("SPEC.md", "# Spec\n")?;
+            let fs = FileSystem::new().unwrap();
+            let bytes = fs.read_bytes(Path::new("SPEC.md")).unwrap();
+            assert_eq!(bytes.as_deref(), Some(&b"# Spec\n"[..]));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn read_bytes_reads_bytes_that_are_not_utf8() {
+        Jail::expect_with(|jail| {
+            std::fs::write(jail.directory().join("SPEC.md"), [0xff, 0xfe]).unwrap();
+            let fs = FileSystem::new().unwrap();
+            let bytes = fs.read_bytes(Path::new("SPEC.md")).unwrap();
+            assert_eq!(bytes.as_deref(), Some(&[0xff, 0xfe][..]));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn read_bytes_finds_nothing_at_a_missing_path() {
+        Jail::expect_with(|_| {
+            let fs = FileSystem::new().unwrap();
+            assert_eq!(fs.read_bytes(Path::new("SPEC.md")).unwrap(), None);
+            assert_eq!(fs.read_bytes(Path::new("missing/SPEC.md")).unwrap(), None);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn read_bytes_cannot_read_a_directory() {
+        Jail::expect_with(|jail| {
+            jail.create_dir("SPEC.md")?;
+            let fs = FileSystem::new().unwrap();
+            let err = fs.read_bytes(Path::new("SPEC.md")).unwrap_err();
+            assert_eq!(err.path, PathBuf::from("SPEC.md"));
+            assert_eq!(err.to_string(), "could not read SPEC.md");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn replace_file_creates_a_new_file() {
+        Jail::expect_with(|jail| {
+            let fs = FileSystem::new().unwrap();
+            fs.replace_file(Path::new("SPEC.md"), "# Spec\n").unwrap();
+            let written = std::fs::read_to_string(jail.directory().join("SPEC.md")).unwrap();
+            assert_eq!(written, "# Spec\n");
+            assert_eq!(entries(jail), ["SPEC.md"]);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn replace_file_replaces_an_existing_file() {
+        Jail::expect_with(|jail| {
+            jail.create_dir("docs")?;
+            jail.create_file("docs/SPEC.md", "a much longer old version\n")?;
+            let fs = FileSystem::new().unwrap();
+            fs.replace_file(Path::new("docs/SPEC.md"), "new\n").unwrap();
+            let written = std::fs::read_to_string(jail.directory().join("docs/SPEC.md")).unwrap();
+            assert_eq!(written, "new\n");
+            Ok(())
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replace_file_gives_a_new_file_the_usual_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        Jail::expect_with(|jail| {
+            let fs = FileSystem::new().unwrap();
+            fs.replace_file(Path::new("SPEC.md"), "# Spec\n").unwrap();
+            jail.create_file("plain.md", "")?;
+            let mode = |name: &str| {
+                let metadata = std::fs::metadata(jail.directory().join(name)).unwrap();
+                metadata.permissions().mode() & 0o777
+            };
+            assert_eq!(mode("SPEC.md"), mode("plain.md"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn replace_file_does_not_create_a_missing_directory() {
+        Jail::expect_with(|jail| {
+            let fs = FileSystem::new().unwrap();
+            let err = fs
+                .replace_file(Path::new("docs/SPEC.md"), "# Spec\n")
+                .unwrap_err();
+            assert_eq!(err.path, PathBuf::from("docs/SPEC.md"));
+            assert_eq!(err.source.kind(), ErrorKind::NotFound);
+            assert_eq!(
+                err.help().map(|help| help.to_string()).as_deref(),
+                Some("create the directory docs first")
+            );
+            assert!(entries(jail).is_empty());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn replace_file_never_replaces_a_directory() {
+        Jail::expect_with(|jail| {
+            jail.create_dir("SPEC.md")?;
+            jail.create_file("SPEC.md/keep", "me")?;
+            let fs = FileSystem::new().unwrap();
+            let err = fs
+                .replace_file(Path::new("SPEC.md"), "# Spec\n")
+                .unwrap_err();
+            assert_eq!(err.to_string(), "could not write SPEC.md");
+            assert!(jail.directory().join("SPEC.md/keep").is_file());
+            // The temporary file is cleaned up.
+            assert_eq!(entries(jail), ["SPEC.md"]);
+            Ok(())
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replace_file_replaces_a_symlink_instead_of_writing_through_it() {
+        Jail::expect_with(|jail| {
+            jail.create_file("target.md", "keep me\n")?;
+            let link = jail.directory().join("SPEC.md");
+            std::os::unix::fs::symlink(jail.directory().join("target.md"), &link).unwrap();
+            let fs = FileSystem::new().unwrap();
+            fs.replace_file(Path::new("SPEC.md"), "# Spec\n").unwrap();
+            assert!(!link.symlink_metadata().unwrap().is_symlink());
+            assert_eq!(std::fs::read_to_string(&link).unwrap(), "# Spec\n");
+            let target = std::fs::read_to_string(jail.directory().join("target.md")).unwrap();
+            assert_eq!(target, "keep me\n");
             Ok(())
         });
     }

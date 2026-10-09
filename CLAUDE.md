@@ -47,7 +47,7 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `dispatch(self) -> miette::Result<()>`. To add a command: add a variant to
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
-- `render` is a stub returning `cli::NotImplemented`.
+- `slice` and `eval` are stubs returning `cli::NotImplemented`.
 - `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
   root `SEC-001`, Glossary `SEC-002`) at `FILE`, by default the well-known
   `SPEC.slcr.yml`. Without `--name`, the spec is named after the file's stem
@@ -64,6 +64,16 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   serialize with a kebab-case `code` plus their fields, so renaming a
   `Violation` or `Warning` variant or field changes that output. Validator-file
   checks wait on the validator-file schema.
+- `render [FILE]` renders a specification (default `SPEC.slcr.yml`) as
+  Markdown with `render::document`, to FILE's base name plus `.md` beside it
+  (`SPEC.slcr.yml` → `SPEC.md`), to `--output PATH`, or to stdout with `-o -`.
+  Findings go to stderr as `check` reports them, and a file that breaks an
+  invariant fails with `RenderFailed`. It replaces the output atomically
+  (`FileSystem::replace_file`), but only a file that starts with the
+  generated-file comment, unless `--force`; an up-to-date output is left
+  alone. `--expect-no-diff` writes nothing and fails with `UnexpectedDiff`
+  unless the output is already up to date. (The flag avoids the word "check",
+  which is overloaded.)
 - Commands stay synchronous; an async command calls `cli::block_on` from its
   `dispatch()` (see `src/cli/runtime.rs`). Remove the `#[expect(unused_imports)]`
   on its re-export in `src/cli/mod.rs` when the first caller lands.
@@ -104,12 +114,31 @@ Structs use `rename_all = "camelCase"` and `deny_unknown_fields`, and the canoni
 fixture must round-trip byte-for-byte (`the_canon_example_serializes_back_to_itself`),
 so field order and omission rules matter.
 
+## Rendering (`src/render/`)
+
+`render::document` is a pure function from a `SlcrRequirementsDocument` to
+the canonical Markdown of section 8 of the design document; the same graph
+always renders to the same bytes. The canon fixture's rendering is the golden
+file `tests/fixtures/todo-api.md`; when output changes on purpose, update it
+with `slcr render tests/fixtures/todo-api.spec.yaml --force`.
+
+- `blocks.rs` — `Blocks` joins blocks with exactly one blank line, LF endings,
+  and one trailing newline. Prose (`body`, `rationale`, `definition`) is
+  emitted verbatim apart from that normalization; never indent or rewrap it.
+- `inline.rs` — titles are plain text: `escape` them for Markdown, or
+  `escape_html` inside the Glossary's `<dl>`. Tests check every ASCII
+  punctuation character round-trips through `pulldown-cmark`.
+- Each node is preceded by a hidden `<a id="ID"></a>`; IDs never appear in
+  visible text, and every cross-reference is a link to an anchor.
+
 ## Filesystem (`src/fs/`)
 
 `FileSystem` wraps XDG project dirs and does all serde I/O, dispatching on
 `File::extension()` to TOML / JSON / YAML (`serde-saphyr`). A file that can't be
 read fails with a `ReadError` naming its path; one that can't be deserialized
 fails with a `ParseError` that labels the problem in the file's source when the
-deserializer reports a location. Implement `File` for
+deserializer reports a location. Generated text goes through
+`replace_file`, which writes atomically via a temporary file and never
+creates a directory. Implement `File` for
 files at dynamic paths, or `StaticFile` for fixed-name files under a
 `DirectoryType` (whose parent dir is created on demand).

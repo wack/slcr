@@ -51,6 +51,11 @@ impl Terminal {
         term.write_line("").into_diagnostic()
     }
 
+    /// Write `text` to stdout exactly as given, adding no newline.
+    pub fn write_stdout(&self, text: &str) -> Result<()> {
+        self.stdout.term().write_str(text).into_diagnostic()
+    }
+
     /// Write a single line to stdout.
     pub fn write_stdout_line(&self, line: &str) -> Result<()> {
         self.stdout.term().write_line(line).into_diagnostic()

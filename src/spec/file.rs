@@ -1,4 +1,8 @@
-use std::{ffi::OsStr, marker::PhantomData, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+};
 
 use miette::{Diagnostic, Result};
 use serde::{Serialize, de::DeserializeOwned};
@@ -6,6 +10,29 @@ use thiserror::Error;
 
 use super::graph::{SlcrRequirementsDocument, UncheckedDocument};
 use crate::fs::{File, FileSystem};
+
+/// The well-known requirements file, like `Makefile` or `LICENSE`: where
+/// `slcr init` creates a specification, and where commands that read one
+/// look by default.
+pub const DEFAULT_FILE: &str = "SPEC.slcr.yml";
+
+/// Suffixes that mark a file's stem as a specification's, which
+/// [base_name] drops: `todo-api.spec.yaml` and `todo-api.slcr.yml` both
+/// have the base name `todo-api`.
+const STEM_SUFFIXES: [&str; 2] = [".slcr", ".spec"];
+
+/// The name of a requirements file without its extension and without one
+/// `.slcr` or `.spec` suffix: `todo-api` for `specs/todo-api.spec.yaml`,
+/// and `SPEC` for the well-known `SPEC.slcr.yml`. `None` if the path has
+/// no file name, or one that isn't UTF-8.
+pub(crate) fn base_name(path: &Path) -> Option<&str> {
+    let stem = path.file_stem().and_then(OsStr::to_str)?;
+    let base = STEM_SUFFIXES
+        .iter()
+        .find_map(|suffix| stem.strip_suffix(suffix))
+        .unwrap_or(stem);
+    Some(base)
+}
 
 /// An SLCR requirements file: a specification graph stored at a
 /// caller-chosen path. The path's extension selects the format: YAML
@@ -131,6 +158,47 @@ mod tests {
                 format!("{name} is not a YAML, JSON, or TOML file")
             );
         }
+    }
+
+    #[test]
+    fn the_default_file_is_a_supported_requirements_file() {
+        assert!(RequirementsFile::new(DEFAULT_FILE).is_ok());
+        assert_eq!(base_name(Path::new(DEFAULT_FILE)), Some("SPEC"));
+    }
+
+    #[test]
+    fn base_names_drop_the_extension_and_one_suffix() {
+        for (path, base) in [
+            ("todo-api.yaml", "todo-api"),
+            ("todo-api.spec.yaml", "todo-api"),
+            ("todo-api.slcr.yml", "todo-api"),
+            ("specs/billing.slcr.toml", "billing"),
+            ("SPEC.slcr.json", "SPEC"),
+            ("spec.yaml", "spec"),
+            ("slcr.yml", "slcr"),
+            // Only one suffix is dropped.
+            ("todo-api.slcr.spec.yml", "todo-api.slcr"),
+            // A suffix is only dropped from the end of the stem.
+            ("todo.spec-api.yaml", "todo.spec-api"),
+            (".spec.yaml", ""),
+        ] {
+            assert_eq!(base_name(Path::new(path)), Some(base), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_path_without_a_file_name_has_no_base_name() {
+        assert_eq!(base_name(Path::new("/")), None);
+        assert_eq!(base_name(Path::new("..")), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_name_that_is_not_utf8_has_no_base_name() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let path = Path::new(OsStr::from_bytes(b"spec\xff.yaml"));
+        assert_eq!(base_name(path), None);
     }
 
     #[test]
