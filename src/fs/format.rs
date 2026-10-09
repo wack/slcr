@@ -56,10 +56,14 @@ impl Format {
         })
     }
 
-    /// Serialize `data` in this format.
+    /// Serialize `data` in this format, ending in a single newline.
     pub(crate) fn serialize<T: Serialize>(self, data: &T) -> miette::Result<String> {
         match self {
-            Self::Json => serde_json::to_string_pretty(data).into_diagnostic(),
+            // The YAML and TOML serializers end with a newline; this one
+            // doesn't.
+            Self::Json => serde_json::to_string_pretty(data)
+                .map(|json| json + "\n")
+                .into_diagnostic(),
             Self::Toml => toml::to_string_pretty(data).into_diagnostic(),
             Self::Yaml => serde_saphyr::to_string(data).into_diagnostic(),
         }
@@ -377,6 +381,25 @@ mod tests {
         for format in [Format::Json, Format::Toml, Format::Yaml] {
             let err = error(format, "");
             assert!(!err.message().is_empty(), "{format}");
+        }
+    }
+
+    #[test]
+    fn serialized_documents_end_in_a_single_newline() {
+        #[derive(Serialize)]
+        struct Out {
+            name: &'static str,
+            tags: [&'static str; 2],
+        }
+
+        let data = Out {
+            name: "x",
+            tags: ["a", "b"],
+        };
+        for format in [Format::Json, Format::Toml, Format::Yaml] {
+            let serialized = format.serialize(&data).unwrap();
+            assert!(serialized.ends_with('\n'), "{format}: {serialized:?}");
+            assert!(!serialized.ends_with("\n\n"), "{format}: {serialized:?}");
         }
     }
 

@@ -47,7 +47,14 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `dispatch(self) -> miette::Result<()>`. To add a command: add a variant to
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
-- `init` and `render` are stubs returning `cli::NotImplemented`.
+- `render` is a stub returning `cli::NotImplemented`.
+- `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
+  root `SEC-001`, Glossary `SEC-002`) at `FILE`, by default the well-known
+  `SPEC.slcr.yml`. Without `--name`, the spec is named after the file's stem
+  minus any `.slcr`/`.spec`, or, for `SPEC.slcr.*`, after its directory; an
+  invalid result is an error, never slugified. `--title` defaults to the name.
+  It writes through `FileSystem::create_file`, so it never overwrites anything
+  (even a dangling symlink) and never creates a missing directory.
 - `check <FILE>...` loads each requirements file with
   `RequirementsFile::unchecked()`, writes every finding to stderr as a miette
   diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,

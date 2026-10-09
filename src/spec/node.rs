@@ -90,6 +90,19 @@ pub struct Section {
     children: Vec<SectionChild>,
 }
 
+impl Section {
+    /// A Section with only an ID and a title: no body, terms, or children.
+    pub(crate) fn new(id: SectionId, title: Title) -> Self {
+        Self {
+            id,
+            title,
+            body: None,
+            uses_term: Vec::new(),
+            children: Vec::new(),
+        }
+    }
+}
+
 /// A node contained by a [Section].
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -263,6 +276,21 @@ pub struct Glossary {
         skip_serializing_if = "Vec::is_empty"
     )]
     terms: Vec<Term>,
+}
+
+impl Glossary {
+    /// The title every specification's Glossary is created with.
+    pub const TITLE: &'static str = "Glossary";
+
+    /// An empty Glossary, titled [Glossary::TITLE].
+    pub(crate) fn new(id: SectionId) -> Self {
+        Self {
+            id,
+            title: Title::try_from(Self::TITLE.to_owned()).expect("the Glossary's title is valid"),
+            body: None,
+            terms: Vec::new(),
+        }
+    }
 }
 
 /// A glossary entry.
@@ -596,6 +624,35 @@ mod tests {
             "definition": "A requirement plus its context."
         }));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_new_section_has_only_an_id_and_a_title() {
+        let title = Title::try_from("Root".to_owned()).unwrap();
+        let section = Section::new(SectionId::new(7), title.clone());
+        assert_eq!(*section.id(), SectionId::new(7));
+        assert_eq!(*section.title(), title);
+        assert!(section.body().is_none());
+        assert!(section.uses_term().is_empty());
+        assert!(section.children().is_empty());
+        assert_eq!(
+            serde_json::to_value(&section).unwrap(),
+            json!({ "kind": "section", "id": "SEC-007", "title": "Root" })
+        );
+    }
+
+    #[test]
+    fn a_new_glossary_is_empty_and_titled_glossary() {
+        let glossary = Glossary::new(SectionId::new(2));
+        assert_eq!(*glossary.id(), SectionId::new(2));
+        assert_eq!(glossary.title().as_str(), Glossary::TITLE);
+        assert_eq!(Glossary::TITLE, "Glossary");
+        assert!(glossary.body().is_none());
+        assert!(glossary.terms().is_empty());
+        assert_eq!(
+            serde_json::to_value(&glossary).unwrap(),
+            json!({ "kind": "section", "id": "SEC-002", "title": "Glossary" })
+        );
     }
 
     #[test]

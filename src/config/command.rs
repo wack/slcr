@@ -1,15 +1,15 @@
 use clap::Subcommand;
 use miette::Result;
 
-use crate::cli::{Check, CheckArgs, Init, Render, Version};
+use crate::cli::{Check, CheckArgs, Init, InitArgs, Render, Version};
 use crate::terminal::Terminal;
 
 /// A `SlcrCommand` is one of the top-level commands accepted by
 /// the slcr CLI.
 #[derive(Subcommand, Clone)]
 pub enum SlcrCommand {
-    /// Create a specification with its root and Glossary sections (not yet implemented)
-    Init,
+    /// Create a specification with its root and Glossary sections
+    Init(InitArgs),
     /// Render a specification as Markdown to `SPEC.md` (not yet implemented)
     Render,
     /// Report the invariants requirements files break
@@ -22,7 +22,7 @@ impl SlcrCommand {
     /// dispatch the user-provided arguments to the command handler.
     pub fn dispatch(self, console: Terminal) -> Result<()> {
         match self {
-            Self::Init => Init::new(console).dispatch(),
+            Self::Init(args) => Init::new(console, args).dispatch(),
             Self::Render => Render::new(console).dispatch(),
             Self::Check(args) => Check::new(console, args).dispatch(),
             Self::Version => Version::new(console).dispatch(),
@@ -46,8 +46,18 @@ mod tests {
     #[test]
     fn stubbed_subcommands_parse() {
         let parse = |name| Cli::parse_from(["slcr", name]).cmd().clone();
-        assert!(matches!(parse("init"), Some(SlcrCommand::Init)));
         assert!(matches!(parse("render"), Some(SlcrCommand::Render)));
+    }
+
+    #[test]
+    fn init_parses_with_or_without_a_file() {
+        for argv in [
+            &["slcr", "init"][..],
+            &["slcr", "init", "todo-api.spec.json"],
+        ] {
+            let cli = Cli::parse_from(argv);
+            assert!(matches!(cli.cmd(), Some(SlcrCommand::Init(_))), "{argv:?}");
+        }
     }
 
     #[test]
@@ -58,15 +68,10 @@ mod tests {
 
     #[test]
     fn stubbed_subcommands_report_that_they_are_not_implemented() {
-        for name in ["init", "render"] {
-            let cli = Cli::parse_from(["slcr", name]);
-            let terminal = Terminal::new(&cli);
-            let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
-            assert_eq!(
-                err.to_string(),
-                format!("`slcr {name}` is not implemented yet")
-            );
-        }
+        let cli = Cli::parse_from(["slcr", "render"]);
+        let terminal = Terminal::new(&cli);
+        let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
+        assert_eq!(err.to_string(), "`slcr render` is not implemented yet");
     }
 
     #[test]
