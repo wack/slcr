@@ -47,7 +47,7 @@ jobs:
   #
   # We use wack/gh-actions/setup-rust (which pins to dtolnay's stable as the
   # rustup *default*) rather than forcing a toolchain: the repo's
-  # rust-toolchain.toml (1.96.0) takes precedence over the default, so cargo
+  # rust-toolchain.toml takes precedence over the default, so cargo
   # commands run on the pinned toolchain — matching local dev exactly. No
   # CROSS_REPO_PAT is configured because multitool's only git dependency
   # (multitool-rust-sdk) is a public repo.

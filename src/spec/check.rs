@@ -10,7 +10,7 @@ use std::{
 use miette::Diagnostic;
 use thiserror::Error;
 
-use super::graph::SpecGraph;
+use super::graph::SlcrRequirementsDocument;
 use super::id::{DependencyId, RequirementId, TermId};
 use super::node::{Modality, Refinement, Requirement};
 
@@ -114,7 +114,7 @@ pub enum Warning {
 }
 
 /// Check every invariant that is an error rather than a warning.
-pub(super) fn invariants(graph: &SpecGraph) -> Result<(), Violations> {
+pub(super) fn invariants(graph: &SlcrRequirementsDocument) -> Result<(), Violations> {
     let requirements = graph.requirements();
     let violations: Vec<Violation> = [
         duplicate_ids(graph, &requirements),
@@ -135,7 +135,7 @@ pub(super) fn invariants(graph: &SpecGraph) -> Result<(), Violations> {
 }
 
 /// Check the invariants that are only warnings.
-pub(super) fn warnings(graph: &SpecGraph) -> Vec<Warning> {
+pub(super) fn warnings(graph: &SlcrRequirementsDocument) -> Vec<Warning> {
     let requirements = graph.requirements();
     let refiners = refiners(&requirements);
     let mut warnings = Vec::new();
@@ -162,7 +162,10 @@ pub(super) fn warnings(graph: &SpecGraph) -> Vec<Warning> {
 
 /// Every ID is unique across the document. IDs of different kinds can't
 /// collide, because the prefix is part of the ID.
-fn duplicate_ids(graph: &SpecGraph, requirements: &[&Requirement]) -> Vec<Violation> {
+fn duplicate_ids(
+    graph: &SlcrRequirementsDocument,
+    requirements: &[&Requirement],
+) -> Vec<Violation> {
     let sections = graph
         .sections()
         .into_iter()
@@ -194,7 +197,10 @@ fn repeated<T: Copy + Display + Eq + Hash>(ids: impl IntoIterator<Item = T>) -> 
 
 /// Every ID in `refines`, `dependsOn`, and `usesTerm` names an existing
 /// node. The ID's type already guarantees the node is of an allowed kind.
-fn dangling_references(graph: &SpecGraph, requirements: &[&Requirement]) -> Vec<Violation> {
+fn dangling_references(
+    graph: &SlcrRequirementsDocument,
+    requirements: &[&Requirement],
+) -> Vec<Violation> {
     let sections = graph.sections();
     let section_ids: HashSet<_> = sections
         .iter()
@@ -385,7 +391,7 @@ fn refinement_presence(requirements: &[&Requirement]) -> Vec<Violation> {
 
 /// Glossary terms are serialized in ID order. A repeated ID is reported by
 /// [duplicate_ids] instead.
-fn term_order(graph: &SpecGraph) -> Vec<Violation> {
+fn term_order(graph: &SlcrRequirementsDocument) -> Vec<Violation> {
     graph
         .glossary()
         .terms()
@@ -430,8 +436,8 @@ mod tests {
     const TODO_API: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
 
     /// Read a graph without checking its invariants.
-    fn unchecked(value: Value) -> SpecGraph {
-        SpecGraph::deserialize(value).unwrap()
+    fn unchecked(value: Value) -> SlcrRequirementsDocument {
+        SlcrRequirementsDocument::deserialize(value).unwrap()
     }
 
     fn violations(value: Value) -> Vec<Violation> {
