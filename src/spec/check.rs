@@ -8,6 +8,7 @@ use std::{
 };
 
 use miette::Diagnostic;
+use serde::Serialize;
 use thiserror::Error;
 
 use super::graph::SlcrRequirementsDocument;
@@ -38,10 +39,18 @@ fn list(violations: &[Violation]) -> String {
 }
 
 /// One broken invariant.
-#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
+///
+/// It serializes as an object whose `code` names the invariant in
+/// kebab-case, e.g. `dangling-reference`, alongside the variant's fields.
+#[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "code",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub enum Violation {
-    #[error("{0} identifies more than one node")]
-    DuplicateId(String),
+    #[error("{id} identifies more than one node")]
+    DuplicateId { id: String },
 
     #[error("{from} names {to} in `{relation}`, but no such node exists")]
     DanglingReference {
@@ -78,7 +87,8 @@ fn arrows(path: &[RequirementId]) -> String {
 }
 
 /// A cross edge between nodes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Relation {
     Refines,
     DependsOn,
@@ -96,7 +106,14 @@ impl Display for Relation {
 }
 
 /// A finding that doesn't make the graph invalid.
-#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
+///
+/// It serializes like a [Violation].
+#[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "code",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub enum Warning {
     #[error("the body of {requirement} does not contain its modality keyword, {modality}")]
     #[diagnostic(severity(Warning))]
@@ -113,10 +130,78 @@ pub enum Warning {
     VacuousAnd { requirement: RequirementId },
 }
 
+/// One thing a check found, borrowed from its [Report]: a broken invariant
+/// or a warning. It serializes as what it wraps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum Finding<'a> {
+    Violation(&'a Violation),
+    Warning(&'a Warning),
+}
+
+impl<'a> Finding<'a> {
+    /// The finding as a diagnostic, with its own message, severity, and
+    /// help.
+    pub fn diagnostic(self) -> &'a dyn Diagnostic {
+        match self {
+            Self::Violation(violation) => violation,
+            Self::Warning(warning) => warning,
+        }
+    }
+}
+
+/// Everything a check found in a document: the invariants it breaks and
+/// the warnings, each in document order.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Report {
+    violations: Vec<Violation>,
+    warnings: Vec<Warning>,
+}
+
+impl Report {
+    pub fn violations(&self) -> &[Violation] {
+        &self.violations
+    }
+
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+
+    /// Whether the check found nothing at all, not even a warning.
+    pub fn is_clean(&self) -> bool {
+        self.violations.is_empty() && self.warnings.is_empty()
+    }
+
+    /// Every finding: the violations, then the warnings.
+    pub fn findings(&self) -> impl Iterator<Item = Finding<'_>> {
+        let violations = self.violations.iter().map(Finding::Violation);
+        let warnings = self.warnings.iter().map(Finding::Warning);
+        violations.chain(warnings)
+    }
+}
+
+/// Check every invariant, including those that are only warnings.
+pub(super) fn report(graph: &SlcrRequirementsDocument) -> Report {
+    Report {
+        violations: violations(graph),
+        warnings: warnings(graph),
+    }
+}
+
 /// Check every invariant that is an error rather than a warning.
 pub(super) fn invariants(graph: &SlcrRequirementsDocument) -> Result<(), Violations> {
+    let violations = violations(graph);
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(Violations { violations })
+    }
+}
+
+/// The invariants `graph` breaks, in document order.
+fn violations(graph: &SlcrRequirementsDocument) -> Vec<Violation> {
     let requirements = graph.requirements();
-    let violations: Vec<Violation> = [
+    [
         duplicate_ids(graph, &requirements),
         dangling_references(graph, &requirements),
         cycles(&requirements),
@@ -125,13 +210,7 @@ pub(super) fn invariants(graph: &SlcrRequirementsDocument) -> Result<(), Violati
     ]
     .into_iter()
     .flatten()
-    .collect();
-
-    if violations.is_empty() {
-        Ok(())
-    } else {
-        Err(Violations { violations })
-    }
+    .collect()
 }
 
 /// Check the invariants that are only warnings.
@@ -191,7 +270,7 @@ fn repeated<T: Copy + Display + Eq + Hash>(ids: impl IntoIterator<Item = T>) -> 
     let mut reported = HashSet::new();
     ids.into_iter()
         .filter(|id| !seen.insert(*id) && reported.insert(*id))
-        .map(|id| Violation::DuplicateId(id.to_string()))
+        .map(|id| Violation::DuplicateId { id: id.to_string() })
         .collect()
 }
 
@@ -259,6 +338,10 @@ fn dangling_references(
 
 /// `refines` is acyclic, and `dependsOn` is acyclic. Only Requirements have
 /// outgoing edges, so only they can lie on a cycle.
+///
+/// Reports one cycle for each strongly connected component that has one, so
+/// independent cycles are all reported at once, while the many cycles that
+/// share nodes in a single tangle are reported once.
 fn cycles(requirements: &[&Requirement]) -> Vec<Violation> {
     let refines = edges(requirements, |requirement| requirement.refines().clone());
     let depends_on = edges(requirements, |requirement| {
@@ -277,8 +360,10 @@ fn cycles(requirements: &[&Requirement]) -> Vec<Violation> {
         (Relation::DependsOn, depends_on),
     ]
     .into_iter()
-    .filter_map(|(relation, edges)| {
-        find_cycle(&edges).map(|path| Violation::Cycle { relation, path })
+    .flat_map(|(relation, edges)| {
+        find_cycles(&edges)
+            .into_iter()
+            .map(move |path| Violation::Cycle { relation, path })
     })
     .collect()
 }
@@ -304,57 +389,129 @@ fn edges(
     edges
 }
 
-/// Find a cycle in a directed graph, or `None` if it is acyclic.
-///
-/// Repeatedly removes nodes with no outgoing edges. Every node left after
-/// that has an edge to another node left, so walking those edges from any
-/// of them must revisit a node, closing a cycle. Iterative, so a long chain
-/// can't overflow the stack.
-fn find_cycle(edges: &BTreeMap<RequirementId, Vec<RequirementId>>) -> Option<Vec<RequirementId>> {
-    let mut predecessors: HashMap<RequirementId, Vec<RequirementId>> = HashMap::new();
-    let mut out_degree: HashMap<RequirementId, usize> = HashMap::new();
-    for (source, targets) in edges {
-        out_degree.insert(*source, targets.len());
-        for target in targets {
-            predecessors.entry(*target).or_default().push(*source);
-        }
-    }
-
-    let mut sinks: Vec<_> = out_degree
-        .iter()
-        .filter(|(_, degree)| **degree == 0)
-        .map(|(node, _)| *node)
+/// Find one cycle in each strongly connected component of a directed graph
+/// that has one, ordered by the smallest ID in the component. An acyclic
+/// graph has none.
+fn find_cycles(edges: &BTreeMap<RequirementId, Vec<RequirementId>>) -> Vec<Vec<RequirementId>> {
+    // Number the nodes in ID order, so components and cycles come out in a
+    // deterministic order.
+    let nodes: Vec<RequirementId> = edges.keys().copied().collect();
+    let numbers: HashMap<RequirementId, usize> =
+        nodes.iter().enumerate().map(|(n, id)| (*id, n)).collect();
+    let successors: Vec<Vec<usize>> = edges
+        .values()
+        .map(|targets| targets.iter().map(|target| numbers[target]).collect())
         .collect();
-    while let Some(sink) = sinks.pop() {
-        out_degree.remove(&sink);
-        for predecessor in predecessors.get(&sink).into_iter().flatten() {
-            if let Some(degree) = out_degree.get_mut(predecessor) {
-                *degree -= 1;
-                if *degree == 0 {
-                    sinks.push(*predecessor);
-                }
-            }
-        }
-    }
 
-    // Start from the smallest remaining ID so the report is deterministic.
-    let start = edges.keys().find(|node| out_degree.contains_key(node))?;
-    let mut path = vec![*start];
-    let mut position = HashMap::from([(*start, 0)]);
-    let mut node = *start;
+    let mut components = strongly_connected_components(&successors);
+    components.retain(|component| {
+        component.len() > 1 || successors[component[0]].contains(&component[0])
+    });
+    components.sort_by_key(|component| component.iter().min().copied());
+    components
+        .iter()
+        .map(|component| {
+            cycle_within(component, &successors)
+                .into_iter()
+                .map(|node| nodes[node])
+                .collect()
+        })
+        .collect()
+}
+
+/// A cycle among the nodes of a strongly connected component that has one,
+/// starting and ending with the same node.
+///
+/// Every node in such a component has an edge to another node in it, so
+/// walking those edges from its smallest node must revisit a node, closing
+/// a cycle.
+fn cycle_within(component: &[usize], successors: &[Vec<usize>]) -> Vec<usize> {
+    let members: HashSet<usize> = component.iter().copied().collect();
+    let start = *component.iter().min().expect("components are non-empty");
+    let mut path = vec![start];
+    let mut position = HashMap::from([(start, 0)]);
+    let mut node = start;
     loop {
-        node = *edges[&node]
+        node = *successors[node]
             .iter()
-            .find(|next| out_degree.contains_key(next))
-            .expect("every remaining node has an edge to another remaining node");
+            .find(|next| members.contains(next))
+            .expect("every node in the component has an edge within it");
         if let Some(&index) = position.get(&node) {
             let mut cycle = path.split_off(index);
             cycle.push(node);
-            return Some(cycle);
+            return cycle;
         }
         position.insert(node, path.len());
         path.push(node);
     }
+}
+
+/// The strongly connected components of a directed graph whose nodes are
+/// `0..successors.len()`, by Tarjan's algorithm.
+///
+/// Iterative rather than recursive, so a long chain can't overflow the
+/// stack.
+fn strongly_connected_components(successors: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    const UNVISITED: usize = usize::MAX;
+    let count = successors.len();
+    // The order in which each node was first visited.
+    let mut order = vec![UNVISITED; count];
+    // The earliest-visited node reachable from each node's subtree that is
+    // still on the stack.
+    let mut low = vec![0; count];
+    let mut on_stack = vec![false; count];
+    let mut stack = Vec::new();
+    let mut components = Vec::new();
+    let mut visited = 0;
+
+    for root in 0..count {
+        if order[root] != UNVISITED {
+            continue;
+        }
+        // Each frame is a node and how many of its edges are explored.
+        let mut frames = vec![(root, 0)];
+        order[root] = visited;
+        low[root] = visited;
+        visited += 1;
+        stack.push(root);
+        on_stack[root] = true;
+
+        while let Some((node, explored)) = frames.last_mut() {
+            let node = *node;
+            if let Some(&next) = successors[node].get(*explored) {
+                *explored += 1;
+                if order[next] == UNVISITED {
+                    order[next] = visited;
+                    low[next] = visited;
+                    visited += 1;
+                    stack.push(next);
+                    on_stack[next] = true;
+                    frames.push((next, 0));
+                } else if on_stack[next] {
+                    low[node] = low[node].min(order[next]);
+                }
+                continue;
+            }
+
+            frames.pop();
+            if let Some(&(parent, _)) = frames.last() {
+                low[parent] = low[parent].min(low[node]);
+            }
+            if low[node] == order[node] {
+                let mut component = Vec::new();
+                loop {
+                    let member = stack.pop().expect("the node is on the stack");
+                    on_stack[member] = false;
+                    component.push(member);
+                    if member == node {
+                        break;
+                    }
+                }
+                components.push(component);
+            }
+        }
+    }
+    components
 }
 
 /// The requirements that refine each requirement, in document order.
@@ -429,19 +586,21 @@ fn modality_at(words: &[&str]) -> Option<Modality> {
 
 #[cfg(test)]
 mod tests {
+    use miette::Severity;
     use serde_json::{Value, json};
 
     use super::*;
+    use crate::spec::graph::UncheckedDocument;
 
     const TODO_API: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
 
     /// Read a graph without checking its invariants.
-    fn unchecked(value: Value) -> SlcrRequirementsDocument {
-        SlcrRequirementsDocument::deserialize(value).unwrap()
+    fn unchecked(value: Value) -> UncheckedDocument {
+        serde_json::from_value(value).unwrap()
     }
 
     fn violations(value: Value) -> Vec<Violation> {
-        match invariants(&unchecked(value)) {
+        match invariants(unchecked(value).document()) {
             Ok(()) => Vec::new(),
             Err(violations) => violations.violations,
         }
@@ -506,7 +665,9 @@ mod tests {
         );
         assert_eq!(
             violations(value),
-            [Violation::DuplicateId("REQ-001".to_owned())]
+            [Violation::DuplicateId {
+                id: "REQ-001".to_owned()
+            }]
         );
     }
 
@@ -516,7 +677,9 @@ mod tests {
         value["glossary"]["id"] = json!("SEC-001");
         assert_eq!(
             violations(value),
-            [Violation::DuplicateId("SEC-001".to_owned())]
+            [Violation::DuplicateId {
+                id: "SEC-001".to_owned()
+            }]
         );
     }
 
@@ -537,9 +700,15 @@ mod tests {
         assert_eq!(
             violations(value),
             [
-                Violation::DuplicateId("SEC-002".to_owned()),
-                Violation::DuplicateId("AC-001".to_owned()),
-                Violation::DuplicateId("TERM-001".to_owned()),
+                Violation::DuplicateId {
+                    id: "SEC-002".to_owned()
+                },
+                Violation::DuplicateId {
+                    id: "AC-001".to_owned()
+                },
+                Violation::DuplicateId {
+                    id: "TERM-001".to_owned()
+                },
             ]
         );
     }
@@ -700,6 +869,103 @@ mod tests {
         );
     }
 
+    /// Requirements REQ-001 to REQ-`count`, where each `(from, to)` pair is
+    /// a `dependsOn` edge.
+    fn depending(count: u32, pairs: &[(u32, u32)]) -> Value {
+        let mut targets: HashMap<u32, Vec<String>> = HashMap::new();
+        for (from, to) in pairs {
+            targets
+                .entry(*from)
+                .or_default()
+                .push(format!("REQ-{to:03}"));
+        }
+        let requirements = (1..=count)
+            .map(|number| {
+                let mut requirement = req(&format!("REQ-{number:03}"), "It MUST work.", "MUST");
+                if let Some(targets) = targets.remove(&number) {
+                    requirement["dependsOn"] = json!(targets);
+                }
+                requirement
+            })
+            .collect();
+        graph(requirements, vec![])
+    }
+
+    fn depends_on_cycle(path: &[u32]) -> Violation {
+        Violation::Cycle {
+            relation: Relation::DependsOn,
+            path: path.iter().copied().map(rid).collect(),
+        }
+    }
+
+    #[test]
+    fn independent_cycles_are_all_reported() {
+        let value = depending(5, &[(4, 5), (5, 4), (1, 2), (2, 1), (3, 1)]);
+        assert_eq!(
+            violations(value),
+            [depends_on_cycle(&[1, 2, 1]), depends_on_cycle(&[4, 5, 4])]
+        );
+    }
+
+    #[test]
+    fn cycles_sharing_a_node_are_reported_once() {
+        // A figure eight: REQ-001 ⇄ REQ-002 and REQ-002 ⇄ REQ-003.
+        let value = depending(3, &[(1, 2), (2, 1), (2, 3), (3, 2)]);
+        assert_eq!(violations(value), [depends_on_cycle(&[1, 2, 1])]);
+    }
+
+    #[test]
+    fn a_cycle_need_not_pass_through_the_smallest_node_of_its_tangle() {
+        // REQ-001 → REQ-002 → REQ-003 → REQ-002, and REQ-003 → REQ-001.
+        let value = depending(3, &[(1, 2), (2, 3), (3, 2), (3, 1)]);
+        assert_eq!(violations(value), [depends_on_cycle(&[2, 3, 2])]);
+    }
+
+    #[test]
+    fn self_loops_and_longer_cycles_are_reported_side_by_side() {
+        let value = depending(4, &[(4, 4), (1, 3), (3, 1), (2, 2)]);
+        assert_eq!(
+            violations(value),
+            [
+                depends_on_cycle(&[1, 3, 1]),
+                depends_on_cycle(&[2, 2]),
+                depends_on_cycle(&[4, 4]),
+            ]
+        );
+    }
+
+    #[test]
+    fn long_cycles_do_not_overflow_the_stack() {
+        let count = 20_000;
+        let ring: Vec<(u32, u32)> = (1..=count)
+            .map(|number| (number, number % count + 1))
+            .collect();
+        let found = violations(depending(count, &ring));
+        let [Violation::Cycle { path, .. }] = found.as_slice() else {
+            panic!("expected one cycle, found {found:?}");
+        };
+        assert_eq!(path.len(), count as usize + 1);
+        assert_eq!(path.first(), Some(&rid(1)));
+        assert_eq!(path.last(), Some(&rid(1)));
+    }
+
+    #[test]
+    fn strongly_connected_components_partition_the_graph() {
+        // 0 → 1 → 2 → 0 is one component; 3 → 4 are singletons; 5 loops.
+        let successors = vec![vec![1], vec![2], vec![0, 3], vec![4], vec![], vec![5]];
+        let mut components = strongly_connected_components(&successors);
+        for component in &mut components {
+            component.sort_unstable();
+        }
+        components.sort();
+        assert_eq!(components, [vec![0, 1, 2], vec![3], vec![4], vec![5]]);
+    }
+
+    #[test]
+    fn an_empty_graph_has_no_cycles() {
+        assert!(find_cycles(&BTreeMap::new()).is_empty());
+    }
+
     #[test]
     fn a_refined_requirement_needs_a_refinement() {
         let parent = req("REQ-001", "It MUST work.", "MUST");
@@ -777,7 +1043,7 @@ mod tests {
         let mut leaf = req("REQ-001", "It MUST work.", "MUST");
         leaf["refinement"] = json!("OR");
         leaf["usesTerm"] = json!(["TERM-005"]);
-        let err = invariants(&unchecked(graph(vec![leaf], vec![]))).unwrap_err();
+        let err = invariants(unchecked(graph(vec![leaf], vec![])).document()).unwrap_err();
         assert_eq!(
             err.to_string(),
             "the specification graph breaks its invariants:\n  \
@@ -805,7 +1071,7 @@ mod tests {
             vec![],
         );
         assert_eq!(
-            unchecked(value).warnings(),
+            unchecked(value).document().warnings(),
             [Warning::ModalityNotStated {
                 requirement: rid(1),
                 modality: Modality::Must,
@@ -846,7 +1112,9 @@ mod tests {
         one["refines"] = json!(["REQ-001"]);
         two["refines"] = json!(["REQ-001"]);
         assert_eq!(
-            unchecked(graph(vec![parent, one, two], vec![])).warnings(),
+            unchecked(graph(vec![parent, one, two], vec![]))
+                .document()
+                .warnings(),
             [Warning::VacuousAnd {
                 requirement: rid(1),
             }]
@@ -862,7 +1130,9 @@ mod tests {
         one["refines"] = json!(["REQ-001"]);
         two["refines"] = json!(["REQ-001"]);
         assert_eq!(
-            unchecked(graph(vec![parent, one, two], vec![])).warnings(),
+            unchecked(graph(vec![parent, one, two], vec![]))
+                .document()
+                .warnings(),
             []
         );
     }
@@ -874,6 +1144,219 @@ mod tests {
         parent["refinement"] = json!("OR");
         let mut one = req("REQ-002", "It MAY accept OAuth.", "MAY");
         one["refines"] = json!(["REQ-001"]);
-        assert_eq!(unchecked(graph(vec![parent, one], vec![])).warnings(), []);
+        assert_eq!(
+            unchecked(graph(vec![parent, one], vec![]))
+                .document()
+                .warnings(),
+            []
+        );
+    }
+
+    #[test]
+    fn the_canon_example_reports_nothing() {
+        let value: Value = serde_json::from_str(TODO_API).unwrap();
+        let report = unchecked(value).report();
+        assert!(report.is_clean());
+        assert_eq!(report, Report::default());
+        assert_eq!(report.findings().count(), 0);
+    }
+
+    #[test]
+    fn a_report_holds_warnings_even_when_invariants_are_broken() {
+        // REQ-001 is a leaf with a `refinement`, and doesn't state its MUST.
+        let mut leaf = req("REQ-001", "There is an endpoint.", "MUST");
+        leaf["refinement"] = json!("OR");
+        let report = unchecked(graph(vec![leaf], vec![])).report();
+        assert_eq!(
+            report.violations(),
+            [Violation::UnexpectedRefinement {
+                requirement: rid(1)
+            }]
+        );
+        assert_eq!(
+            report.warnings(),
+            [Warning::ModalityNotStated {
+                requirement: rid(1),
+                modality: Modality::Must,
+            }]
+        );
+    }
+
+    #[test]
+    fn a_report_with_only_warnings_is_not_clean() {
+        let report = unchecked(graph(vec![req("REQ-001", "No keyword.", "MAY")], vec![])).report();
+        assert!(report.violations().is_empty());
+        assert!(!report.is_clean());
+    }
+
+    #[test]
+    fn findings_list_violations_before_warnings() {
+        let mut leaf = req("REQ-001", "There is an endpoint.", "MUST");
+        leaf["refinement"] = json!("OR");
+        let second = req("REQ-002", "Another one.", "SHOULD");
+        let report = unchecked(graph(vec![leaf, second], vec![])).report();
+        let findings: Vec<Finding<'_>> = report.findings().collect();
+        assert_eq!(
+            findings,
+            [
+                Finding::Violation(&Violation::UnexpectedRefinement {
+                    requirement: rid(1)
+                }),
+                Finding::Warning(&Warning::ModalityNotStated {
+                    requirement: rid(1),
+                    modality: Modality::Must,
+                }),
+                Finding::Warning(&Warning::ModalityNotStated {
+                    requirement: rid(2),
+                    modality: Modality::Should,
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn findings_keep_the_message_severity_and_help_of_what_they_wrap() {
+        let violation = Violation::UnexpectedRefinement {
+            requirement: rid(1),
+        };
+        let diagnostic = Finding::Violation(&violation).diagnostic();
+        assert_eq!(
+            diagnostic.to_string(),
+            "REQ-001 has a `refinement`, but no requirement refines it"
+        );
+        assert_eq!(diagnostic.severity(), None);
+        assert_eq!(
+            diagnostic.help().unwrap().to_string(),
+            "omit `refinement` on a leaf requirement"
+        );
+
+        let warning = Warning::VacuousAnd {
+            requirement: rid(2),
+        };
+        let diagnostic = Finding::Warning(&warning).diagnostic();
+        assert_eq!(diagnostic.to_string(), "REQ-002 is vacuously satisfied");
+        assert_eq!(diagnostic.severity(), Some(Severity::Warning));
+        assert!(diagnostic.help().is_some());
+    }
+
+    #[test]
+    fn findings_serialize_with_a_code_and_their_fields() {
+        let cases = [
+            (
+                Violation::DuplicateId {
+                    id: "SEC-002".to_owned(),
+                },
+                json!({ "code": "duplicate-id", "id": "SEC-002" }),
+            ),
+            (
+                Violation::DanglingReference {
+                    from: "REQ-001".to_owned(),
+                    relation: Relation::DependsOn,
+                    to: "SEC-009".to_owned(),
+                },
+                json!({
+                    "code": "dangling-reference",
+                    "from": "REQ-001",
+                    "relation": "dependsOn",
+                    "to": "SEC-009"
+                }),
+            ),
+            (
+                Violation::Cycle {
+                    relation: Relation::Refines,
+                    path: vec![rid(1), rid(2), rid(1)],
+                },
+                json!({
+                    "code": "cycle",
+                    "relation": "refines",
+                    "path": ["REQ-001", "REQ-002", "REQ-001"]
+                }),
+            ),
+            (
+                Violation::MissingRefinement {
+                    requirement: rid(1),
+                    refiner: rid(2),
+                },
+                json!({ "code": "missing-refinement", "requirement": "REQ-001", "refiner": "REQ-002" }),
+            ),
+            (
+                Violation::UnexpectedRefinement {
+                    requirement: rid(1),
+                },
+                json!({ "code": "unexpected-refinement", "requirement": "REQ-001" }),
+            ),
+            (
+                Violation::TermOutOfOrder {
+                    term: TermId::new(1),
+                    previous: TermId::new(1000),
+                },
+                json!({ "code": "term-out-of-order", "term": "TERM-001", "previous": "TERM-1000" }),
+            ),
+        ];
+        for (violation, expected) in cases {
+            let finding = Finding::Violation(&violation);
+            assert_eq!(serde_json::to_value(finding).unwrap(), expected);
+        }
+
+        let cases = [
+            (
+                Warning::ModalityNotStated {
+                    requirement: rid(3),
+                    modality: Modality::ShouldNot,
+                },
+                json!({
+                    "code": "modality-not-stated",
+                    "requirement": "REQ-003",
+                    "modality": "SHOULD NOT"
+                }),
+            ),
+            (
+                Warning::VacuousAnd {
+                    requirement: rid(4),
+                },
+                json!({ "code": "vacuous-and", "requirement": "REQ-004" }),
+            ),
+        ];
+        for (warning, expected) in cases {
+            let finding = Finding::Warning(&warning);
+            assert_eq!(serde_json::to_value(finding).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn every_violation_has_a_message() {
+        let cases = [
+            (
+                Violation::DuplicateId {
+                    id: "REQ-001".to_owned(),
+                },
+                "REQ-001 identifies more than one node",
+            ),
+            (
+                Violation::DanglingReference {
+                    from: "REQ-001".to_owned(),
+                    relation: Relation::Refines,
+                    to: "REQ-002".to_owned(),
+                },
+                "REQ-001 names REQ-002 in `refines`, but no such node exists",
+            ),
+            (
+                Violation::MissingRefinement {
+                    requirement: rid(1),
+                    refiner: rid(2),
+                },
+                "REQ-001 is refined by REQ-002 but has no `refinement`",
+            ),
+            (
+                Violation::TermOutOfOrder {
+                    term: TermId::new(1),
+                    previous: TermId::new(2),
+                },
+                "glossary term TERM-001 follows TERM-002; terms must be serialized in ID order",
+            ),
+        ];
+        for (violation, message) in cases {
+            assert_eq!(violation.to_string(), message);
+        }
     }
 }

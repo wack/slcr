@@ -1,5 +1,5 @@
 // Remove this `expect` once the first async command calls `block_on`.
-pub use check::Check;
+pub use check::{Check, CheckArgs};
 pub use init::Init;
 pub use not_implemented::NotImplemented;
 pub use render::Render;
