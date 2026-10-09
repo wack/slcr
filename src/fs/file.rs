@@ -12,16 +12,16 @@ pub(crate) trait File {
     /// The data type this file serializes to and from..
     type Data: DeserializeOwned + Serialize;
 
-    /// The file extension we expect to find. Not dot is included.
-    /// e.g. "json"
-    const EXTENSION: &'static str;
+    /// The file extension, which selects the serialization format.
+    /// No dot is included. e.g. "json"
+    fn extension(&self) -> &str;
 
-    /// Return the expected path to the file. If this file's parent
-    /// directory doesn't exist, it will be created.
+    /// Return the expected path to the file. A [StaticFile] creates its
+    /// parent directory if it doesn't exist.
     fn path(&self, fs: &FileSystem) -> Result<PathBuf>;
 }
 
-/// [StaticFiles] have a statically known name. For example,
+/// [StaticFile]s have a statically known name. For example,
 /// `project.toml` has a statically known name, but a file whose name
 /// is determined dynamically does not.
 pub(crate) trait StaticFile {
@@ -31,7 +31,7 @@ pub(crate) trait StaticFile {
     const DIR: DirectoryType;
     /// The name of the file, minus the extension.
     const NAME: &'static str;
-    /// The file extension we expect to find. Not dot is included.
+    /// The file extension we expect to find. No dot is included.
     /// e.g. "json"
     const EXTENSION: &'static str;
 
@@ -43,7 +43,10 @@ pub(crate) trait StaticFile {
 
 impl<T: StaticFile> File for T {
     type Data = T::Data;
-    const EXTENSION: &'static str = T::EXTENSION;
+
+    fn extension(&self) -> &str {
+        T::EXTENSION
+    }
 
     fn path(&self, fs: &FileSystem) -> Result<PathBuf> {
         Self::static_path(fs)
