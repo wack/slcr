@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use miette::{Diagnostic, LabeledSpan, NamedSource, SourceCode, SourceSpan};
+use miette::{Diagnostic, IntoDiagnostic, LabeledSpan, NamedSource, SourceCode, SourceSpan};
 use serde::{Serialize, de::DeserializeOwned};
 
 /// A serialization format, chosen by a file's extension.
@@ -58,7 +58,6 @@ impl Format {
 
     /// Serialize `data` in this format.
     pub(crate) fn serialize<T: Serialize>(self, data: &T) -> miette::Result<String> {
-        use miette::IntoDiagnostic;
         match self {
             Self::Json => serde_json::to_string_pretty(data).into_diagnostic(),
             Self::Toml => toml::to_string_pretty(data).into_diagnostic(),

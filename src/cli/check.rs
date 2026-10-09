@@ -110,9 +110,7 @@ impl Outcome {
     /// Whether the file passes the check.
     fn passes(&self, deny_warnings: bool) -> bool {
         match &self.result {
-            Ok(report) => {
-                report.violations().is_empty() && !(deny_warnings && !report.warnings().is_empty())
-            }
+            Ok(report) => passes(report, deny_warnings),
             Err(_) => false,
         }
     }
@@ -148,6 +146,12 @@ fn check_file(fs: &FileSystem, path: &Path) -> Outcome {
         path: path.to_path_buf(),
         result,
     }
+}
+
+/// Whether a file with `report` passes: it breaks no invariant and, if
+/// warnings are denied, has no warning.
+fn passes(report: &Report, deny_warnings: bool) -> bool {
+    report.violations().is_empty() && (!deny_warnings || report.warnings().is_empty())
 }
 
 /// Succeed if every file passes, or fail naming how many didn't.
@@ -210,14 +214,12 @@ struct FileFindings<'a> {
 
 impl<'a> FileFindings<'a> {
     fn new(path: &Path, report: &'a Report, deny_warnings: bool) -> Self {
-        let failing =
-            !report.violations().is_empty() || (deny_warnings && !report.warnings().is_empty());
         Self {
             headline: format!("{}: {}", path.display(), tally(report)),
-            severity: if failing {
-                Severity::Error
-            } else {
+            severity: if passes(report, deny_warnings) {
                 Severity::Warning
+            } else {
+                Severity::Error
             },
             report,
         }
