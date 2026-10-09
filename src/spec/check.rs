@@ -113,10 +113,70 @@ pub enum Warning {
     VacuousAnd { requirement: RequirementId },
 }
 
+/// One thing a check found: a broken invariant or a warning.
+#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
+pub enum Finding {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Violation(#[from] Violation),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Warning(#[from] Warning),
+}
+
+/// Everything a check found in a document: the invariants it breaks and
+/// the warnings, each in document order.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Report {
+    violations: Vec<Violation>,
+    warnings: Vec<Warning>,
+}
+
+impl Report {
+    pub fn violations(&self) -> &[Violation] {
+        &self.violations
+    }
+
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+
+    /// Whether the check found nothing at all, not even a warning.
+    pub fn is_clean(&self) -> bool {
+        self.violations.is_empty() && self.warnings.is_empty()
+    }
+
+    /// Every finding: the violations, then the warnings.
+    pub fn into_findings(self) -> Vec<Finding> {
+        let violations = self.violations.into_iter().map(Finding::Violation);
+        let warnings = self.warnings.into_iter().map(Finding::Warning);
+        violations.chain(warnings).collect()
+    }
+}
+
+/// Check every invariant, including those that are only warnings.
+pub(super) fn report(graph: &SlcrRequirementsDocument) -> Report {
+    Report {
+        violations: violations(graph),
+        warnings: warnings(graph),
+    }
+}
+
 /// Check every invariant that is an error rather than a warning.
 pub(super) fn invariants(graph: &SlcrRequirementsDocument) -> Result<(), Violations> {
+    let violations = violations(graph);
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(Violations { violations })
+    }
+}
+
+/// The invariants `graph` breaks, in document order.
+fn violations(graph: &SlcrRequirementsDocument) -> Vec<Violation> {
     let requirements = graph.requirements();
-    let violations: Vec<Violation> = [
+    [
         duplicate_ids(graph, &requirements),
         dangling_references(graph, &requirements),
         cycles(&requirements),
@@ -125,13 +185,7 @@ pub(super) fn invariants(graph: &SlcrRequirementsDocument) -> Result<(), Violati
     ]
     .into_iter()
     .flatten()
-    .collect();
-
-    if violations.is_empty() {
-        Ok(())
-    } else {
-        Err(Violations { violations })
-    }
+    .collect()
 }
 
 /// Check the invariants that are only warnings.
@@ -429,19 +483,21 @@ fn modality_at(words: &[&str]) -> Option<Modality> {
 
 #[cfg(test)]
 mod tests {
+    use miette::Severity;
     use serde_json::{Value, json};
 
     use super::*;
+    use crate::spec::graph::UncheckedDocument;
 
     const TODO_API: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
 
     /// Read a graph without checking its invariants.
-    fn unchecked(value: Value) -> SlcrRequirementsDocument {
-        SlcrRequirementsDocument::deserialize(value).unwrap()
+    fn unchecked(value: Value) -> UncheckedDocument {
+        serde_json::from_value(value).unwrap()
     }
 
     fn violations(value: Value) -> Vec<Violation> {
-        match invariants(&unchecked(value)) {
+        match invariants(unchecked(value).document()) {
             Ok(()) => Vec::new(),
             Err(violations) => violations.violations,
         }
@@ -777,7 +833,7 @@ mod tests {
         let mut leaf = req("REQ-001", "It MUST work.", "MUST");
         leaf["refinement"] = json!("OR");
         leaf["usesTerm"] = json!(["TERM-005"]);
-        let err = invariants(&unchecked(graph(vec![leaf], vec![]))).unwrap_err();
+        let err = invariants(unchecked(graph(vec![leaf], vec![])).document()).unwrap_err();
         assert_eq!(
             err.to_string(),
             "the specification graph breaks its invariants:\n  \
@@ -805,7 +861,7 @@ mod tests {
             vec![],
         );
         assert_eq!(
-            unchecked(value).warnings(),
+            unchecked(value).document().warnings(),
             [Warning::ModalityNotStated {
                 requirement: rid(1),
                 modality: Modality::Must,
@@ -846,7 +902,9 @@ mod tests {
         one["refines"] = json!(["REQ-001"]);
         two["refines"] = json!(["REQ-001"]);
         assert_eq!(
-            unchecked(graph(vec![parent, one, two], vec![])).warnings(),
+            unchecked(graph(vec![parent, one, two], vec![]))
+                .document()
+                .warnings(),
             [Warning::VacuousAnd {
                 requirement: rid(1),
             }]
@@ -862,7 +920,9 @@ mod tests {
         one["refines"] = json!(["REQ-001"]);
         two["refines"] = json!(["REQ-001"]);
         assert_eq!(
-            unchecked(graph(vec![parent, one, two], vec![])).warnings(),
+            unchecked(graph(vec![parent, one, two], vec![]))
+                .document()
+                .warnings(),
             []
         );
     }
@@ -874,6 +934,132 @@ mod tests {
         parent["refinement"] = json!("OR");
         let mut one = req("REQ-002", "It MAY accept OAuth.", "MAY");
         one["refines"] = json!(["REQ-001"]);
-        assert_eq!(unchecked(graph(vec![parent, one], vec![])).warnings(), []);
+        assert_eq!(
+            unchecked(graph(vec![parent, one], vec![]))
+                .document()
+                .warnings(),
+            []
+        );
+    }
+
+    #[test]
+    fn the_canon_example_reports_nothing() {
+        let value: Value = serde_json::from_str(TODO_API).unwrap();
+        let report = unchecked(value).report();
+        assert!(report.is_clean());
+        assert_eq!(report, Report::default());
+        assert!(report.into_findings().is_empty());
+    }
+
+    #[test]
+    fn a_report_holds_warnings_even_when_invariants_are_broken() {
+        // REQ-001 is a leaf with a `refinement`, and doesn't state its MUST.
+        let mut leaf = req("REQ-001", "There is an endpoint.", "MUST");
+        leaf["refinement"] = json!("OR");
+        let report = unchecked(graph(vec![leaf], vec![])).report();
+        assert_eq!(
+            report.violations(),
+            [Violation::UnexpectedRefinement {
+                requirement: rid(1)
+            }]
+        );
+        assert_eq!(
+            report.warnings(),
+            [Warning::ModalityNotStated {
+                requirement: rid(1),
+                modality: Modality::Must,
+            }]
+        );
+    }
+
+    #[test]
+    fn a_report_with_only_warnings_is_not_clean() {
+        let report = unchecked(graph(vec![req("REQ-001", "No keyword.", "MAY")], vec![])).report();
+        assert!(report.violations().is_empty());
+        assert!(!report.is_clean());
+    }
+
+    #[test]
+    fn findings_list_violations_before_warnings() {
+        let mut leaf = req("REQ-001", "There is an endpoint.", "MUST");
+        leaf["refinement"] = json!("OR");
+        let second = req("REQ-002", "Another one.", "SHOULD");
+        let findings = unchecked(graph(vec![leaf, second], vec![]))
+            .report()
+            .into_findings();
+        assert_eq!(
+            findings,
+            [
+                Finding::Violation(Violation::UnexpectedRefinement {
+                    requirement: rid(1)
+                }),
+                Finding::Warning(Warning::ModalityNotStated {
+                    requirement: rid(1),
+                    modality: Modality::Must,
+                }),
+                Finding::Warning(Warning::ModalityNotStated {
+                    requirement: rid(2),
+                    modality: Modality::Should,
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn findings_keep_the_message_severity_and_help_of_what_they_wrap() {
+        let violation = Finding::from(Violation::UnexpectedRefinement {
+            requirement: rid(1),
+        });
+        assert_eq!(
+            violation.to_string(),
+            "REQ-001 has a `refinement`, but no requirement refines it"
+        );
+        assert_eq!(violation.severity(), None);
+        assert_eq!(
+            violation.help().unwrap().to_string(),
+            "omit `refinement` on a leaf requirement"
+        );
+
+        let warning = Finding::from(Warning::VacuousAnd {
+            requirement: rid(2),
+        });
+        assert_eq!(warning.to_string(), "REQ-002 is vacuously satisfied");
+        assert_eq!(warning.severity(), Some(Severity::Warning));
+        assert!(warning.help().is_some());
+    }
+
+    #[test]
+    fn every_violation_has_a_message() {
+        let cases = [
+            (
+                Violation::DuplicateId("REQ-001".to_owned()),
+                "REQ-001 identifies more than one node",
+            ),
+            (
+                Violation::DanglingReference {
+                    from: "REQ-001".to_owned(),
+                    relation: Relation::Refines,
+                    to: "REQ-002".to_owned(),
+                },
+                "REQ-001 names REQ-002 in `refines`, but no such node exists",
+            ),
+            (
+                Violation::MissingRefinement {
+                    requirement: rid(1),
+                    refiner: rid(2),
+                },
+                "REQ-001 is refined by REQ-002 but has no `refinement`",
+            ),
+            (
+                Violation::TermOutOfOrder {
+                    term: TermId::new(1),
+                    previous: TermId::new(2),
+                },
+                "glossary term TERM-001 follows TERM-002; terms must be serialized in ID order",
+            ),
+        ];
+        for (violation, message) in cases {
+            assert_eq!(violation.to_string(), message);
+        }
     }
 }

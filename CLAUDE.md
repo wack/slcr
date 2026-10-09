@@ -77,7 +77,10 @@ truth for field names, grammar, and the `x-checkInvariants` list.
 - `check.rs` — invariants the schema can't express. **Deserializing a `SlcrRequirementsDocument`
   runs `check::invariants` and fails on any `Violation`**; non-fatal findings are
   `Warning`s, exposed separately via `SlcrRequirementsDocument::warnings()`. All violations are
-  collected and reported together, in document order.
+  collected and reported together, in document order. To see the findings
+  instead of failing, read an `UncheckedDocument` (or load
+  `RequirementsFile::unchecked()`), whose `report()` returns a `check::Report`
+  of every violation and warning.
 - `file.rs` — `RequirementsFile`, a caller-chosen path whose extension selects the
   format.
 
