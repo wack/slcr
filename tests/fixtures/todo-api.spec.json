@@ -1,5 +1,5 @@
 {
-  "$schema": "https://wack.run/schemas/slcr/spec/v1.schema.json",
+  "$schema": "https://slcr.io/reference/schemas/spec/v1.schema.json",
   "formatVersion": "1",
   "spec": { "name": "todo-api" },
   "root": {

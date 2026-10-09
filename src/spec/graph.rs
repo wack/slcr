@@ -136,7 +136,7 @@ mod tests {
         let graph: SpecGraph = serde_json::from_str(TODO_API).unwrap();
         assert_eq!(
             graph.schema().as_deref(),
-            Some("https://wack.run/schemas/slcr/spec/v1.schema.json")
+            Some("https://slcr.io/reference/schemas/spec/v1.schema.json")
         );
         assert_eq!(*graph.format_version(), FormatVersion::V1);
         assert_eq!(graph.spec().name().as_str(), "todo-api");
