@@ -47,7 +47,13 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `dispatch(self) -> miette::Result<()>`. To add a command: add a variant to
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
-- `init`, `render`, and `check` are stubs returning `cli::NotImplemented`.
+- `init` and `render` are stubs returning `cli::NotImplemented`.
+- `check <FILE>...` loads each requirements file with
+  `RequirementsFile::unchecked()`, writes every finding to stderr as a miette
+  diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,
+  and fails with `CheckFailed` if any file can't be loaded or breaks an
+  invariant (or has warnings, under `--deny-warnings`). Validator-file checks
+  wait on the validator-file schema.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
   `dispatch()` (see `src/cli/runtime.rs`). Remove the `#[expect(unused_imports)]`
   on its re-export in `src/cli/mod.rs` when the first caller lands.

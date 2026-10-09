@@ -12,7 +12,7 @@ pub(crate) use file::StaticFile;
 use format::Format;
 
 mod file;
-mod format;
+pub(crate) mod format;
 
 /// The name of the application as used on the filesystem for XDG conventions.
 const APPLICATION_NAME: &str = "slcr";
