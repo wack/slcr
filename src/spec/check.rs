@@ -8,6 +8,7 @@ use std::{
 };
 
 use miette::Diagnostic;
+use serde::Serialize;
 use thiserror::Error;
 
 use super::graph::SlcrRequirementsDocument;
@@ -38,10 +39,18 @@ fn list(violations: &[Violation]) -> String {
 }
 
 /// One broken invariant.
-#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
+///
+/// It serializes as an object whose `code` names the invariant in
+/// kebab-case, e.g. `dangling-reference`, alongside the variant's fields.
+#[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "code",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub enum Violation {
-    #[error("{0} identifies more than one node")]
-    DuplicateId(String),
+    #[error("{id} identifies more than one node")]
+    DuplicateId { id: String },
 
     #[error("{from} names {to} in `{relation}`, but no such node exists")]
     DanglingReference {
@@ -78,7 +87,8 @@ fn arrows(path: &[RequirementId]) -> String {
 }
 
 /// A cross edge between nodes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Relation {
     Refines,
     DependsOn,
@@ -96,7 +106,14 @@ impl Display for Relation {
 }
 
 /// A finding that doesn't make the graph invalid.
-#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
+///
+/// It serializes like a [Violation].
+#[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "code",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub enum Warning {
     #[error("the body of {requirement} does not contain its modality keyword, {modality}")]
     #[diagnostic(severity(Warning))]
@@ -113,16 +130,24 @@ pub enum Warning {
     VacuousAnd { requirement: RequirementId },
 }
 
-/// One thing a check found: a broken invariant or a warning.
-#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
-pub enum Finding {
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    Violation(#[from] Violation),
+/// One thing a check found, borrowed from its [Report]: a broken invariant
+/// or a warning. It serializes as what it wraps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum Finding<'a> {
+    Violation(&'a Violation),
+    Warning(&'a Warning),
+}
 
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    Warning(#[from] Warning),
+impl<'a> Finding<'a> {
+    /// The finding as a diagnostic, with its own message, severity, and
+    /// help.
+    pub fn diagnostic(self) -> &'a dyn Diagnostic {
+        match self {
+            Self::Violation(violation) => violation,
+            Self::Warning(warning) => warning,
+        }
+    }
 }
 
 /// Everything a check found in a document: the invariants it breaks and
@@ -148,10 +173,10 @@ impl Report {
     }
 
     /// Every finding: the violations, then the warnings.
-    pub fn into_findings(self) -> Vec<Finding> {
-        let violations = self.violations.into_iter().map(Finding::Violation);
-        let warnings = self.warnings.into_iter().map(Finding::Warning);
-        violations.chain(warnings).collect()
+    pub fn findings(&self) -> impl Iterator<Item = Finding<'_>> {
+        let violations = self.violations.iter().map(Finding::Violation);
+        let warnings = self.warnings.iter().map(Finding::Warning);
+        violations.chain(warnings)
     }
 }
 
@@ -245,7 +270,7 @@ fn repeated<T: Copy + Display + Eq + Hash>(ids: impl IntoIterator<Item = T>) -> 
     let mut reported = HashSet::new();
     ids.into_iter()
         .filter(|id| !seen.insert(*id) && reported.insert(*id))
-        .map(|id| Violation::DuplicateId(id.to_string()))
+        .map(|id| Violation::DuplicateId { id: id.to_string() })
         .collect()
 }
 
@@ -640,7 +665,9 @@ mod tests {
         );
         assert_eq!(
             violations(value),
-            [Violation::DuplicateId("REQ-001".to_owned())]
+            [Violation::DuplicateId {
+                id: "REQ-001".to_owned()
+            }]
         );
     }
 
@@ -650,7 +677,9 @@ mod tests {
         value["glossary"]["id"] = json!("SEC-001");
         assert_eq!(
             violations(value),
-            [Violation::DuplicateId("SEC-001".to_owned())]
+            [Violation::DuplicateId {
+                id: "SEC-001".to_owned()
+            }]
         );
     }
 
@@ -671,9 +700,15 @@ mod tests {
         assert_eq!(
             violations(value),
             [
-                Violation::DuplicateId("SEC-002".to_owned()),
-                Violation::DuplicateId("AC-001".to_owned()),
-                Violation::DuplicateId("TERM-001".to_owned()),
+                Violation::DuplicateId {
+                    id: "SEC-002".to_owned()
+                },
+                Violation::DuplicateId {
+                    id: "AC-001".to_owned()
+                },
+                Violation::DuplicateId {
+                    id: "TERM-001".to_owned()
+                },
             ]
         );
     }
@@ -1123,7 +1158,7 @@ mod tests {
         let report = unchecked(value).report();
         assert!(report.is_clean());
         assert_eq!(report, Report::default());
-        assert!(report.into_findings().is_empty());
+        assert_eq!(report.findings().count(), 0);
     }
 
     #[test]
@@ -1159,20 +1194,19 @@ mod tests {
         let mut leaf = req("REQ-001", "There is an endpoint.", "MUST");
         leaf["refinement"] = json!("OR");
         let second = req("REQ-002", "Another one.", "SHOULD");
-        let findings = unchecked(graph(vec![leaf, second], vec![]))
-            .report()
-            .into_findings();
+        let report = unchecked(graph(vec![leaf, second], vec![])).report();
+        let findings: Vec<Finding<'_>> = report.findings().collect();
         assert_eq!(
             findings,
             [
-                Finding::Violation(Violation::UnexpectedRefinement {
+                Finding::Violation(&Violation::UnexpectedRefinement {
                     requirement: rid(1)
                 }),
-                Finding::Warning(Warning::ModalityNotStated {
+                Finding::Warning(&Warning::ModalityNotStated {
                     requirement: rid(1),
                     modality: Modality::Must,
                 }),
-                Finding::Warning(Warning::ModalityNotStated {
+                Finding::Warning(&Warning::ModalityNotStated {
                     requirement: rid(2),
                     modality: Modality::Should,
                 }),
@@ -1182,32 +1216,120 @@ mod tests {
 
     #[test]
     fn findings_keep_the_message_severity_and_help_of_what_they_wrap() {
-        let violation = Finding::from(Violation::UnexpectedRefinement {
+        let violation = Violation::UnexpectedRefinement {
             requirement: rid(1),
-        });
+        };
+        let diagnostic = Finding::Violation(&violation).diagnostic();
         assert_eq!(
-            violation.to_string(),
+            diagnostic.to_string(),
             "REQ-001 has a `refinement`, but no requirement refines it"
         );
-        assert_eq!(violation.severity(), None);
+        assert_eq!(diagnostic.severity(), None);
         assert_eq!(
-            violation.help().unwrap().to_string(),
+            diagnostic.help().unwrap().to_string(),
             "omit `refinement` on a leaf requirement"
         );
 
-        let warning = Finding::from(Warning::VacuousAnd {
+        let warning = Warning::VacuousAnd {
             requirement: rid(2),
-        });
-        assert_eq!(warning.to_string(), "REQ-002 is vacuously satisfied");
-        assert_eq!(warning.severity(), Some(Severity::Warning));
-        assert!(warning.help().is_some());
+        };
+        let diagnostic = Finding::Warning(&warning).diagnostic();
+        assert_eq!(diagnostic.to_string(), "REQ-002 is vacuously satisfied");
+        assert_eq!(diagnostic.severity(), Some(Severity::Warning));
+        assert!(diagnostic.help().is_some());
+    }
+
+    #[test]
+    fn findings_serialize_with_a_code_and_their_fields() {
+        let cases = [
+            (
+                Violation::DuplicateId {
+                    id: "SEC-002".to_owned(),
+                },
+                json!({ "code": "duplicate-id", "id": "SEC-002" }),
+            ),
+            (
+                Violation::DanglingReference {
+                    from: "REQ-001".to_owned(),
+                    relation: Relation::DependsOn,
+                    to: "SEC-009".to_owned(),
+                },
+                json!({
+                    "code": "dangling-reference",
+                    "from": "REQ-001",
+                    "relation": "dependsOn",
+                    "to": "SEC-009"
+                }),
+            ),
+            (
+                Violation::Cycle {
+                    relation: Relation::Refines,
+                    path: vec![rid(1), rid(2), rid(1)],
+                },
+                json!({
+                    "code": "cycle",
+                    "relation": "refines",
+                    "path": ["REQ-001", "REQ-002", "REQ-001"]
+                }),
+            ),
+            (
+                Violation::MissingRefinement {
+                    requirement: rid(1),
+                    refiner: rid(2),
+                },
+                json!({ "code": "missing-refinement", "requirement": "REQ-001", "refiner": "REQ-002" }),
+            ),
+            (
+                Violation::UnexpectedRefinement {
+                    requirement: rid(1),
+                },
+                json!({ "code": "unexpected-refinement", "requirement": "REQ-001" }),
+            ),
+            (
+                Violation::TermOutOfOrder {
+                    term: TermId::new(1),
+                    previous: TermId::new(1000),
+                },
+                json!({ "code": "term-out-of-order", "term": "TERM-001", "previous": "TERM-1000" }),
+            ),
+        ];
+        for (violation, expected) in cases {
+            let finding = Finding::Violation(&violation);
+            assert_eq!(serde_json::to_value(finding).unwrap(), expected);
+        }
+
+        let cases = [
+            (
+                Warning::ModalityNotStated {
+                    requirement: rid(3),
+                    modality: Modality::ShouldNot,
+                },
+                json!({
+                    "code": "modality-not-stated",
+                    "requirement": "REQ-003",
+                    "modality": "SHOULD NOT"
+                }),
+            ),
+            (
+                Warning::VacuousAnd {
+                    requirement: rid(4),
+                },
+                json!({ "code": "vacuous-and", "requirement": "REQ-004" }),
+            ),
+        ];
+        for (warning, expected) in cases {
+            let finding = Finding::Warning(&warning);
+            assert_eq!(serde_json::to_value(finding).unwrap(), expected);
+        }
     }
 
     #[test]
     fn every_violation_has_a_message() {
         let cases = [
             (
-                Violation::DuplicateId("REQ-001".to_owned()),
+                Violation::DuplicateId {
+                    id: "REQ-001".to_owned(),
+                },
                 "REQ-001 identifies more than one node",
             ),
             (

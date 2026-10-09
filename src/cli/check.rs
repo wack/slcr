@@ -3,14 +3,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::Args;
+use clap::{Args, ValueEnum};
 use miette::{Diagnostic, Report as ErrorReport, Result, Severity};
 use thiserror::Error;
 
 use crate::Terminal;
 use crate::fs::FileSystem;
-use crate::spec::check::Report;
+use crate::spec::check::{Finding, Report};
 use crate::spec::file::RequirementsFile;
+
+mod json;
 
 /// The arguments to `slcr check`.
 #[derive(Args, Clone, Debug)]
@@ -22,13 +24,28 @@ pub struct CheckArgs {
     /// Fail when a file has warnings, too.
     #[arg(long)]
     deny_warnings: bool,
+
+    /// How to report the findings.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
+    format: OutputFormat,
+}
+
+/// How `slcr check` reports its findings.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum OutputFormat {
+    /// Diagnostics on stderr, then each file's status on stdout.
+    #[default]
+    Human,
+    /// One JSON document on stdout, describing every file and finding.
+    Json,
 }
 
 /// Report the invariants a specification breaks.
 ///
-/// Every file is checked, even after one fails. Each finding is written to
-/// stderr as a diagnostic, then each file's status is written to stdout.
-/// The command fails if any file can't be loaded or breaks an invariant, or,
+/// Every file is checked, even after one fails. By default each finding is
+/// written to stderr as a diagnostic, then each file's status is written to
+/// stdout; `--format json` writes one JSON document to stdout instead. The
+/// command fails if any file can't be loaded or breaks an invariant, or,
 /// with `--deny-warnings`, has a warning.
 pub struct Check {
     terminal: Terminal,
@@ -49,8 +66,20 @@ impl Check {
             .map(|path| check_file(&fs, path))
             .collect();
         let deny_warnings = self.args.deny_warnings;
+        match self.args.format {
+            OutputFormat::Human => self.write_human(&outcomes)?,
+            OutputFormat::Json => {
+                let document = json::document(&outcomes, deny_warnings);
+                self.terminal.write_stdout_line(&document)?;
+            }
+        }
+        verdict(&outcomes, deny_warnings)
+    }
 
-        for outcome in &outcomes {
+    /// Write each file's findings to stderr, then its status to stdout.
+    fn write_human(&self, outcomes: &[Outcome]) -> Result<()> {
+        let deny_warnings = self.args.deny_warnings;
+        for outcome in outcomes {
             match &outcome.result {
                 Err(error) => self.terminal.write_diagnostic(error.as_ref())?,
                 Ok(report) if !report.is_clean() => {
@@ -60,12 +89,11 @@ impl Check {
                 Ok(_) => {}
             }
         }
-        for outcome in &outcomes {
+        for outcome in outcomes {
             self.terminal
                 .write_stdout_line(&outcome.status().to_string())?;
         }
-
-        verdict(&outcomes, deny_warnings)
+        Ok(())
     }
 }
 
@@ -210,13 +238,7 @@ impl Diagnostic for FileFindings<'_> {
     }
 
     fn related<'b>(&'b self) -> Option<Box<dyn Iterator<Item = &'b dyn Diagnostic> + 'b>> {
-        let violations = self
-            .report
-            .violations()
-            .iter()
-            .map(|v| v as &dyn Diagnostic);
-        let warnings = self.report.warnings().iter().map(|w| w as &dyn Diagnostic);
-        Some(Box::new(violations.chain(warnings)))
+        Some(Box::new(self.report.findings().map(Finding::diagnostic)))
     }
 }
 
@@ -368,6 +390,52 @@ mod tests {
             panic!("expected `check`");
         };
         assert!(!args.deny_warnings);
+    }
+
+    #[test]
+    fn the_output_format_defaults_to_human() {
+        let cli = Cli::parse_from(["slcr", "check", "a.yaml"]);
+        let Some(SlcrCommand::Check(args)) = cli.cmd() else {
+            panic!("expected `check`");
+        };
+        assert_eq!(args.format, OutputFormat::Human);
+    }
+
+    #[test]
+    fn the_output_format_can_be_json() {
+        let cli = Cli::parse_from(["slcr", "check", "--format", "json", "a.yaml"]);
+        let Some(SlcrCommand::Check(args)) = cli.cmd() else {
+            panic!("expected `check`");
+        };
+        assert_eq!(args.format, OutputFormat::Json);
+        assert!(Cli::try_parse_from(["slcr", "check", "--format", "xml", "a.yaml"]).is_err());
+    }
+
+    #[test]
+    fn json_output_fails_the_same_way() {
+        Jail::expect_with(|jail| {
+            let broken = json(&with_violation());
+            let warned = json(&with_warning());
+            let files = [
+                ("broken.json", broken.as_str()),
+                ("warned.json", warned.as_str()),
+            ];
+            let result = run(
+                jail,
+                &files,
+                &["--format", "json", "broken.json", "warned.json"],
+            );
+            assert_eq!(
+                check_failed(result),
+                CheckFailed {
+                    failed: 1,
+                    total: 2,
+                    warnings_denied: false,
+                }
+            );
+            run(jail, &[], &["--format", "json", "warned.json"]).unwrap();
+            Ok(())
+        });
     }
 
     #[test]

@@ -52,8 +52,11 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   `RequirementsFile::unchecked()`, writes every finding to stderr as a miette
   diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,
   and fails with `CheckFailed` if any file can't be loaded or breaks an
-  invariant (or has warnings, under `--deny-warnings`). Validator-file checks
-  wait on the validator-file schema.
+  invariant (or has warnings, under `--deny-warnings`). `--format json` writes
+  one JSON document to stdout instead (`src/cli/check/json.rs`); findings
+  serialize with a kebab-case `code` plus their fields, so renaming a
+  `Violation` or `Warning` variant or field changes that output. Validator-file
+  checks wait on the validator-file schema.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
   `dispatch()` (see `src/cli/runtime.rs`). Remove the `#[expect(unused_imports)]`
   on its re-export in `src/cli/mod.rs` when the first caller lands.
