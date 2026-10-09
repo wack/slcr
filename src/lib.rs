@@ -10,5 +10,7 @@ mod cli;
 mod config;
 /// An abstraction over the user's filesystem, respecting $XDG_CONFIG.
 mod fs;
+/// The specification graph: SLCR's requirements document.
+mod spec;
 /// Terminal output, color detection, and the miette error hook.
 mod terminal;
