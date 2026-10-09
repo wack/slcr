@@ -2,9 +2,14 @@ use derive_getters::Getters;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use super::check::{self, Report, Violations, Warning};
+use super::id::SectionId;
 use super::node::{Glossary, Requirement, Section, SectionChild};
 use super::optional;
-use super::text::SpecName;
+use super::text::{SpecName, Title};
+
+/// The `$id` of the specification graph's JSON Schema, which a new document
+/// names in its `$schema` so that editors can validate it.
+pub const SCHEMA_URL: &str = "https://slcr.io/reference/schemas/spec/v1.schema.json";
 
 /// One SLCR specification: the requirements document, stored as a graph.
 ///
@@ -38,6 +43,19 @@ pub struct SlcrRequirementsDocument {
 }
 
 impl SlcrRequirementsDocument {
+    /// A new specification named `name`: an empty root Section titled
+    /// `title`, and the empty Glossary. IDs are assigned in order of
+    /// creation, so the root is SEC-001 and the Glossary SEC-002.
+    pub fn new(name: SpecName, title: Title) -> Self {
+        Self {
+            schema: Some(SCHEMA_URL.to_owned()),
+            format_version: FormatVersion::V1,
+            spec: SpecMetadata { name },
+            root: Section::new(SectionId::new(1), title),
+            glossary: Glossary::new(SectionId::new(2)),
+        }
+    }
+
     /// Every Section in the containment tree, in document order. The
     /// Glossary is not included.
     pub fn sections(&self) -> Vec<&Section> {
@@ -366,6 +384,73 @@ mod tests {
     fn an_unchecked_document_serializes_like_its_document() {
         let unchecked: UncheckedDocument = serde_json::from_value(broken()).unwrap();
         assert_eq!(serde_json::to_value(&unchecked).unwrap(), broken());
+    }
+
+    fn new_document() -> SlcrRequirementsDocument {
+        SlcrRequirementsDocument::new(
+            SpecName::try_from("todo-api".to_owned()).unwrap(),
+            Title::try_from("TodoList API".to_owned()).unwrap(),
+        )
+    }
+
+    #[test]
+    fn a_new_document_has_a_root_and_a_glossary() {
+        let graph = new_document();
+        assert_eq!(graph.schema().as_deref(), Some(SCHEMA_URL));
+        assert_eq!(*graph.format_version(), FormatVersion::V1);
+        assert_eq!(graph.spec().name().as_str(), "todo-api");
+        assert_eq!(*graph.root().id(), SectionId::new(1));
+        assert_eq!(graph.root().title().as_str(), "TodoList API");
+        assert!(graph.root().body().is_none());
+        assert!(graph.root().children().is_empty());
+        assert_eq!(*graph.glossary().id(), SectionId::new(2));
+        assert_eq!(graph.glossary().title().as_str(), Glossary::TITLE);
+        assert!(graph.glossary().terms().is_empty());
+        assert_eq!(graph.sections().len(), 1);
+        assert!(graph.requirements().is_empty());
+    }
+
+    #[test]
+    fn a_new_document_names_the_schema_the_canon_example_does() {
+        let canon: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
+        assert_eq!(new_document().schema(), canon.schema());
+    }
+
+    #[test]
+    fn a_new_document_checks_clean() {
+        let graph = new_document();
+        assert!(graph.warnings().is_empty());
+        let unchecked = UncheckedDocument(graph.clone());
+        assert!(unchecked.report().is_clean());
+        assert_eq!(unchecked.into_checked().unwrap(), graph);
+    }
+
+    #[test]
+    fn a_new_document_serializes_in_canonical_form() {
+        assert_eq!(
+            serde_json::to_value(new_document()).unwrap(),
+            json!({
+                "$schema": "https://slcr.io/reference/schemas/spec/v1.schema.json",
+                "formatVersion": "1",
+                "spec": { "name": "todo-api" },
+                "root": { "kind": "section", "id": "SEC-001", "title": "TodoList API" },
+                "glossary": { "kind": "section", "id": "SEC-002", "title": "Glossary" }
+            })
+        );
+    }
+
+    #[test]
+    fn a_new_document_round_trips_through_every_format() {
+        use crate::fs::format::Format;
+
+        let graph = new_document();
+        for format in [Format::Json, Format::Yaml, Format::Toml] {
+            let serialized = format.serialize(&graph).unwrap();
+            let parsed: SlcrRequirementsDocument = format
+                .parse(std::path::Path::new("spec"), serialized)
+                .unwrap();
+            assert_eq!(parsed, graph, "{format}");
+        }
     }
 
     #[test]

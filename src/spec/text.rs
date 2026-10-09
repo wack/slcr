@@ -152,6 +152,14 @@ impl Display for SpecName {
     }
 }
 
+/// A specification's name, used as a title. Every name is a valid title: it
+/// is non-empty and has no whitespace at all.
+impl From<&SpecName> for Title {
+    fn from(name: &SpecName) -> Self {
+        Self(name.0.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,6 +258,16 @@ mod tests {
             "tödo",
         ] {
             assert!(spec_name(value).is_err(), "{value:?}");
+        }
+    }
+
+    #[test]
+    fn every_spec_name_is_a_valid_title() {
+        for value in ["todo-api", "api", "v2", "a-b-c", "2024-q3-plan"] {
+            let name = spec_name(value).unwrap();
+            let converted = Title::from(&name);
+            assert_eq!(converted, title(value).unwrap());
+            assert_eq!(converted.as_str(), name.as_str());
         }
     }
 
