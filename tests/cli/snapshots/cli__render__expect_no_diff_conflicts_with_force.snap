@@ -1,0 +1,19 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "--expect-no-diff"
+    - "--force"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: the argument '--expect-no-diff' cannot be used with '--force'
+
+Usage: slcr render --expect-no-diff [FILE]
+
+For more information, try '--help'.

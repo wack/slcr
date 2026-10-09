@@ -1,0 +1,48 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "--help"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Create a specification with its root and Glossary sections
+
+Usage: slcr init [OPTIONS] [FILE]
+
+Arguments:
+  [FILE]
+          The requirements file to create: `.yaml`, `.yml`, `.json`, or `.toml`. It must not exist yet
+          
+          [default: SPEC.slcr.yml]
+
+Options:
+      --name <NAME>
+          The specification's name, e.g. `todo-api`. Defaults to the file's name without its extension and any `.slcr` or `.spec`, or, for `SPEC.slcr.*`, to the name of its directory
+
+      --title <TITLE>
+          The root Section's title. Defaults to the specification's name
+
+      --enable-colors <ENABLE_COLORS>
+          Whether to color the output
+
+          Possible values:
+          - always: Always color the output
+          - never:  Never color the output
+          - auto:   Detect whether the terminal is a tty before deciding to color
+          
+          [default: auto]
+
+      --log-level <LOG_LEVEL>
+          Sets the maximum log level. Defaults to INFO. Options are 'trace', 'debug', 'info', 'warn', 'error', and 'off'. 'off' implies no logger will occur. Options are case-insensitive
+          
+          [env: LOG_LEVEL=]
+          [default: info]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+----- stderr -----

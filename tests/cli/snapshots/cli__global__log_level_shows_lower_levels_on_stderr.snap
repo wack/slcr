@@ -1,0 +1,16 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - "--log-level"
+    - debug
+    - render
+---
+success: true
+exit_code: 0
+----- stdout -----
+SPEC.md: rendered todo-api
+
+----- stderr -----
+[TIMESTAMP] DEBUG rendering a requirements file path=SPEC.slcr.yml output=SPEC.md

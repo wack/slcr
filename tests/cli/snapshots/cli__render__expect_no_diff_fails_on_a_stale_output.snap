@@ -1,0 +1,15 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "--expect-no-diff"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × SPEC.md differs from the rendered specification, first on line 70
+  help: render again without `--expect-no-diff` to update it

@@ -1,0 +1,23 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - check
+    - broken.yaml
+    - "--enable-colors"
+    - always
+---
+success: false
+exit_code: 1
+----- stdout -----
+broken.yaml: 1 violation
+
+----- stderr -----
+  ␛[31m×␛[0m broken.yaml: 1 violation
+
+Error: 
+  ␛[31m×␛[0m REQ-001 is refined by REQ-002 but has no `refinement`
+␛[36m  help: ␛[0mset `refinement` to AND, OR, or XOR
+
+Error:   ␛[31m×␛[0m the check failed for 1 of 1 file

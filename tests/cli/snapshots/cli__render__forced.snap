@@ -1,0 +1,14 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "--force"
+---
+success: true
+exit_code: 0
+----- stdout -----
+SPEC.md: rendered todo-api
+
+----- stderr -----

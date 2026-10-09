@@ -1,0 +1,18 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - "--enable-colors"
+    - sometimes
+    - version
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'sometimes' for '--enable-colors <ENABLE_COLORS>'
+  [possible values: always, never, auto]
+
+For more information, try '--help'.

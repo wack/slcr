@@ -1,0 +1,14 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not read SPEC.slcr.yml
+  ╰─▶ No such file or directory (os error 2)

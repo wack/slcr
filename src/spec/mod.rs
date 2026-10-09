@@ -16,5 +16,7 @@ pub(crate) mod id;
 pub(crate) mod node;
 /// Deserializers for fields that canonical form omits when empty.
 mod optional;
+/// Deserializing tagged nodes without losing the location of errors.
+mod tagged;
 /// Validated strings: titles, Markdown prose, and specification names.
 pub(crate) mod text;

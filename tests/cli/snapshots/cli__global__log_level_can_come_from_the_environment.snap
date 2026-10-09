@@ -1,0 +1,17 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - init
+    - todo-api.yaml
+  env:
+    LOG_LEVEL: DEBUG
+---
+success: true
+exit_code: 0
+----- stdout -----
+todo-api.yaml: created specification todo-api
+
+----- stderr -----
+[TIMESTAMP] DEBUG creating a requirements file path=todo-api.yaml name=todo-api

@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use miette::Result;
 
-use crate::cli::{Check, CheckArgs, Init, InitArgs, Render, Version};
+use crate::cli::{Check, CheckArgs, Eval, Init, InitArgs, Render, RenderArgs, Slice, Version};
 use crate::terminal::Terminal;
 
 /// A `SlcrCommand` is one of the top-level commands accepted by
@@ -10,8 +10,12 @@ use crate::terminal::Terminal;
 pub enum SlcrCommand {
     /// Create a specification with its root and Glossary sections
     Init(InitArgs),
-    /// Render a specification as Markdown to `SPEC.md` (not yet implemented)
-    Render,
+    /// Render a specification as Markdown, to `SPEC.md` by default
+    Render(RenderArgs),
+    /// Write the slice for one requirement (not yet implemented)
+    Slice,
+    /// Report whether the specification's requirements are satisfied (not yet implemented)
+    Eval,
     /// Report the invariants requirements files break
     Check(CheckArgs),
     /// Print the CLI version and exit
@@ -23,7 +27,9 @@ impl SlcrCommand {
     pub fn dispatch(self, console: Terminal) -> Result<()> {
         match self {
             Self::Init(args) => Init::new(console, args).dispatch(),
-            Self::Render => Render::new(console).dispatch(),
+            Self::Render(args) => Render::new(console, args).dispatch(),
+            Self::Slice => Slice::new(console).dispatch(),
+            Self::Eval => Eval::new(console).dispatch(),
             Self::Check(args) => Check::new(console, args).dispatch(),
             Self::Version => Version::new(console).dispatch(),
         }
@@ -46,7 +52,22 @@ mod tests {
     #[test]
     fn stubbed_subcommands_parse() {
         let parse = |name| Cli::parse_from(["slcr", name]).cmd().clone();
-        assert!(matches!(parse("render"), Some(SlcrCommand::Render)));
+        assert!(matches!(parse("slice"), Some(SlcrCommand::Slice)));
+        assert!(matches!(parse("eval"), Some(SlcrCommand::Eval)));
+    }
+
+    #[test]
+    fn render_parses_with_or_without_a_file() {
+        for argv in [
+            &["slcr", "render"][..],
+            &["slcr", "render", "todo-api.spec.json"],
+        ] {
+            let cli = Cli::parse_from(argv);
+            assert!(
+                matches!(cli.cmd(), Some(SlcrCommand::Render(_))),
+                "{argv:?}"
+            );
+        }
     }
 
     #[test]
@@ -68,10 +89,15 @@ mod tests {
 
     #[test]
     fn stubbed_subcommands_report_that_they_are_not_implemented() {
-        let cli = Cli::parse_from(["slcr", "render"]);
-        let terminal = Terminal::new(&cli);
-        let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
-        assert_eq!(err.to_string(), "`slcr render` is not implemented yet");
+        for name in ["slice", "eval"] {
+            let cli = Cli::parse_from(["slcr", name]);
+            let terminal = Terminal::new(&cli);
+            let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                format!("`slcr {name}` is not implemented yet")
+            );
+        }
     }
 
     #[test]

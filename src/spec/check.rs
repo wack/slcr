@@ -515,7 +515,9 @@ fn strongly_connected_components(successors: &[Vec<usize>]) -> Vec<Vec<usize>> {
 }
 
 /// The requirements that refine each requirement, in document order.
-fn refiners<'a>(requirements: &[&'a Requirement]) -> HashMap<RequirementId, Vec<&'a Requirement>> {
+pub(crate) fn refiners<'a>(
+    requirements: &[&'a Requirement],
+) -> HashMap<RequirementId, Vec<&'a Requirement>> {
     let mut refiners: HashMap<_, Vec<_>> = HashMap::new();
     for requirement in requirements {
         for target in requirement.refines() {

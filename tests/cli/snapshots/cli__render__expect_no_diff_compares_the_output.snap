@@ -1,0 +1,16 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "--expect-no-diff"
+    - "--output"
+    - docs/API.md
+---
+success: true
+exit_code: 0
+----- stdout -----
+docs/API.md: up to date
+
+----- stderr -----

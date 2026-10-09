@@ -1,0 +1,14 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - specs/todo-api.spec.yaml
+---
+success: true
+exit_code: 0
+----- stdout -----
+specs/todo-api.md: rendered todo-api
+
+----- stderr -----

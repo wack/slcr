@@ -1,0 +1,22 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--deny-warnings"
+    - warned.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+warned.yaml: 1 warning
+
+----- stderr -----
+  × warned.yaml: 1 warning
+
+Warning: 
+  ⚠ the body of REQ-003 does not contain its modality keyword, MUST
+
+Error:   × the check failed for 1 of 1 file
+  help: `--deny-warnings` makes a warning fail the check

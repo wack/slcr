@@ -1,0 +1,18 @@
+---
+source: tests/cli/version.rs
+info:
+  program: slcr
+  args:
+    - version
+    - extra
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unexpected argument 'extra' found
+
+Usage: slcr version [OPTIONS]
+
+For more information, try '--help'.

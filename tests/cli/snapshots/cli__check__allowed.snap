@@ -1,0 +1,18 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - warned.yaml
+---
+success: true
+exit_code: 0
+----- stdout -----
+warned.yaml: 1 warning
+
+----- stderr -----
+  ⚠ warned.yaml: 1 warning
+
+Warning: 
+  ⚠ the body of REQ-003 does not contain its modality keyword, MUST

@@ -1,0 +1,15 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - todo-api.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × todo-api.yaml already exists
+  help: choose another path, or delete the existing file first

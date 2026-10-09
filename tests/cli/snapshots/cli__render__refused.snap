@@ -1,0 +1,14 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × SPEC.md exists, and slcr did not render it
+  help: pass `--force` to replace it, or choose another file with `--output`

@@ -1,0 +1,13 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - eval
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × `slcr eval` is not implemented yet

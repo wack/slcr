@@ -1,0 +1,23 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--format"
+    - human
+    - broken.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+broken.yaml: 1 violation
+
+----- stderr -----
+  × broken.yaml: 1 violation
+
+Error: 
+  × REQ-001 is refined by REQ-002 but has no `refinement`
+  help: set `refinement` to AND, OR, or XOR
+
+Error:   × the check failed for 1 of 1 file

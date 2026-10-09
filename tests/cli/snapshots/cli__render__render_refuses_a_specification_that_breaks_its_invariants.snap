@@ -1,0 +1,21 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - todo-api.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+  × todo-api.yaml: 1 violation
+
+Error: 
+  × REQ-001 is refined by REQ-002 but has no `refinement`
+  help: set `refinement` to AND, OR, or XOR
+
+Error:   × could not render todo-api.yaml, which breaks its invariants
+  help: fix the violations reported above, then render it again

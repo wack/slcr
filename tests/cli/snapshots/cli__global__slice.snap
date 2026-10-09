@@ -1,0 +1,13 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - slice
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × `slcr slice` is not implemented yet

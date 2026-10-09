@@ -1,0 +1,17 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "--name"
+    - Todo API
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'Todo API' for '--name <NAME>': "Todo API" is not a valid specification name
+
+For more information, try '--help'.

@@ -1,10 +1,12 @@
 use std::fmt::{self, Display};
 
 use derive_getters::Getters;
+use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::id::{CriterionId, DependencyId, RequirementId, SectionId, TermId};
 use super::optional;
+use super::tagged::{self, Node};
 use super::text::{Markdown, Title};
 
 /// Every serialized node carries a `kind` discriminator, but serde only
@@ -15,9 +17,10 @@ use super::text::{Markdown, Title};
 /// which emits inherent `serialize` and `deserialize` functions in place of
 /// the trait impls, keeping the struct-level tag for output. This macro then
 /// implements the traits: serialization forwards to the derived code, and
-/// deserialization reads the node through a single-variant, internally
-/// tagged enum that checks the `kind`. [SectionChild] reuses the inherent
-/// functions directly, because its own tag has already selected the node.
+/// deserialization streams the node's map through [tagged], which checks the
+/// `kind` and hands every other field to the derived code. A serde tagged
+/// enum would check the `kind` too, but it buffers the map first, which
+/// loses the location of every error inside it.
 macro_rules! tagged {
     ($node:ident, $kind:literal) => {
         impl Serialize for $node {
@@ -26,24 +29,19 @@ macro_rules! tagged {
             }
         }
 
+        impl tagged::Node for $node {
+            const KIND: &'static str = $kind;
+
+            fn deserialize_fields<'de, D: Deserializer<'de>>(
+                deserializer: D,
+            ) -> Result<Self, D::Error> {
+                $node::deserialize(deserializer)
+            }
+        }
+
         impl<'de> Deserialize<'de> for $node {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                fn untagged<'de, D>(deserializer: D) -> Result<$node, D::Error>
-                where
-                    D: Deserializer<'de>,
-                {
-                    $node::deserialize(deserializer)
-                }
-
-                #[derive(Deserialize)]
-                #[serde(tag = "kind")]
-                enum Tagged {
-                    #[serde(rename = $kind)]
-                    Node(#[serde(deserialize_with = "untagged")] $node),
-                }
-
-                let Tagged::Node(node) = Tagged::deserialize(deserializer)?;
-                Ok(node)
+                tagged::deserialize(deserializer)
             }
         }
     };
@@ -104,11 +102,39 @@ impl Section {
 }
 
 /// A node contained by a [Section].
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SectionChild {
-    Section(#[serde(deserialize_with = "Section::deserialize")] Section),
-    Requirement(#[serde(deserialize_with = "Requirement::deserialize")] Requirement),
+    Section(Section),
+    Requirement(Requirement),
+}
+
+impl<'de> Deserialize<'de> for SectionChild {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ChildVisitor;
+
+        impl<'de> Visitor<'de> for ChildVisitor {
+            type Value = SectionChild;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a section or requirement node")
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<SectionChild, A::Error> {
+                const KINDS: &[&str] = &[Section::KIND, Requirement::KIND];
+                // The kind selects the node, whose own deserializer reads the
+                // rest of the map.
+                let (kind, fields) = tagged::read_kind(map, KINDS)?;
+                let fields = MapAccessDeserializer::new(fields);
+                if kind == Section::KIND {
+                    Section::deserialize_fields(fields).map(SectionChild::Section)
+                } else {
+                    Requirement::deserialize_fields(fields).map(SectionChild::Requirement)
+                }
+            }
+        }
+
+        deserializer.deserialize_map(ChildVisitor)
+    }
 }
 
 impl Serialize for SectionChild {

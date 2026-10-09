@@ -1,0 +1,17 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "-o"
+    - docs/SPEC.md
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not write docs/SPEC.md
+  ╰─▶ No such file or directory (os error 2)
+  help: create the directory docs first

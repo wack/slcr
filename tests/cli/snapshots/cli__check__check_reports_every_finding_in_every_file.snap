@@ -1,0 +1,55 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - ok.yaml
+    - warned.yaml
+    - broken.yaml
+    - malformed.yaml
+    - invalid.yaml
+    - missing.yaml
+    - notes.md
+---
+success: false
+exit_code: 1
+----- stdout -----
+ok.yaml: ok
+warned.yaml: 1 warning
+broken.yaml: 1 violation
+malformed.yaml: could not be loaded
+invalid.yaml: could not be loaded
+missing.yaml: could not be loaded
+notes.md: could not be loaded
+
+----- stderr -----
+  ⚠ warned.yaml: 1 warning
+
+Warning: 
+  ⚠ the body of REQ-003 does not contain its modality keyword, MUST
+
+  × broken.yaml: 1 violation
+
+Error: 
+  × REQ-001 is refined by REQ-002 but has no `refinement`
+  help: set `refinement` to AND, OR, or XOR
+
+  × could not parse malformed.yaml as YAML: unclosed bracket '['
+
+  × could not parse invalid.yaml as YAML
+   ╭─[invalid.yaml:8:7]
+ 7 │   kind: section
+ 8 │   id: SEC-1
+   ·       ──┬──
+   ·         ╰── `SEC-1` is not a valid section ID
+ 9 │   title: TodoList API
+   ╰────
+
+  × could not read missing.yaml
+  ╰─▶ No such file or directory (os error 2)
+
+  × notes.md is not a YAML, JSON, or TOML file
+  help: a requirements file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`
+
+Error:   × the check failed for 5 of 7 files
