@@ -47,7 +47,16 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `dispatch(self) -> miette::Result<()>`. To add a command: add a variant to
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
-- `init`, `render`, and `check` are stubs returning `cli::NotImplemented`.
+- `init` and `render` are stubs returning `cli::NotImplemented`.
+- `check <FILE>...` loads each requirements file with
+  `RequirementsFile::unchecked()`, writes every finding to stderr as a miette
+  diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,
+  and fails with `CheckFailed` if any file can't be loaded or breaks an
+  invariant (or has warnings, under `--deny-warnings`). `--format json` writes
+  one JSON document to stdout instead (`src/cli/check/json.rs`); findings
+  serialize with a kebab-case `code` plus their fields, so renaming a
+  `Violation` or `Warning` variant or field changes that output. Validator-file
+  checks wait on the validator-file schema.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
   `dispatch()` (see `src/cli/runtime.rs`). Remove the `#[expect(unused_imports)]`
   on its re-export in `src/cli/mod.rs` when the first caller lands.
@@ -77,7 +86,10 @@ truth for field names, grammar, and the `x-checkInvariants` list.
 - `check.rs` — invariants the schema can't express. **Deserializing a `SlcrRequirementsDocument`
   runs `check::invariants` and fails on any `Violation`**; non-fatal findings are
   `Warning`s, exposed separately via `SlcrRequirementsDocument::warnings()`. All violations are
-  collected and reported together, in document order.
+  collected and reported together, in document order. To see the findings
+  instead of failing, read an `UncheckedDocument` (or load
+  `RequirementsFile::unchecked()`), whose `report()` returns a `check::Report`
+  of every violation and warning.
 - `file.rs` — `RequirementsFile`, a caller-chosen path whose extension selects the
   format.
 
@@ -88,6 +100,9 @@ so field order and omission rules matter.
 ## Filesystem (`src/fs/`)
 
 `FileSystem` wraps XDG project dirs and does all serde I/O, dispatching on
-`File::extension()` to TOML / JSON / YAML (`serde-saphyr`). Implement `File` for
+`File::extension()` to TOML / JSON / YAML (`serde-saphyr`). A file that can't be
+read fails with a `ReadError` naming its path; one that can't be deserialized
+fails with a `ParseError` that labels the problem in the file's source when the
+deserializer reports a location. Implement `File` for
 files at dynamic paths, or `StaticFile` for fixed-name files under a
 `DirectoryType` (whose parent dir is created on demand).

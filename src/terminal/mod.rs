@@ -1,5 +1,5 @@
 use logging::setup_logger;
-use miette::{GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, Result};
+use miette::{Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, Result};
 
 use crate::Cli;
 
@@ -37,17 +37,18 @@ impl Terminal {
     pub fn set_error_hook(&self) -> Result<()> {
         let allow_color = self.stderr.allow_color();
         // Set the hook and coerce the `InstallError` into an `ErrorReport`
-        miette::set_hook(Box::new(move |_| {
-            // TODO: Add brand colors to the colored theme.
-            let theme = if allow_color {
-                GraphicalTheme::unicode()
-            } else {
-                GraphicalTheme::unicode_nocolor()
-            };
-            Box::new(GraphicalReportHandler::new_themed(theme))
-        }))?;
+        miette::set_hook(Box::new(move |_| Box::new(report_handler(allow_color))))?;
 
         Ok(())
+    }
+
+    /// Write a diagnostic to stderr, rendered as the error hook renders
+    /// errors, followed by a blank line.
+    pub fn write_diagnostic(&self, diagnostic: &dyn Diagnostic) -> Result<()> {
+        let rendered = render(diagnostic, report_handler(self.stderr.allow_color()))?;
+        let term = self.stderr.term();
+        term.write_line(rendered.trim_end()).into_diagnostic()?;
+        term.write_line("").into_diagnostic()
     }
 
     /// Write a single line to stdout.
@@ -66,5 +67,54 @@ impl Terminal {
             .term()
             .write_line(msg.as_str())
             .into_diagnostic()
+    }
+}
+
+/// The handler that renders diagnostics: miette's graphical handler, with a
+/// colored theme when color is allowed and a plain Unicode one otherwise.
+fn report_handler(allow_color: bool) -> GraphicalReportHandler {
+    // TODO: Add brand colors to the colored theme.
+    let theme = if allow_color {
+        GraphicalTheme::unicode()
+    } else {
+        GraphicalTheme::unicode_nocolor()
+    };
+    GraphicalReportHandler::new_themed(theme)
+}
+
+/// Render `diagnostic` with `handler`.
+fn render(diagnostic: &dyn Diagnostic, handler: GraphicalReportHandler) -> Result<String> {
+    let mut rendered = String::new();
+    handler
+        .render_report(&mut rendered, diagnostic)
+        .into_diagnostic()?;
+    Ok(rendered)
+}
+
+/// Render `diagnostic` as plain text at a fixed width, as tests expect it.
+#[cfg(test)]
+pub(crate) fn render_plain(diagnostic: &dyn Diagnostic) -> String {
+    render(diagnostic, report_handler(false).with_width(80)).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use miette::miette;
+
+    use super::*;
+
+    #[test]
+    fn plain_rendering_has_no_color_codes() {
+        let report = miette!(help = "try again", "it broke");
+        let rendered = render_plain(report.as_ref());
+        assert_eq!(rendered, "  × it broke\n  help: try again\n");
+        assert!(!rendered.contains('\u{1b}'));
+    }
+
+    #[test]
+    fn colored_rendering_uses_color_codes() {
+        let report = miette!("it broke");
+        let rendered = render(report.as_ref(), report_handler(true)).unwrap();
+        assert!(rendered.contains('\u{1b}'), "{rendered:?}");
     }
 }

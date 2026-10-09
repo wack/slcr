@@ -2,17 +2,17 @@ use directories::ProjectDirs;
 use miette::{Diagnostic, IntoDiagnostic, Result, miette};
 use thiserror::Error;
 
-use std::{
-    io::{BufReader, Read, Write},
-    path::PathBuf,
-};
+use std::{io::Write, path::PathBuf};
 
 pub(crate) use file::File;
 // Re-exported so modules outside of `fs` can declare their own `StaticFile`
 // marker types and reuse the loader.
 pub(crate) use file::StaticFile;
 
+use format::Format;
+
 mod file;
+pub(crate) mod format;
 
 /// The name of the application as used on the filesystem for XDG conventions.
 const APPLICATION_NAME: &str = "slcr";
@@ -30,6 +30,22 @@ pub struct FileSystem {
 #[derive(Debug, Error, Diagnostic)]
 #[error("$HOME directory unavailable")]
 pub struct MissingHomeDirectory;
+
+/// The error returned when a file can't be read.
+#[derive(Debug, Error, Diagnostic)]
+#[error("could not read {}", .path.display())]
+pub struct ReadError {
+    path: PathBuf,
+    #[source]
+    source: std::io::Error,
+}
+
+/// The format a file's extension names.
+fn format_of<F: File>(file: &F) -> Result<Format> {
+    Format::from_extension(file.extension()).ok_or_else(|| {
+        miette!("Extension unknown! Internal error. Please file this error as a bug.")
+    })
+}
 
 impl FileSystem {
     pub fn new() -> Result<Self, MissingHomeDirectory> {
@@ -54,71 +70,26 @@ impl FileSystem {
         }
     }
 
-    /// Open the file and deserialize it with serde.
+    /// Open the file and deserialize it with serde, in the format its
+    /// extension names.
     pub(crate) fn load_file<F: File>(&self, file: F) -> Result<F::Data> {
-        match file.extension() {
-            "toml" => self.read_toml_file(file),
-            "json" => self.read_json_file(file),
-            "yaml" | "yml" => self.read_yaml_file(file),
-            _ => Err(miette!(
-                "Extension unknown! Internal error. Please file this error as a bug."
-            )),
-        }
-    }
-
-    /// Open the file and deserialize it with serde.
-    fn read_json_file<F: File>(&self, file: F) -> Result<F::Data> {
-        // • Get the path to the file.
+        let format = format_of(&file)?;
         let path = file.path(self)?;
-        // • Open it as a byte stream, then deserialize those bytes.
-        let file = std::fs::File::open(path).into_diagnostic()?;
-        let reader = BufReader::new(file);
-
-        // • Serialize the JSON contents of the file.
-        serde_json::from_reader(reader).into_diagnostic()
-    }
-
-    /// Open the file and deserialize it with serde.
-    fn read_toml_file<F: File>(&self, file: F) -> Result<F::Data> {
-        // • Get the path to the file.
-        let path = file.path(self)?;
-        // • Open it as a byte stream, then deserialize those bytes.
-        // TODO: Chain these errors together functionally.
-        let mut buffer = String::new();
-        let mut file = std::fs::File::open(path).into_diagnostic()?;
-        file.read_to_string(&mut buffer).into_diagnostic()?;
-        let document = toml::from_str(&buffer).into_diagnostic()?;
-        Ok(document)
-    }
-
-    /// Open the file and deserialize it with serde.
-    fn read_yaml_file<F: File>(&self, file: F) -> Result<F::Data> {
-        // • Get the path to the file.
-        let path = file.path(self)?;
-        // • Open it as a byte stream, then deserialize those bytes.
-        let file = std::fs::File::open(path).into_diagnostic()?;
-        let reader = BufReader::new(file);
-
-        // • Deserialize the YAML contents of the file.
-        serde_saphyr::from_reader(reader).into_diagnostic()
+        let source = std::fs::read_to_string(&path).map_err(|source| ReadError {
+            path: path.clone(),
+            source,
+        })?;
+        Ok(format.parse(&path, source)?)
     }
 
     /// Store the file, using its canonical path.
     pub(crate) fn save_file<F: File>(&self, file: &F, blob: &F::Data) -> Result<()> {
+        let format = format_of(file)?;
         // • Get the path to the file.
         let path = file.path(self)?;
         // • Serialize before touching the disk, so a failure can't
         //   truncate an existing file.
-        let marshalled = match file.extension() {
-            "toml" => toml::to_string_pretty(blob).into_diagnostic()?,
-            "json" => serde_json::to_string_pretty(blob).into_diagnostic()?,
-            "yaml" | "yml" => serde_saphyr::to_string(blob).into_diagnostic()?,
-            _ => {
-                return Err(miette!(
-                    "Extension unknown! Internal error. Please file this error as a bug."
-                ));
-            }
-        };
+        let marshalled = format.serialize(blob)?;
         // • Create the file if it doesn't exist.
         let mut file = std::fs::File::create(path).into_diagnostic()?;
         file.write_all(marshalled.as_bytes()).into_diagnostic()?;
@@ -179,6 +150,7 @@ mod tests {
     // `figment::Jail`'s closure returns a large `Result`; unavoidable here.
     #![allow(clippy::result_large_err)]
 
+    use super::format::ParseError;
     use super::*;
     use figment::Jail;
     use serde::{Deserialize, Serialize};
@@ -368,6 +340,56 @@ mod tests {
             jail.create_file("settings.json", "{ not json")?;
             let fs = FileSystem::new().unwrap();
             assert!(fs.load_file(JsonSettings).is_err());
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_missing_file_names_its_path() {
+        Jail::expect_with(|_| {
+            let fs = FileSystem::new().unwrap();
+            let err = fs.load_file(JsonSettings).unwrap_err();
+            let read = err.downcast_ref::<ReadError>().expect("a read error");
+            assert!(read.path.ends_with("settings.json"), "{err}");
+            assert_eq!(read.source.kind(), std::io::ErrorKind::NotFound);
+            assert!(err.to_string().starts_with("could not read "), "{err}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_directory_cannot_be_read_as_a_file() {
+        Jail::expect_with(|jail| {
+            std::fs::create_dir(jail.directory().join("settings.yaml")).unwrap();
+            let fs = FileSystem::new().unwrap();
+            let err = fs.load_file(YamlSettings).unwrap_err();
+            assert!(err.downcast_ref::<ReadError>().is_some(), "{err}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_file_that_is_not_utf8_cannot_be_read() {
+        Jail::expect_with(|jail| {
+            std::fs::write(jail.directory().join("settings.toml"), [0xff, 0xfe, b'x']).unwrap();
+            let fs = FileSystem::new().unwrap();
+            let err = fs.load_file(TomlSettings).unwrap_err();
+            let read = err.downcast_ref::<ReadError>().expect("a read error");
+            assert_eq!(read.source.kind(), std::io::ErrorKind::InvalidData);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_malformed_file_reports_where_it_is_malformed() {
+        Jail::expect_with(|jail| {
+            jail.create_file("settings.yaml", "name: slcr\nretries: many\n")?;
+            let fs = FileSystem::new().unwrap();
+            let err = fs.load_file(YamlSettings).unwrap_err();
+            let parse = err.downcast_ref::<ParseError>().expect("a parse error");
+            let span = parse.span().expect("a location");
+            assert_eq!(span.offset(), "name: slcr\nretries: ".len());
+            assert!(err.to_string().ends_with("settings.yaml as YAML"), "{err}");
             Ok(())
         });
     }

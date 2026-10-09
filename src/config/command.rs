@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use miette::Result;
 
-use crate::cli::{Check, Init, Render, Version};
+use crate::cli::{Check, CheckArgs, Init, Render, Version};
 use crate::terminal::Terminal;
 
 /// A `SlcrCommand` is one of the top-level commands accepted by
@@ -12,8 +12,8 @@ pub enum SlcrCommand {
     Init,
     /// Render a specification as Markdown to `SPEC.md` (not yet implemented)
     Render,
-    /// Report the invariants a specification breaks (not yet implemented)
-    Check,
+    /// Report the invariants requirements files break
+    Check(CheckArgs),
     /// Print the CLI version and exit
     Version,
 }
@@ -24,7 +24,7 @@ impl SlcrCommand {
         match self {
             Self::Init => Init::new(console).dispatch(),
             Self::Render => Render::new(console).dispatch(),
-            Self::Check => Check::new(console).dispatch(),
+            Self::Check(args) => Check::new(console, args).dispatch(),
             Self::Version => Version::new(console).dispatch(),
         }
     }
@@ -48,12 +48,17 @@ mod tests {
         let parse = |name| Cli::parse_from(["slcr", name]).cmd().clone();
         assert!(matches!(parse("init"), Some(SlcrCommand::Init)));
         assert!(matches!(parse("render"), Some(SlcrCommand::Render)));
-        assert!(matches!(parse("check"), Some(SlcrCommand::Check)));
+    }
+
+    #[test]
+    fn check_parses_its_files() {
+        let cli = Cli::parse_from(["slcr", "check", "a.yaml", "b.json"]);
+        assert!(matches!(cli.cmd(), Some(SlcrCommand::Check(_))));
     }
 
     #[test]
     fn stubbed_subcommands_report_that_they_are_not_implemented() {
-        for name in ["init", "render", "check"] {
+        for name in ["init", "render"] {
             let cli = Cli::parse_from(["slcr", name]);
             let terminal = Terminal::new(&cli);
             let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();

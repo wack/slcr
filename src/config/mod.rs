@@ -2,4 +2,4 @@ pub use cli::Cli;
 
 mod cli;
 mod colors;
-mod command;
+pub(crate) mod command;

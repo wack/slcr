@@ -1,17 +1,23 @@
-use std::{ffi::OsStr, path::PathBuf};
+use std::{ffi::OsStr, marker::PhantomData, path::PathBuf};
 
 use miette::{Diagnostic, Result};
+use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
-use super::graph::SlcrRequirementsDocument;
+use super::graph::{SlcrRequirementsDocument, UncheckedDocument};
 use crate::fs::{File, FileSystem};
 
 /// An SLCR requirements file: a specification graph stored at a
 /// caller-chosen path. The path's extension selects the format: YAML
 /// (`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`).
+///
+/// It loads as `D`: by default a [SlcrRequirementsDocument], which fails to
+/// load if it breaks an invariant, or, through
+/// [RequirementsFile::unchecked], an [UncheckedDocument], which doesn't.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct RequirementsFile {
+pub(crate) struct RequirementsFile<D = SlcrRequirementsDocument> {
     path: PathBuf,
+    data: PhantomData<fn() -> D>,
 }
 
 /// The error returned when a path's extension names no supported format.
@@ -33,15 +39,26 @@ impl RequirementsFile {
             .and_then(OsStr::to_str)
             .is_some_and(|extension| Self::EXTENSIONS.contains(&extension));
         if supported {
-            Ok(Self { path })
+            Ok(Self {
+                path,
+                data: PhantomData,
+            })
         } else {
             Err(UnsupportedFormat { path })
         }
     }
+
+    /// The same file, loaded without checking its invariants.
+    pub(crate) fn unchecked(self) -> RequirementsFile<UncheckedDocument> {
+        RequirementsFile {
+            path: self.path,
+            data: PhantomData,
+        }
+    }
 }
 
-impl File for RequirementsFile {
-    type Data = SlcrRequirementsDocument;
+impl<D: DeserializeOwned + Serialize> File for RequirementsFile<D> {
+    type Data = D;
 
     fn extension(&self) -> &str {
         // `new` only accepts paths with a supported, UTF-8 extension.
@@ -201,6 +218,48 @@ mod tests {
                     .contains("REQ-009 names REQ-099 in `refines`, but no such node exists"),
                 "{err}"
             );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn unchecked_files_load_despite_broken_invariants() {
+        Jail::expect_with(|jail| {
+            let broken = [
+                (
+                    "broken.json",
+                    TODO_API_JSON.replace(r#""refines": ["REQ-008"]"#, r#""refines": ["REQ-099"]"#),
+                ),
+                (
+                    "broken.yaml",
+                    TODO_API_YAML.replace("refines: [REQ-008]", "refines: [REQ-099]"),
+                ),
+                (
+                    "broken.toml",
+                    TODO_API_TOML.replace(r#"refines = ["REQ-008"]"#, r#"refines = ["REQ-099"]"#),
+                ),
+            ];
+            let fs = FileSystem::new().unwrap();
+            for (name, contents) in broken {
+                jail.create_file(name, &contents).unwrap();
+                let file = RequirementsFile::new(name).unwrap().unchecked();
+                let report = fs.load_file(file).unwrap().report();
+                // REQ-009 and REQ-010 now name a missing node, and nothing
+                // refines REQ-008, so its `refinement` is unexpected.
+                assert_eq!(report.violations().len(), 3, "{name}");
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn unchecked_files_still_enforce_the_grammar() {
+        Jail::expect_with(|jail| {
+            let broken = TODO_API_YAML.replacen("id: SEC-001", "id: SEC-1", 1);
+            jail.create_file("broken.yaml", &broken).unwrap();
+            let fs = FileSystem::new().unwrap();
+            let file = RequirementsFile::new("broken.yaml").unwrap().unchecked();
+            assert!(fs.load_file(file).is_err());
             Ok(())
         });
     }
