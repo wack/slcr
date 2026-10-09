@@ -1,0 +1,18 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - specs.yaml
+    - "--name"
+    - billing
+    - "--title"
+    - Billing Service
+---
+success: true
+exit_code: 0
+----- stdout -----
+specs.yaml: created specification billing
+
+----- stderr -----

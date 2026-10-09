@@ -10,22 +10,13 @@ use thiserror::Error;
 
 use crate::Terminal;
 use crate::fs::FileSystem;
-use crate::spec::file::RequirementsFile;
+use crate::spec::file::{DEFAULT_FILE, RequirementsFile, base_name};
 use crate::spec::graph::SlcrRequirementsDocument;
 use crate::spec::text::{InvalidSpecName, InvalidTitle, SpecName, Title};
-
-/// Where `slcr init` creates the specification when no file is given: a
-/// well-known name, like `Makefile` or `LICENSE`.
-pub const DEFAULT_FILE: &str = "SPEC.slcr.yml";
 
 /// The stem of the well-known file name, whatever its extension. Its
 /// specification is named after the directory that holds it.
 const WELL_KNOWN_STEM: &str = "SPEC.slcr";
-
-/// Suffixes that mark a file's stem as a specification's, dropped when the
-/// specification is named after the file: `todo-api.spec.yaml` and
-/// `todo-api.slcr.yml` both name `todo-api`.
-const STEM_SUFFIXES: [&str; 2] = [".slcr", ".spec"];
 
 /// The arguments to `slcr init`.
 #[derive(Args, Clone, Debug)]
@@ -105,18 +96,14 @@ fn derived_name(path: &Path) -> Result<SpecName, UnnamedSpec> {
 }
 
 /// What a specification would be named after its file's path, valid or
-/// not: the file's stem without any `.slcr` or `.spec`, or, for the
-/// well-known `SPEC.slcr.*`, the name of the directory that holds it.
+/// not: the file's [base_name], or, for the well-known `SPEC.slcr.*`, the
+/// name of the directory that holds it.
 fn name_candidate(path: &Path) -> Option<String> {
     let stem = path.file_stem().and_then(OsStr::to_str)?;
     if stem == WELL_KNOWN_STEM {
         return directory_name(path);
     }
-    let name = STEM_SUFFIXES
-        .iter()
-        .find_map(|suffix| stem.strip_suffix(suffix))
-        .unwrap_or(stem);
-    Some(name.to_owned())
+    base_name(path).map(str::to_owned)
 }
 
 /// The name of the directory that holds `path`, which need not exist.

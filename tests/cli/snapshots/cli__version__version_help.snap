@@ -1,0 +1,36 @@
+---
+source: tests/cli/version.rs
+info:
+  program: slcr
+  args:
+    - version
+    - "--help"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Print the CLI version and exit
+
+Usage: slcr version [OPTIONS]
+
+Options:
+      --enable-colors <ENABLE_COLORS>
+          Whether to color the output
+
+          Possible values:
+          - always: Always color the output
+          - never:  Never color the output
+          - auto:   Detect whether the terminal is a tty before deciding to color
+          
+          [default: auto]
+
+      --log-level <LOG_LEVEL>
+          Sets the maximum log level. Defaults to INFO. Options are 'trace', 'debug', 'info', 'warn', 'error', and 'off'. 'off' implies no logger will occur. Options are case-insensitive
+          
+          [env: LOG_LEVEL=]
+          [default: info]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+----- stderr -----

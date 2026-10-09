@@ -1,0 +1,18 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - todo-api.yaml
+---
+success: true
+exit_code: 0
+----- stdout -----
+todo-api.md: rendered todo-api
+
+----- stderr -----
+  ⚠ todo-api.yaml: 1 warning
+
+Warning: 
+  ⚠ the body of REQ-003 does not contain its modality keyword, MUST

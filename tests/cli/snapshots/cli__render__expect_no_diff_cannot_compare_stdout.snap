@@ -1,0 +1,17 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - "--expect-no-diff"
+    - "-o"
+    - "-"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × `--expect-no-diff` compares a file, but the output is stdout
+  help: name a file with `--output`, or omit `--output` for the default

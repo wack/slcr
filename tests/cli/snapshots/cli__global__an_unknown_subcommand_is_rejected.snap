@@ -1,0 +1,17 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - frobnicate
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unrecognized subcommand 'frobnicate'
+
+Usage: slcr [OPTIONS] [COMMAND]
+
+For more information, try '--help'.

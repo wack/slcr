@@ -1,0 +1,15 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - My Spec.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not name the specification in My Spec.yaml
+  help: "My Spec" is not a valid specification name, which is lowercase letters and digits in dash-separated words; pass one with `--name`, e.g. `--name todo-api`

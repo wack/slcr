@@ -1,0 +1,16 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - specs/todo-api.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not write specs/todo-api.yaml
+  ╰─▶ No such file or directory (os error 2)
+  help: create the directory specs first

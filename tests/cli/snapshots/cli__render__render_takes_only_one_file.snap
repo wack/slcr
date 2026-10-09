@@ -1,0 +1,19 @@
+---
+source: tests/cli/render.rs
+info:
+  program: slcr
+  args:
+    - render
+    - a.yaml
+    - b.yaml
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unexpected argument 'b.yaml' found
+
+Usage: slcr render [OPTIONS] [FILE]
+
+For more information, try '--help'.

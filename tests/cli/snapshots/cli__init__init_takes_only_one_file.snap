@@ -1,0 +1,19 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - a.yaml
+    - b.yaml
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unexpected argument 'b.yaml' found
+
+Usage: slcr init [OPTIONS] [FILE]
+
+For more information, try '--help'.

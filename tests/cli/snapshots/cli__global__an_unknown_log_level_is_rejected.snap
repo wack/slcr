@@ -1,0 +1,17 @@
+---
+source: tests/cli/global.rs
+info:
+  program: slcr
+  args:
+    - "--log-level"
+    - loud
+    - version
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'loud' for '--log-level <LOG_LEVEL>': error parsing level filter: expected one of "off", "error", "warn", "info", "debug", "trace", or a number 0-5
+
+For more information, try '--help'.

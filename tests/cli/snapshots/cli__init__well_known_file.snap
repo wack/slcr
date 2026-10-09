@@ -1,0 +1,16 @@
+---
+source: tests/cli/init.rs
+expression: "workspace.read(\"todo-api/SPEC.slcr.yml\")"
+---
+$schema: https://slcr.io/reference/schemas/spec/v1.schema.json
+formatVersion: "1"
+spec:
+  name: todo-api
+root:
+  kind: section
+  id: SEC-001
+  title: todo-api
+glossary:
+  kind: section
+  id: SEC-002
+  title: Glossary
