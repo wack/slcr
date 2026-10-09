@@ -1,13 +1,19 @@
 use clap::Subcommand;
 use miette::Result;
 
-use crate::cli::Version;
+use crate::cli::{Check, Init, Render, Version};
 use crate::terminal::Terminal;
 
 /// A `SlcrCommand` is one of the top-level commands accepted by
 /// the slcr CLI.
 #[derive(Subcommand, Clone)]
 pub enum SlcrCommand {
+    /// Create a specification with its root and Glossary sections (not yet implemented)
+    Init,
+    /// Render a specification as Markdown to `SPEC.md` (not yet implemented)
+    Render,
+    /// Report the invariants a specification breaks (not yet implemented)
+    Check,
     /// Print the CLI version and exit
     Version,
 }
@@ -16,6 +22,9 @@ impl SlcrCommand {
     /// dispatch the user-provided arguments to the command handler.
     pub fn dispatch(self, console: Terminal) -> Result<()> {
         match self {
+            Self::Init => Init::new(console).dispatch(),
+            Self::Render => Render::new(console).dispatch(),
+            Self::Check => Check::new(console).dispatch(),
             Self::Version => Version::new(console).dispatch(),
         }
     }
@@ -26,12 +35,33 @@ mod tests {
     use clap::Parser;
 
     use super::SlcrCommand;
-    use crate::Cli;
+    use crate::{Cli, Terminal};
 
     #[test]
     fn version_subcommand_parses() {
         let cli = Cli::parse_from(["slcr", "version"]);
         assert!(matches!(cli.cmd(), Some(SlcrCommand::Version)));
+    }
+
+    #[test]
+    fn stubbed_subcommands_parse() {
+        let parse = |name| Cli::parse_from(["slcr", name]).cmd().clone();
+        assert!(matches!(parse("init"), Some(SlcrCommand::Init)));
+        assert!(matches!(parse("render"), Some(SlcrCommand::Render)));
+        assert!(matches!(parse("check"), Some(SlcrCommand::Check)));
+    }
+
+    #[test]
+    fn stubbed_subcommands_report_that_they_are_not_implemented() {
+        for name in ["init", "render", "check"] {
+            let cli = Cli::parse_from(["slcr", name]);
+            let terminal = Terminal::new(&cli);
+            let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                format!("`slcr {name}` is not implemented yet")
+            );
+        }
     }
 
     #[test]
