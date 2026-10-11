@@ -1,0 +1,16 @@
+---
+source: tests/cli/slice.rs
+info:
+  program: slcr
+  args:
+    - slice
+    - SEC-001
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'SEC-001' for '<REQUIREMENT>': `SEC-001` is not a valid requirement ID
+
+For more information, try '--help'.

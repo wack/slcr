@@ -39,8 +39,8 @@ and serialized as YAML, JSON, or TOML. A single crate exposes a library
 (`src/lib.rs`) and a thin binary (`src/bin/main.rs`). Unit tests are inline
 `#[cfg(test)]` modules; the only integration test is the CLI's end-to-end
 snapshot suite in `tests/cli/` (see Testing). `tests/fixtures/` holds data only
-(the canonical `todo-api` spec in all three formats and its rendering, loaded
-via `include_str!`).
+(the canonical `todo-api` spec in all three formats, its rendering, and the
+slice of its controller, loaded via `include_str!`).
 
 ## Command flow
 
@@ -50,7 +50,7 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `dispatch(self) -> miette::Result<()>`. To add a command: add a variant to
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
-- `slice` and `eval` are stubs returning `cli::NotImplemented`.
+- `eval` is a stub returning `cli::NotImplemented`.
 - `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
   root `SEC-001`, Glossary `SEC-002`) at `FILE`, by default the well-known
   `SPEC.slcr.yml`. Without `--name`, the spec is named after the file's stem
@@ -86,8 +86,14 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   edges as `(REQ-004)-[:REFINES]->(REQ-002)` (in JSON, an object with `label`,
   `source`, and `target`). A query that can't run fails with `InvalidQuery`,
   which labels syntax errors and features outside the profile in the query.
+- `slice REQUIREMENT [FILE]` writes the slice of one requirement (default file
+  `SPEC.slcr.yml`) to stdout as Markdown: `slice::members` finds what it
+  includes with GQL, and `render::slice` renders it. Findings go to stderr as
+  `check` reports them; a file that breaks an invariant fails with
+  `SliceFailed`, and an ID the file lacks with `UnknownRequirement`. A
+  malformed ID is a clap usage error.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
-  `dispatch()` (see `src/cli/runtime.rs`), as `query` does.
+  `dispatch()` (see `src/cli/runtime.rs`), as `query` and `slice` do.
 - All user-facing output goes through `Terminal` (`src/terminal/`), which owns
   color detection (`--enable-colors`) and logging setup (`--log-level` / `LOG_LEVEL`).
 - Errors are `thiserror` + `miette::Diagnostic` types; use `#[diagnostic(help(...))]`
@@ -147,6 +153,26 @@ with `slcr render tests/fixtures/todo-api.spec.yaml --force`.
   punctuation character round-trips through `pulldown-cmark`.
 - Each node is preceded by a hidden `<a id="ID"></a>`; IDs never appear in
   visible text, and every cross-reference is a link to an anchor.
+- `slice.rs` — `render::slice` renders a slice with the same `Renderer`:
+  R's ancestors as headings (bodies only), then R and the included
+  requirements nested under it, then everything else under "Related
+  requirements" with a breadcrumb, then a Glossary of the included terms.
+  Nodes keep their document numbers. A requirement's parts are gated by its
+  `slice::Detail`; a reference to a node the slice leaves out is its plain
+  title, so every link resolves. The canon controller's slice is the golden
+  file `tests/fixtures/todo-api.REQ-005.md`; update it with
+  `slcr slice REQ-005 tests/fixtures/todo-api.spec.yaml > tests/fixtures/todo-api.REQ-005.md`.
+
+## Slices (`src/slice.rs`)
+
+`slice::members` computes `slice(R)` from section 9 of the design document
+by running one-hop GQL queries against a `SpecGraph` until each closure stops
+growing. Don't replace them with quantified patterns (`-[:REFINES]->{1,}`):
+`slcr-gql` matches those once per path, which is exponential on a DAG with
+diamonds. Each included node gets a `Detail` (`Body` for ancestors and what R
+refines, `Dependency` for the `dependsOn` closure of R and its refinement
+descendants, `Full` for R and those descendants); a node included for several
+reasons gets the greatest.
 
 ## Queries (`src/query/`)
 
@@ -192,7 +218,7 @@ Two layers, both run by `cargo make test`:
 ## CLI snapshot tests (`tests/cli/`)
 
 `tests/cli/main.rs` is the harness; each subcommand has its own module
-(`init.rs`, `render.rs`, `check.rs`, `query.rs`, `version.rs`), and
+(`init.rs`, `render.rs`, `check.rs`, `query.rs`, `slice.rs`, `version.rs`), and
 `global.rs` covers top-level behavior. Snapshots are in `tests/cli/snapshots/`, named
 `cli__<module>__<name>.snap`, and are committed.
 
@@ -215,9 +241,9 @@ Two layers, both run by `cargo make test`:
   argument and flag of its own, and one for each distinct error path, including
   clap usage errors (exit code 2). Global flags (`--log-level`, its `LOG_LEVEL`
   variable, `--enable-colors`) behave the same for every subcommand, so they're
-  covered once, in `global.rs`; don't repeat them per subcommand. The stubs
-  (`slice`, `eval`) have one snapshot each, so implementing them shows up as a
-  snapshot change.
+  covered once, in `global.rs`; don't repeat them per subcommand. The stub
+  (`eval`) has one snapshot, so implementing it shows up as a snapshot
+  change.
 - **Nondeterminism.** Redact anything that changes between runs with an
   `insta::Settings` filter scoped to the test (see `without_timestamps` in
   `global.rs` and the `[VERSION]` redaction in `version.rs`). Never redact an
