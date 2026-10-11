@@ -14,9 +14,11 @@ use slcr_gql::{Error, Params, PetgraphStore, StoreError};
 use crate::spec::graph::SlcrRequirementsDocument;
 
 pub use cell::Cell;
+pub use error::InvalidQuery;
 pub use materialize::materialize;
 
 mod cell;
+mod error;
 mod materialize;
 
 /// A specification, materialized into an in-memory graph to query.

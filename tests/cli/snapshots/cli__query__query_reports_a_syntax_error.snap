@@ -1,0 +1,19 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (r:Requirement RETURN r"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the query is not valid GQL
+   ╭─[query:1:22]
+ 1 │ MATCH (r:Requirement RETURN r
+   ·                      ───┬──
+   ·                         ╰── found 'RETURN' expected '&', '|', ':', '{', WHERE, or ')'
+   ╰────

@@ -77,9 +77,17 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   alone. `--expect-no-diff` writes nothing and fails with `UnexpectedDiff`
   unless the output is already up to date. (The flag avoids the word "check",
   which is overloaded.)
+- `query QUERY [FILE]` runs a read-only GQL query (the SLCR query profile of
+  `slcr-gql`) against a specification (default `SPEC.slcr.yml`) and writes the
+  rows to stdout as an aligned table, or with `--format tsv` / `json`. The
+  query is parsed before the file is read; `--param NAME=JSON` binds `$NAME`.
+  Findings go to stderr as `check` reports them, and a file that breaks an
+  invariant fails with `QueryFailed`. Nodes are written as their SLCR IDs and
+  edges as `(REQ-004)-[:REFINES]->(REQ-002)` (in JSON, an object with `label`,
+  `source`, and `target`). A query that can't run fails with `InvalidQuery`,
+  which labels syntax errors and features outside the profile in the query.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
-  `dispatch()` (see `src/cli/runtime.rs`). Remove the `#[expect(unused_imports)]`
-  on its re-export in `src/cli/mod.rs` when the first caller lands.
+  `dispatch()` (see `src/cli/runtime.rs`), as `query` does.
 - All user-facing output goes through `Terminal` (`src/terminal/`), which owns
   color detection (`--enable-colors`) and logging setup (`--log-level` / `LOG_LEVEL`).
 - Errors are `thiserror` + `miette::Diagnostic` types; use `#[diagnostic(help(...))]`
@@ -140,6 +148,23 @@ with `slcr render tests/fixtures/todo-api.spec.yaml --force`.
 - Each node is preceded by a hidden `<a id="ID"></a>`; IDs never appear in
   visible text, and every cross-reference is a link to an anchor.
 
+## Queries (`src/query/`)
+
+`slcr-gql` (a git dependency on `wack/gql-rust`, pinned by `rev`) parses and
+runs queries against any `GraphStore`. Its `PROFILE.md` specifies the query
+language and the graph a specification maps to.
+
+- `materialize.rs` — loads a checked `SlcrRequirementsDocument` into a
+  `GraphStoreMut`, following that mapping. `slcr_gql::load_spec` implements
+  the same mapping from JSON alone; the tests hold the two to the same graph,
+  element for element and **in the same insertion order** (rows without
+  `ORDER BY` come back in insertion order). Change both together, or the tests
+  fail.
+- `mod.rs` — `SpecGraph`: a document materialized into an in-memory
+  `PetgraphStore`, which runs parsed queries and resolves results into
+  `Cell`s (`cell.rs`) that name nodes by SLCR ID.
+- `error.rs` — `InvalidQuery`, the miette diagnostic for any query error.
+
 ## Filesystem (`src/fs/`)
 
 `FileSystem` wraps XDG project dirs and does all serde I/O, dispatching on
@@ -167,8 +192,8 @@ Two layers, both run by `cargo make test`:
 ## CLI snapshot tests (`tests/cli/`)
 
 `tests/cli/main.rs` is the harness; each subcommand has its own module
-(`init.rs`, `render.rs`, `check.rs`, `version.rs`), and `global.rs` covers
-top-level behavior. Snapshots are in `tests/cli/snapshots/`, named
+(`init.rs`, `render.rs`, `check.rs`, `query.rs`, `version.rs`), and
+`global.rs` covers top-level behavior. Snapshots are in `tests/cli/snapshots/`, named
 `cli__<module>__<name>.snap`, and are committed.
 
 - **Isolation.** Every test makes a `Workspace` (a temp dir), writes its inputs

@@ -1,0 +1,16 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - RETURN 1
+    - SPEC.md
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × SPEC.md is not a YAML, JSON, or TOML file
+  help: a requirements file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`

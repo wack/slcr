@@ -1,0 +1,19 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (t:Term) RETURN t, t.title"
+    - "--format"
+    - table
+---
+success: true
+exit_code: 0
+----- stdout -----
+t         t.title
+--------  ------------
+TERM-001  TodoListItem
+(1 row)
+
+----- stderr -----

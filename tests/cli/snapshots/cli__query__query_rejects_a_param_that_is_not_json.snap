@@ -1,0 +1,18 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (r {id: $id}) RETURN r"
+    - "--param"
+    - id=REQ-001
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'id=REQ-001' for '--param <NAME=JSON>': `REQ-001` is not JSON; quote a string, as in --param 'id="REQ-001"'
+
+For more information, try '--help'.
