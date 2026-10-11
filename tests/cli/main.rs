@@ -19,6 +19,7 @@ mod global;
 mod init;
 mod query;
 mod render;
+mod slice;
 mod version;
 
 /// The canon `TodoListItem` example, in each format.

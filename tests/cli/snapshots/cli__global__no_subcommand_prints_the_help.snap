@@ -15,7 +15,7 @@ Commands:
   init     Create a specification with its root and Glossary sections
   render   Render a specification as Markdown, to `SPEC.md` by default
   query    Query a specification with GQL
-  slice    Write the slice for one requirement (not yet implemented)
+  slice    Write the slice for one requirement: the context an agent needs to implement it
   eval     Report whether the specification's requirements are satisfied (not yet implemented)
   check    Report the invariants requirements files break
   version  Print the CLI version and exit

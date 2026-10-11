@@ -1,0 +1,15 @@
+---
+source: tests/cli/slice.rs
+info:
+  program: slcr
+  args:
+    - slice
+    - REQ-099
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × SPEC.slcr.yml has no requirement REQ-099
+  help: `slcr query 'MATCH (r:Requirement) RETURN r, r.title'` lists them

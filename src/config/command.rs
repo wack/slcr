@@ -2,7 +2,8 @@ use clap::Subcommand;
 use miette::Result;
 
 use crate::cli::{
-    Check, CheckArgs, Eval, Init, InitArgs, Query, QueryArgs, Render, RenderArgs, Slice, Version,
+    Check, CheckArgs, Eval, Init, InitArgs, Query, QueryArgs, Render, RenderArgs, Slice, SliceArgs,
+    Version,
 };
 use crate::terminal::Terminal;
 
@@ -16,8 +17,8 @@ pub enum SlcrCommand {
     Render(RenderArgs),
     /// Query a specification with GQL
     Query(QueryArgs),
-    /// Write the slice for one requirement (not yet implemented)
-    Slice,
+    /// Write the slice for one requirement: the context an agent needs to implement it
+    Slice(SliceArgs),
     /// Report whether the specification's requirements are satisfied (not yet implemented)
     Eval,
     /// Report the invariants requirements files break
@@ -33,7 +34,7 @@ impl SlcrCommand {
             Self::Init(args) => Init::new(console, args).dispatch(),
             Self::Render(args) => Render::new(console, args).dispatch(),
             Self::Query(args) => Query::new(console, args).dispatch(),
-            Self::Slice => Slice::new(console).dispatch(),
+            Self::Slice(args) => Slice::new(console, args).dispatch(),
             Self::Eval => Eval::new(console).dispatch(),
             Self::Check(args) => Check::new(console, args).dispatch(),
             Self::Version => Version::new(console).dispatch(),
@@ -56,9 +57,8 @@ mod tests {
 
     #[test]
     fn stubbed_subcommands_parse() {
-        let parse = |name| Cli::parse_from(["slcr", name]).cmd().clone();
-        assert!(matches!(parse("slice"), Some(SlcrCommand::Slice)));
-        assert!(matches!(parse("eval"), Some(SlcrCommand::Eval)));
+        let cli = Cli::parse_from(["slcr", "eval"]);
+        assert!(matches!(cli.cmd(), Some(SlcrCommand::Eval)));
     }
 
     #[test]
@@ -98,6 +98,17 @@ mod tests {
     }
 
     #[test]
+    fn slice_parses_a_requirement_with_or_without_a_file() {
+        for argv in [
+            &["slcr", "slice", "REQ-001"][..],
+            &["slcr", "slice", "REQ-001", "todo-api.spec.json"],
+        ] {
+            let cli = Cli::parse_from(argv);
+            assert!(matches!(cli.cmd(), Some(SlcrCommand::Slice(_))), "{argv:?}");
+        }
+    }
+
+    #[test]
     fn check_parses_its_files() {
         let cli = Cli::parse_from(["slcr", "check", "a.yaml", "b.json"]);
         assert!(matches!(cli.cmd(), Some(SlcrCommand::Check(_))));
@@ -105,15 +116,10 @@ mod tests {
 
     #[test]
     fn stubbed_subcommands_report_that_they_are_not_implemented() {
-        for name in ["slice", "eval"] {
-            let cli = Cli::parse_from(["slcr", name]);
-            let terminal = Terminal::new(&cli);
-            let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
-            assert_eq!(
-                err.to_string(),
-                format!("`slcr {name}` is not implemented yet")
-            );
-        }
+        let cli = Cli::parse_from(["slcr", "eval"]);
+        let terminal = Terminal::new(&cli);
+        let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
+        assert_eq!(err.to_string(), "`slcr eval` is not implemented yet");
     }
 
     #[test]

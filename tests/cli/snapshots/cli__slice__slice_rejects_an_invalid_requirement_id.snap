@@ -1,0 +1,16 @@
+---
+source: tests/cli/slice.rs
+info:
+  program: slcr
+  args:
+    - slice
+    - REQ-5
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'REQ-5' for '<REQUIREMENT>': `REQ-5` is not a valid requirement ID
+
+For more information, try '--help'.
