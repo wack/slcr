@@ -1,0 +1,14 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - MATCH (r) RETURN r.id + 1
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the query failed: arithmetic on STRING and INTEGER

@@ -1,0 +1,18 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (r:Requirement {id: 'REQ-004'})-[e:REFINES]->(t) RETURN r, e, t ORDER BY t.id"
+---
+success: true
+exit_code: 0
+----- stdout -----
+r        e                                t
+-------  -------------------------------  -------
+REQ-004  (REQ-004)-[:REFINES]->(REQ-002)  REQ-002
+REQ-004  (REQ-004)-[:REFINES]->(REQ-003)  REQ-003
+(2 rows)
+
+----- stderr -----

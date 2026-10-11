@@ -1,0 +1,58 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "--help"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Query a specification with GQL
+
+Usage: slcr query [OPTIONS] <QUERY> [FILE]
+
+Arguments:
+  <QUERY>
+          The query: read-only GQL, in the SLCR query profile, e.g. "MATCH (r:Requirement) RETURN r.id"
+
+  [FILE]
+          The requirements file to query: `.yaml`, `.yml`, `.json`, or `.toml`
+          
+          [default: SPEC.slcr.yml]
+
+Options:
+  -p, --param <NAME=JSON>
+          Bind the query's `$NAME` to a JSON value, e.g. `--param 'id="REQ-001"'` or `--param limit=5`. Repeat it for each parameter
+
+      --format <FORMAT>
+          How to write the rows
+
+          Possible values:
+          - table: Aligned columns under a header, then the number of rows
+          - tsv:   A header line, then one line per row, with tab-separated columns
+          - json:  One JSON document with the columns and the rows
+          
+          [default: table]
+
+      --enable-colors <ENABLE_COLORS>
+          Whether to color the output
+
+          Possible values:
+          - always: Always color the output
+          - never:  Never color the output
+          - auto:   Detect whether the terminal is a tty before deciding to color
+          
+          [default: auto]
+
+      --log-level <LOG_LEVEL>
+          Sets the maximum log level. Defaults to INFO. Options are 'trace', 'debug', 'info', 'warn', 'error', and 'off'. 'off' implies no logger will occur. Options are case-insensitive
+          
+          [env: LOG_LEVEL=]
+          [default: info]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+----- stderr -----

@@ -1,0 +1,20 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - RETURN 1
+    - a.yaml
+    - b.yaml
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unexpected argument 'b.yaml' found
+
+Usage: slcr query [OPTIONS] <QUERY> [FILE]
+
+For more information, try '--help'.

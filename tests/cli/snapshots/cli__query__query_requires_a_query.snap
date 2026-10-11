@@ -1,0 +1,18 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: the following required arguments were not provided:
+  <QUERY>
+
+Usage: slcr query <QUERY> [FILE]
+
+For more information, try '--help'.

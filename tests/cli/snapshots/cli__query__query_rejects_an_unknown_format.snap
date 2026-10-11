@@ -1,0 +1,21 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - RETURN 1
+    - "--format"
+    - csv
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'csv' for '--format <FORMAT>'
+  [possible values: table, tsv, json]
+
+  tip: a similar value exists: 'tsv'
+
+For more information, try '--help'.

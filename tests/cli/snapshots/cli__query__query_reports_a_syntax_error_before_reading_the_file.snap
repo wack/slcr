@@ -1,0 +1,20 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - MATCH (r RETURN r
+    - missing.yaml
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the query is not valid GQL
+   ╭─[query:1:10]
+ 1 │ MATCH (r RETURN r
+   ·          ───┬──
+   ·             ╰── found 'RETURN' expected ':', IS, '{', WHERE, or ')'
+   ╰────

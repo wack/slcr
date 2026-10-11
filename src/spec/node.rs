@@ -259,6 +259,23 @@ pub enum Refinement {
     Xor,
 }
 
+impl Refinement {
+    /// The keyword as serialized, e.g. "XOR".
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::And => "AND",
+            Self::Or => "OR",
+            Self::Xor => "XOR",
+        }
+    }
+}
+
+impl Display for Refinement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.keyword())
+    }
+}
+
 /// A speculative, advisory statement of what done looks like for its
 /// containing requirement. It asserts nothing.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
@@ -452,6 +469,8 @@ mod tests {
         ] {
             let parsed: Refinement = serde_json::from_value(json!(spelling)).unwrap();
             assert_eq!(parsed, refinement);
+            assert_eq!(refinement.keyword(), spelling);
+            assert_eq!(refinement.to_string(), spelling);
         }
         assert!(serde_json::from_value::<Refinement>(json!("and")).is_err());
         assert!(serde_json::from_value::<Refinement>(json!("NAND")).is_err());

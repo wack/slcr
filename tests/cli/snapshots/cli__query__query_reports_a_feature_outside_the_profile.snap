@@ -1,0 +1,21 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - OPTIONAL MATCH (r) RETURN r
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × `OPTIONAL` is outside the SLCR query profile
+   ╭─[query:1:1]
+ 1 │ OPTIONAL MATCH (r) RETURN r
+   · ────┬───
+   ·     ╰── not supported
+   ╰────
+  help: queries use a read-only subset of GQL, specified at
+        https://github.com/wack/gql-rust/blob/trunk/PROFILE.md

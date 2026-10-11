@@ -1,0 +1,22 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (r {id: 'REQ-003'}) RETURN r.body"
+    - todo-api.yaml
+---
+success: true
+exit_code: 0
+----- stdout -----
+r.body
+-----------------------------------------
+The endpoint accepts GET to read an item.
+(1 row)
+
+----- stderr -----
+  ⚠ todo-api.yaml: 1 warning
+
+Warning: 
+  ⚠ the body of REQ-003 does not contain its modality keyword, MUST

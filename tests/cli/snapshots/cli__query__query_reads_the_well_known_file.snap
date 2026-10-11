@@ -1,0 +1,19 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (d:Requirement)-[:REFINES]->{1,}(:Requirement {id: 'REQ-001'}) RETURN DISTINCT d.id AS dependent, d.modality ORDER BY dependent"
+---
+success: true
+exit_code: 0
+----- stdout -----
+dependent  d.modality
+---------  ----------
+REQ-002    MUST
+REQ-003    MUST
+REQ-004    MUST
+(3 rows)
+
+----- stderr -----

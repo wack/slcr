@@ -1,0 +1,22 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (r:Requirement) WHERE r.modality = $modality AND r.id IN $ids RETURN r, r.title ORDER BY r.id"
+    - "--param"
+    - "modality=\"MAY\""
+    - "-p"
+    - "ids=[\"REQ-009\", \"REQ-010\", \"REQ-099\"]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+r        r.title
+-------  --------------------
+REQ-009  Accepts OAuth tokens
+REQ-010  Accepts API keys
+(2 rows)
+
+----- stderr -----
