@@ -14,6 +14,10 @@ use crate::fs::{FileSystem, ReadError};
 /// How long fetching a descriptor over HTTPS may take, all told.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// The most bytes a fetched descriptor may have. Descriptors are small
+/// TOML files; this only stops a misconfigured URL from filling memory.
+const MAX_DESCRIPTOR_BYTES: usize = 1 << 20;
+
 /// Where SLCR fetches a manifest entry's descriptor from: `{ url = "..." }`
 /// for a published descriptor, or `{ path = "..." }` for one kept in the
 /// project.
@@ -58,9 +62,9 @@ impl Source {
 
     /// Fetch the descriptor's bytes: over HTTPS, or from the file at the
     /// path, which must be inside the project at `root`.
-    pub(crate) fn fetch(&self, fs: &FileSystem, root: &Path) -> miette::Result<Vec<u8>> {
+    pub(crate) async fn fetch(&self, fs: &FileSystem, root: &Path) -> miette::Result<Vec<u8>> {
         match self {
-            Self::Url(url) => Ok(url.fetch()?),
+            Self::Url(url) => Ok(url.fetch().await?),
             Self::Path(path) => {
                 let file = path.resolve(root)?;
                 Ok(read_descriptor(fs, &file, Path::new(path.as_str()))?)
@@ -101,19 +105,34 @@ impl HttpsUrl {
     }
 
     /// The bytes the URL serves. Only HTTPS is used, even across
-    /// redirects, and any status but success is an error.
-    fn fetch(&self) -> Result<Vec<u8>, SourceError> {
+    /// redirects; any status but success is an error, and so is a body
+    /// over [MAX_DESCRIPTOR_BYTES].
+    async fn fetch(&self) -> Result<Vec<u8>, SourceError> {
         let fail = |source| SourceError::Fetch {
             url: self.0.clone(),
             source: Box::new(source),
         };
-        let agent: ureq::Agent = ureq::Agent::config_builder()
+        let client = reqwest::Client::builder()
             .https_only(true)
-            .timeout_global(Some(FETCH_TIMEOUT))
+            .timeout(FETCH_TIMEOUT)
             .build()
-            .into();
-        let mut response = agent.get(&self.0).call().map_err(fail)?;
-        response.body_mut().read_to_vec().map_err(fail)
+            .map_err(fail)?;
+        let mut response = client
+            .get(&self.0)
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status)
+            .map_err(fail)?;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(fail)? {
+            if bytes.len() + chunk.len() > MAX_DESCRIPTOR_BYTES {
+                return Err(SourceError::TooLarge {
+                    url: self.0.clone(),
+                });
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(bytes)
     }
 }
 
@@ -263,7 +282,7 @@ impl FromStr for SourceArg {
 impl SourceArg {
     /// The manifest source this names in the project at `root`, and the
     /// descriptor's bytes.
-    pub(crate) fn fetch(
+    pub(crate) async fn fetch(
         self,
         fs: &FileSystem,
         cwd: &Path,
@@ -271,7 +290,7 @@ impl SourceArg {
     ) -> Result<(Source, Vec<u8>), SourceError> {
         match self {
             Self::Url(url) => {
-                let bytes = url.fetch()?;
+                let bytes = url.fetch().await?;
                 Ok((Source::Url(url), bytes))
             }
             Self::Path(path) => {
@@ -320,8 +339,12 @@ pub enum SourceError {
     Fetch {
         url: String,
         #[source]
-        source: Box<ureq::Error>,
+        source: Box<reqwest::Error>,
     },
+
+    #[error("{url} is larger than a descriptor can be")]
+    #[diagnostic(help("a descriptor is at most 1 MiB; check that the URL names a descriptor"))]
+    TooLarge { url: String },
 }
 
 #[cfg(test)]

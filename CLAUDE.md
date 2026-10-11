@@ -200,7 +200,8 @@ and no caching.
   `type = "object"`, and every `{with.<field>}` names a required scalar
   property. Argument templates are parsed into `Segment`s up front.
 - `pin.rs` — `blake3:` plus 64 lowercase hex; nothing else parses.
-- `source.rs` — `{ url }` (HTTPS only, even across redirects, via `ureq`)
+- `source.rs` — `{ url }` (HTTPS only, even across redirects, via async
+  `reqwest` driven by `cli::block_on`; bodies capped at 1 MiB)
   or `{ path }` (project-relative, and still inside the project after
   following symlinks).
 - `store.rs` — the content-addressed store at

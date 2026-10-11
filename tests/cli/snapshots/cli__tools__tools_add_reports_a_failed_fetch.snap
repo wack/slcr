@@ -15,4 +15,7 @@ exit_code: 1
 
 ----- stderr -----
 Error:   × could not fetch https://127.0.0.1:1/cargo-nextest.toml
-  ╰─▶ io: Connection refused (os error 111)
+  ├─▶ error sending request for url (https://127.0.0.1:1/cargo-nextest.toml)
+  ├─▶ client error (Connect)
+  ├─▶ tcp connect error
+  ╰─▶ Connection refused (os error 111)

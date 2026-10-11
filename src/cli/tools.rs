@@ -7,6 +7,7 @@ use clap::{Args, Subcommand};
 use miette::{Diagnostic, IntoDiagnostic, Result};
 use thiserror::Error;
 
+use super::block_on;
 use crate::Terminal;
 use crate::fs::FileSystem;
 use crate::tools::{
@@ -85,7 +86,7 @@ fn add(terminal: &Terminal, args: AddArgs) -> Result<()> {
 
     let origin = origin(&source);
     tracing::debug!(%origin, "fetching a descriptor");
-    let (source, bytes) = source.fetch(&fs, &cwd, project.root())?;
+    let (source, bytes) = block_on(source.fetch(&fs, &cwd, project.root()))??;
     let descriptor = Descriptor::parse(&origin, &bytes)?;
     let pin = Pin::of(&bytes);
     let key = key.unwrap_or_else(|| descriptor.name().clone());
