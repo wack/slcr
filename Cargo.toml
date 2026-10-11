@@ -37,6 +37,9 @@ figment = { version = "0.10", default-features = false, features = ["env", "test
 insta = { version = "1", features = ["filters"] }
 insta-cmd = "0.7"
 pulldown-cmark = { version = "0.13", default-features = false }
+rcgen = "0.14.10"
+tokio = { version = "1", features = ["net", "io-util"] }
+tokio-rustls = "0.26"
 
 [lints.rust]
 unsafe_code = "forbid"

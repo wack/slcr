@@ -22,8 +22,10 @@ pub(crate) struct DescriptorStore {
 
 /// The error returned when the store's directory can't be created.
 #[derive(Debug, Error, Diagnostic)]
-#[error("could not create the descriptor store")]
+#[error("could not create the descriptor store at {}", .dir.display())]
+#[diagnostic(help("set SLCR_DATA_DIR to a directory slcr can write to, to keep its data there"))]
 pub struct StoreUnavailable {
+    dir: PathBuf,
     #[source]
     source: std::io::Error,
 }
@@ -44,23 +46,21 @@ impl DescriptorStore {
         self.dir.join(format!("{}.toml", pin.hex()))
     }
 
-    /// File `bytes`, which must hash to `pin`, under `pin`. A file already
-    /// there that hashes to `pin` is left alone; anything else there, such
-    /// as a corrupted file, is replaced.
-    pub(crate) fn install(&self, fs: &FileSystem, pin: &Pin, bytes: &[u8]) -> Result<()> {
-        assert!(
-            pin.matches(bytes),
-            "a descriptor is filed under its own pin"
-        );
-        let path = self.path(pin);
-        if self.holds(fs, &path, pin) {
-            return Ok(());
+    /// File the descriptor `text` under its pin, and return the pin. A file
+    /// already there that hashes to the pin is left alone; anything else
+    /// there, such as a corrupted file, is replaced.
+    pub(crate) fn install(&self, fs: &FileSystem, text: &str) -> Result<Pin> {
+        let pin = Pin::of(text.as_bytes());
+        let path = self.path(&pin);
+        if self.holds(fs, &path, &pin) {
+            return Ok(pin);
         }
-        std::fs::create_dir_all(&self.dir).map_err(|source| StoreUnavailable { source })?;
-        // Descriptors are TOML, so they are text.
-        let text = std::str::from_utf8(bytes).expect("a descriptor is UTF-8");
+        std::fs::create_dir_all(&self.dir).map_err(|source| StoreUnavailable {
+            dir: self.dir.clone(),
+            source,
+        })?;
         fs.replace_file(&path, text)?;
-        Ok(())
+        Ok(pin)
     }
 
     /// Whether the file at `path` holds exactly the bytes `pin` pins.
@@ -73,27 +73,74 @@ impl DescriptorStore {
 mod tests {
     use super::*;
 
+    /// A store in a fresh temporary directory, which the store's own
+    /// directory is nested inside, as it is in a data directory.
+    fn store() -> (tempfile::TempDir, DescriptorStore) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = DescriptorStore::at(dir.path().join("descriptors/blake3"));
+        (dir, store)
+    }
+
     #[test]
     fn descriptors_are_filed_under_their_pin() {
-        let dir = tempfile::tempdir().unwrap();
+        let (dir, store) = store();
         let fs = FileSystem::new().unwrap();
-        let store = DescriptorStore::at(dir.path().join("descriptors/blake3"));
-        let bytes = b"name = \"jev\"\n";
-        let pin = Pin::of(bytes);
+        let text = "name = \"jev\"\n";
 
-        store.install(&fs, &pin, bytes).unwrap();
+        let pin = store.install(&fs, text).unwrap();
+        assert_eq!(pin, Pin::of(text.as_bytes()));
         let path = store.path(&pin);
         assert_eq!(
             path,
             dir.path()
                 .join(format!("descriptors/blake3/{}.toml", pin.hex()))
         );
-        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
 
-        // Installing again changes nothing; a corrupted file is replaced.
-        store.install(&fs, &pin, bytes).unwrap();
-        std::fs::write(&path, "tampered").unwrap();
-        store.install(&fs, &pin, bytes).unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    /// Installing writes through a temporary file renamed into place, so
+    /// a file that keeps its inode was never rewritten.
+    #[cfg(unix)]
+    #[test]
+    fn installing_again_changes_nothing() {
+        use std::os::unix::fs::MetadataExt;
+
+        let (_dir, store) = store();
+        let fs = FileSystem::new().unwrap();
+        let pin = store.install(&fs, "a").unwrap();
+        let inode = || std::fs::metadata(store.path(&pin)).unwrap().ino();
+        let before = inode();
+        assert_eq!(store.install(&fs, "a").unwrap(), pin);
+        assert_eq!(inode(), before);
+    }
+
+    #[test]
+    fn a_corrupted_descriptor_is_replaced() {
+        let (_dir, store) = store();
+        let fs = FileSystem::new().unwrap();
+        let pin = store.install(&fs, "a").unwrap();
+        std::fs::write(store.path(&pin), "tampered").unwrap();
+        store.install(&fs, "a").unwrap();
+        assert_eq!(std::fs::read_to_string(store.path(&pin)).unwrap(), "a");
+    }
+
+    #[test]
+    fn descriptors_with_different_bytes_never_collide() {
+        let (_dir, store) = store();
+        let fs = FileSystem::new().unwrap();
+        let one = store.install(&fs, "name = \"curl\"\n").unwrap();
+        let other = store.install(&fs, "name = \"curl\" # ours\n").unwrap();
+        assert_ne!(store.path(&one), store.path(&other));
+        assert!(store.path(&one).is_file() && store.path(&other).is_file());
+    }
+
+    #[test]
+    fn a_store_that_cannot_be_created_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        // A file where the store's parent directory would be.
+        std::fs::write(dir.path().join("descriptors"), "").unwrap();
+        let store = DescriptorStore::at(dir.path().join("descriptors/blake3"));
+        let err = store.install(&FileSystem::new().unwrap(), "a").unwrap_err();
+        assert!(err.downcast_ref::<StoreUnavailable>().is_some(), "{err:?}");
     }
 }

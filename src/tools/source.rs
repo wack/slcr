@@ -62,12 +62,17 @@ impl Source {
 
     /// Fetch the descriptor's bytes: over HTTPS, or from the file at the
     /// path, which must be inside the project at `root`.
-    pub(crate) async fn fetch(&self, fs: &FileSystem, root: &Path) -> miette::Result<Vec<u8>> {
+    pub(crate) async fn fetch(
+        &self,
+        fs: &FileSystem,
+        fetcher: &Fetcher,
+        root: &Path,
+    ) -> Result<Vec<u8>, SourceError> {
         match self {
-            Self::Url(url) => Ok(url.fetch().await?),
+            Self::Url(url) => fetcher.fetch(url).await,
             Self::Path(path) => {
                 let file = path.resolve(root)?;
-                Ok(read_descriptor(fs, &file, Path::new(path.as_str()))?)
+                read_descriptor(fs, &file, Path::new(path.as_str()))
             }
         }
     }
@@ -103,22 +108,58 @@ impl HttpsUrl {
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
+}
 
-    /// The bytes the URL serves. Only HTTPS is used, even across
-    /// redirects; any status but success is an error, and so is a body
-    /// over [MAX_DESCRIPTOR_BYTES].
-    async fn fetch(&self) -> Result<Vec<u8>, SourceError> {
+/// Fetches published descriptors over HTTPS.
+///
+/// The HTTPS client is built when a URL is fetched, not before: building
+/// it loads the platform's certificate authorities, which a project that
+/// keeps its descriptors in the repository never needs.
+#[derive(Default)]
+pub(crate) struct Fetcher {
+    /// The only authority to trust, in place of the platform's, for a
+    /// test server.
+    authority: Option<reqwest::Certificate>,
+}
+
+impl Fetcher {
+    /// A fetcher that trusts the platform's certificate authorities.
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// A fetcher that trusts only `authority`, for a test server.
+    #[cfg(test)]
+    pub(crate) fn trusting(authority: reqwest::Certificate) -> Self {
+        Self {
+            authority: Some(authority),
+        }
+    }
+
+    /// The client: HTTPS only, even across redirects, with a timeout.
+    fn client(&self) -> Result<reqwest::Client, SourceError> {
+        let mut builder = reqwest::Client::builder()
+            .https_only(true)
+            .timeout(FETCH_TIMEOUT);
+        if let Some(authority) = &self.authority {
+            builder = builder.tls_certs_only([authority.clone()]);
+        }
+        builder
+            .build()
+            .map_err(|source| SourceError::Client(Box::new(source)))
+    }
+
+    /// The bytes `url` serves. Only HTTPS is used, even across redirects;
+    /// any status but success is an error, and so is a body over
+    /// [MAX_DESCRIPTOR_BYTES].
+    pub(crate) async fn fetch(&self, url: &HttpsUrl) -> Result<Vec<u8>, SourceError> {
         let fail = |source| SourceError::Fetch {
-            url: self.0.clone(),
+            url: url.0.clone(),
             source: Box::new(source),
         };
-        let client = reqwest::Client::builder()
-            .https_only(true)
-            .timeout(FETCH_TIMEOUT)
-            .build()
-            .map_err(fail)?;
-        let mut response = client
-            .get(&self.0)
+        let mut response = self
+            .client()?
+            .get(url.as_str())
             .send()
             .await
             .and_then(reqwest::Response::error_for_status)
@@ -126,9 +167,7 @@ impl HttpsUrl {
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(fail)? {
             if bytes.len() + chunk.len() > MAX_DESCRIPTOR_BYTES {
-                return Err(SourceError::TooLarge {
-                    url: self.0.clone(),
-                });
+                return Err(SourceError::TooLarge { url: url.0.clone() });
             }
             bytes.extend_from_slice(&chunk);
         }
@@ -279,18 +318,29 @@ impl FromStr for SourceArg {
     }
 }
 
+/// How errors name a source: the URL, or the path as it was given.
+impl Display for SourceArg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Url(url) => url.fmt(f),
+            Self::Path(path) => path.display().fmt(f),
+        }
+    }
+}
+
 impl SourceArg {
     /// The manifest source this names in the project at `root`, and the
     /// descriptor's bytes.
     pub(crate) async fn fetch(
         self,
         fs: &FileSystem,
+        fetcher: &Fetcher,
         cwd: &Path,
         root: &Path,
     ) -> Result<(Source, Vec<u8>), SourceError> {
         match self {
             Self::Url(url) => {
-                let bytes = url.fetch().await?;
+                let bytes = fetcher.fetch(&url).await?;
                 Ok((Source::Url(url), bytes))
             }
             Self::Path(path) => {
@@ -335,6 +385,9 @@ pub enum SourceError {
     #[diagnostic(help("a path source must be UTF-8, without backslashes"))]
     Unrepresentable { path: PathBuf },
 
+    #[error("could not set up an HTTPS client")]
+    Client(#[source] Box<reqwest::Error>),
+
     #[error("could not fetch {url}")]
     Fetch {
         url: String,
@@ -350,6 +403,8 @@ pub enum SourceError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::block_on;
+    use crate::tools::https_server::{HttpsServer, Reply};
 
     #[test]
     fn a_source_arg_with_a_scheme_is_a_url() {
@@ -411,6 +466,168 @@ mod tests {
             "path = \"../d.toml\"",
         ] {
             assert!(toml::from_str::<Source>(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    /// What fetching `path` from a server with `routes` yields.
+    fn fetch(routes: Vec<(&'static str, Reply)>, path: &str) -> Result<Vec<u8>, SourceError> {
+        block_on(async {
+            let server = HttpsServer::start(routes).await;
+            server.fetcher().fetch(&server.url(path)).await
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_fetch_returns_the_body() {
+        let routes = vec![("/d.toml", Reply::ok("name = \"jev\"\n"))];
+        assert_eq!(fetch(routes, "/d.toml").unwrap(), b"name = \"jev\"\n");
+    }
+
+    #[test]
+    fn a_fetch_fails_on_any_status_but_success() {
+        let err = fetch(Vec::new(), "/missing.toml").unwrap_err();
+        let SourceError::Fetch { source, .. } = err else {
+            panic!("expected a failed fetch, got {err:?}");
+        };
+        assert_eq!(source.status(), Some(reqwest::StatusCode::NOT_FOUND));
+    }
+
+    #[test]
+    fn a_fetch_follows_redirects_that_stay_on_https() {
+        let routes = vec![
+            ("/old.toml", Reply::redirect("/new.toml")),
+            ("/new.toml", Reply::ok("moved")),
+        ];
+        assert_eq!(fetch(routes, "/old.toml").unwrap(), b"moved");
+    }
+
+    #[test]
+    fn a_fetch_refuses_a_redirect_to_http() {
+        let routes = vec![
+            ("/d.toml", Reply::redirect_to_http("/plain.toml")),
+            ("/plain.toml", Reply::ok("downgraded")),
+        ];
+        let err = fetch(routes, "/d.toml").unwrap_err();
+        // Refused as a redirect, not merely failed: following it would also
+        // fail, on the TLS-only port, but later and for another reason.
+        let SourceError::Fetch { source, .. } = err else {
+            panic!("expected a failed fetch, got {err:?}");
+        };
+        assert!(source.is_redirect(), "{source:?}");
+        let causes: Vec<_> =
+            std::iter::successors(Some(&*source as &dyn std::error::Error), |err| err.source())
+                .map(ToString::to_string)
+                .collect();
+        assert!(
+            causes
+                .iter()
+                .any(|cause| cause == "URL scheme is not allowed"),
+            "{causes:?}"
+        );
+    }
+
+    #[test]
+    fn a_fetch_refuses_a_certificate_the_platform_does_not_trust() {
+        block_on(async {
+            let server = HttpsServer::start(vec![("/d.toml", Reply::ok("x"))]).await;
+            let err = Fetcher::new()
+                .fetch(&server.url("/d.toml"))
+                .await
+                .unwrap_err();
+            assert!(matches!(err, SourceError::Fetch { .. }), "{err:?}");
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_fetch_caps_the_size_of_a_descriptor() {
+        let largest = vec![b'#'; MAX_DESCRIPTOR_BYTES];
+        let routes = vec![
+            ("/largest.toml", Reply::ok(largest.clone())),
+            (
+                "/too-large.toml",
+                Reply::ok([largest, b"#".to_vec()].concat()),
+            ),
+        ];
+        assert_eq!(
+            fetch(routes.clone(), "/largest.toml").unwrap().len(),
+            MAX_DESCRIPTOR_BYTES
+        );
+        assert!(matches!(
+            fetch(routes, "/too-large.toml"),
+            Err(SourceError::TooLarge { .. })
+        ));
+    }
+
+    /// A project at `<dir>/project` holding `tools/d.toml`, and a file
+    /// outside it at `<dir>/outside.toml`.
+    fn project() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("project");
+        std::fs::create_dir_all(root.join("tools")).unwrap();
+        std::fs::write(root.join("tools/d.toml"), "inside").unwrap();
+        std::fs::write(dir.path().join("outside.toml"), "outside").unwrap();
+        (dir, root)
+    }
+
+    #[test]
+    fn a_local_path_is_recorded_relative_to_the_project_root() {
+        let (_dir, root) = project();
+        let cwd = root.join("tools");
+        for given in ["d.toml", "./d.toml", "../tools/d.toml"] {
+            let (path, file) = ProjectPath::locate(Path::new(given), &cwd, &root).unwrap();
+            assert_eq!(path.as_str(), "tools/d.toml", "{given}");
+            assert_eq!(std::fs::read_to_string(file).unwrap(), "inside");
+        }
+    }
+
+    #[test]
+    fn a_local_path_must_be_inside_the_project() {
+        let (_dir, root) = project();
+        let outside = ProjectPath::locate(Path::new("../outside.toml"), &root, &root);
+        assert!(matches!(outside, Err(SourceError::OutsideProject { .. })));
+        let missing = ProjectPath::locate(Path::new("tools/none.toml"), &root, &root);
+        assert!(matches!(missing, Err(SourceError::Missing { .. })));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_out_of_the_project_is_outside_it() {
+        let (dir, root) = project();
+        std::os::unix::fs::symlink(
+            dir.path().join("outside.toml"),
+            root.join("tools/link.toml"),
+        )
+        .unwrap();
+        let located = ProjectPath::locate(Path::new("tools/link.toml"), &root, &root);
+        assert!(matches!(located, Err(SourceError::OutsideProject { .. })));
+        let resolved = ProjectPath::try_from("tools/link.toml".to_owned())
+            .unwrap()
+            .resolve(&root);
+        assert!(matches!(resolved, Err(SourceError::OutsideProject { .. })));
+    }
+
+    #[test]
+    fn a_path_source_is_read_from_the_project() {
+        let (_dir, root) = project();
+        let fs = FileSystem::new().unwrap();
+        let fetcher = Fetcher::new();
+        let source: Source = toml::from_str("path = \"tools/d.toml\"").unwrap();
+        let bytes = block_on(source.fetch(&fs, &fetcher, &root)).unwrap();
+        assert_eq!(bytes.unwrap(), b"inside");
+
+        let missing: Source = toml::from_str("path = \"tools/none.toml\"").unwrap();
+        let err = block_on(missing.fetch(&fs, &fetcher, &root))
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(err.to_string(), "tools/none.toml does not exist");
+    }
+
+    #[test]
+    fn a_source_arg_displays_as_given() {
+        for given in ["https://example.com/d.toml", "../tools/d.toml"] {
+            assert_eq!(given.parse::<SourceArg>().unwrap().to_string(), given);
         }
     }
 }

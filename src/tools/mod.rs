@@ -13,6 +13,8 @@ use thiserror::Error;
 
 use crate::spec::text::is_slug;
 
+/// `slcr tools add`: declaring a descriptor in the manifest.
+pub(crate) mod add;
 /// What a descriptor declares, validated against its schema.
 pub(crate) mod descriptor;
 /// `SLCR.toml`: the project manifest, and finding the project root.
@@ -23,6 +25,10 @@ pub(crate) mod pin;
 pub(crate) mod source;
 /// The content-addressed descriptor store under `$XDG_DATA_HOME`.
 pub(crate) mod store;
+
+/// A local HTTPS server for tests of fetching descriptors.
+#[cfg(test)]
+mod https_server;
 
 /// The key a descriptor is declared under in the manifest's `[tools]`
 /// table, such as `cargo-nextest`, which validators use to refer to it.

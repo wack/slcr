@@ -163,6 +163,23 @@ fn tools_add_rejects_an_unparsable_descriptor() {
 }
 
 #[test]
+fn tools_add_rejects_a_descriptor_that_is_not_utf8() {
+    let workspace = project();
+    workspace.file("tools/cargo-nextest.toml", b"name = \"\xff\"\n");
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "add", "tools/cargo-nextest.toml"]));
+    assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
+}
+
+#[test]
+fn tools_add_reports_a_descriptor_store_it_cannot_create() {
+    let workspace = project();
+    // A file where the data directory would be.
+    workspace.file(DATA_HOME, "");
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "add", "tools/cargo-nextest.toml"]));
+    assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
+}
+
+#[test]
 fn tools_add_rejects_a_descriptor_that_breaks_an_invariant() {
     let workspace = project();
     let undeclared = NEXTEST_DESCRIPTOR.replace("{with.test}", "{with.name}");

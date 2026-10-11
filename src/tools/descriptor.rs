@@ -461,13 +461,18 @@ pub enum Problem {
     NonScalarField { field: String },
 }
 
+/// The text of the descriptor in `bytes`, which came from `origin`: the
+/// path or URL to name in errors. A descriptor is TOML, so it is UTF-8.
+pub(crate) fn text<'a>(origin: &str, bytes: &'a [u8]) -> Result<&'a str, InvalidDescriptor> {
+    std::str::from_utf8(bytes).map_err(|_| InvalidDescriptor::NotUtf8 {
+        origin: origin.to_owned(),
+    })
+}
+
 impl Descriptor {
-    /// Read the descriptor in `bytes`, which came from `origin`: the path
-    /// or URL to name in errors.
-    pub(crate) fn parse(origin: &str, bytes: &[u8]) -> Result<Self, InvalidDescriptor> {
-        let source = std::str::from_utf8(bytes).map_err(|_| InvalidDescriptor::NotUtf8 {
-            origin: origin.to_owned(),
-        })?;
+    /// Read the descriptor `source`, which came from `origin`: the path or
+    /// URL to name in errors.
+    pub(crate) fn parse(origin: &str, source: &str) -> Result<Self, InvalidDescriptor> {
         let raw: RawDescriptor = Format::Toml
             .parse(Path::new(origin), source.to_owned())
             .map_err(|err| InvalidDescriptor::Unparsable(Box::new(err)))?;
@@ -589,7 +594,7 @@ mod tests {
     const NEXTEST: &str = include_str!("../../tests/fixtures/cargo-nextest.descriptor.toml");
 
     fn parse(source: &str) -> Result<Descriptor, InvalidDescriptor> {
-        Descriptor::parse("descriptor.toml", source.as_bytes())
+        Descriptor::parse("descriptor.toml", source)
     }
 
     /// The invariants `source` breaks.
@@ -811,7 +816,8 @@ mod tests {
 
     #[test]
     fn a_descriptor_must_be_utf8() {
-        let err = Descriptor::parse("d.toml", b"name = \"\xff\"").unwrap_err();
+        assert_eq!(text("d.toml", b"name = \"x\"").unwrap(), "name = \"x\"");
+        let err = text("d.toml", b"name = \"\xff\"").unwrap_err();
         assert_eq!(err.to_string(), "d.toml is not UTF-8 text");
     }
 }

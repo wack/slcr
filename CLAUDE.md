@@ -190,6 +190,10 @@ Manifest, Descriptors, and Invocation" (which win over the older
 low-level design page). The MVP has exit-code results only, no lockfile,
 and no caching.
 
+- `add.rs` — `add`, the whole of `slcr tools add`; `src/cli/tools.rs` only
+  builds its `Environment` (filesystem, `DescriptorStore`, `Fetcher`, working
+  directory) and prints the result. Test new behavior here, with an
+  `Environment` of your own, and keep CLI snapshots for what a user sees.
 - `manifest.rs` — `Project` (root discovery; a case-only near miss such as
   `slcr.toml` is an error, so macOS and Linux CI agree), `Manifest` (typed,
   `deny_unknown_fields`), and `ManifestFile`, which edits the TOML document
@@ -200,12 +204,17 @@ and no caching.
   `type = "object"`, and every `{with.<field>}` names a required scalar
   property. Argument templates are parsed into `Segment`s up front.
 - `pin.rs` — `blake3:` plus 64 lowercase hex; nothing else parses.
-- `source.rs` — `{ url }` (HTTPS only, even across redirects, via async
-  `reqwest` driven by `cli::block_on`; bodies capped at 1 MiB)
-  or `{ path }` (project-relative, and still inside the project after
-  following symlinks).
+- `source.rs` — `{ url }` or `{ path }` (project-relative, and still inside
+  the project after following symlinks). `Fetcher` fetches URLs with async
+  `reqwest`: HTTPS only, even across redirects, bodies capped at 1 MiB. It
+  builds its client on first use, so path sources never load the platform's
+  certificate authorities.
+- `https_server.rs` (tests only) — a local HTTPS server with a throwaway
+  certificate authority, and a production `Fetcher` that trusts only it, so
+  fetching is tested for real: redirects, statuses, the size cap.
 - `store.rs` — the content-addressed store at
-  `<data dir>/descriptors/blake3/<hex>.toml`. The data directory is
+  `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
+  text and returns the pin it filed it under. The data directory is
   `$SLCR_DATA_DIR`, else the platform's (`$XDG_DATA_HOME/slcr` on Linux).
 
 ## Queries (`src/query/`)

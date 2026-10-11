@@ -421,6 +421,39 @@ pin = "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b"
     }
 
     #[test]
+    fn a_tool_joins_an_inline_tools_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let inline = "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\ntools = { jev = \
+                      { version = \"1.0.0\", source = { path = \"jev.toml\" }, pin = \"PIN\" } }\n"
+            .replace("PIN", &Pin::of(b"jev").to_string());
+        std::fs::write(dir.path().join(MANIFEST), &inline).unwrap();
+        let project = Project::find_from(dir.path()).unwrap();
+        let mut file = ManifestFile::load(&project).unwrap();
+        let source: Source = toml::from_str("path = \"curl.toml\"").unwrap();
+        let version = DescriptorVersion::try_from("2.0.0".to_owned()).unwrap();
+        file.set_tool(
+            &key("curl"),
+            ToolEntry::new(version, source, Pin::of(b"curl")),
+        );
+        file.save(&FileSystem::new().unwrap()).unwrap();
+
+        let written = std::fs::read_to_string(dir.path().join(MANIFEST)).unwrap();
+        let manifest = parse(&written).unwrap();
+        let keys: Vec<_> = manifest.tools().keys().map(ToolKey::as_str).collect();
+        assert_eq!(keys, ["curl", "jev"]);
+        // Still one inline table, with the new tool at its end.
+        assert_eq!(written.lines().count(), 3, "{written}");
+        assert!(written.contains("pin = \"blake3:"), "{written}");
+        assert!(
+            written.trim_end().ends_with(&format!(
+                "curl = {{ version = \"2.0.0\", source = {{ path = \"curl.toml\" }}, pin = \"{}\" }} }}",
+                Pin::of(b"curl")
+            )),
+            "{written}"
+        );
+    }
+
+    #[test]
     fn the_project_is_found_in_the_nearest_ancestor() {
         let dir = tempfile::tempdir().unwrap();
         let nested = dir.path().join("a/b");

@@ -251,10 +251,10 @@ impl FileSystem {
     /// the platform's data directory, `$XDG_DATA_HOME/slcr` on Linux. It
     /// may not exist yet.
     pub(crate) fn data_dir(&self) -> PathBuf {
-        match std::env::var_os(DATA_DIR_VARIABLE) {
-            Some(dir) if !dir.is_empty() => PathBuf::from(dir),
-            _ => self.xdg_dirs.data_dir().to_path_buf(),
-        }
+        data_dir(
+            std::env::var_os(DATA_DIR_VARIABLE),
+            self.xdg_dirs.data_dir(),
+        )
     }
 
     /// Returns the expected directory for this particular file type.
@@ -286,6 +286,15 @@ impl FileSystem {
         std::fs::create_dir_all(path).map_err(on_err)?;
         // Return an owned path to the directory.
         Ok(path.to_path_buf())
+    }
+}
+
+/// The data directory: `variable`, the value of [DATA_DIR_VARIABLE], unless
+/// it is unset or empty, and otherwise `platform`.
+fn data_dir(variable: Option<std::ffi::OsString>, platform: &Path) -> PathBuf {
+    match variable {
+        Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+        _ => platform.to_path_buf(),
     }
 }
 
@@ -909,5 +918,17 @@ mod tests {
         // A file in the working directory has no directory to create.
         assert_eq!(help(error("b.yml", ErrorKind::NotFound)), None);
         assert_eq!(help(error("a/b.yml", ErrorKind::PermissionDenied)), None);
+    }
+
+    #[test]
+    fn the_data_directory_can_be_overridden() {
+        let platform = Path::new("/home/me/.local/share/slcr");
+        assert_eq!(data_dir(None, platform), platform);
+        assert_eq!(data_dir(Some("".into()), platform), platform);
+        assert_eq!(data_dir(Some(".data".into()), platform), Path::new(".data"));
+        assert_eq!(
+            data_dir(Some("/srv/slcr".into()), platform),
+            Path::new("/srv/slcr")
+        );
     }
 }
