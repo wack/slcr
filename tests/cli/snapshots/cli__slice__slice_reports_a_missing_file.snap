@@ -1,0 +1,15 @@
+---
+source: tests/cli/slice.rs
+info:
+  program: slcr
+  args:
+    - slice
+    - REQ-001
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not read SPEC.slcr.yml
+  ╰─▶ No such file or directory (os error 2)

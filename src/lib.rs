@@ -14,6 +14,8 @@ mod fs;
 mod query;
 /// The canonical Markdown rendering of a specification.
 mod render;
+/// What the agent slice of one requirement includes.
+mod slice;
 /// The specification graph: SLCR's requirements document.
 mod spec;
 /// Terminal output, color detection, and the miette error hook.

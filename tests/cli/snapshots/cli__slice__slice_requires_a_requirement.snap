@@ -1,0 +1,18 @@
+---
+source: tests/cli/slice.rs
+info:
+  program: slcr
+  args:
+    - slice
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: the following required arguments were not provided:
+  <REQUIREMENT>
+
+Usage: slcr slice <REQUIREMENT> [FILE]
+
+For more information, try '--help'.

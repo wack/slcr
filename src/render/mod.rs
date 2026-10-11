@@ -7,6 +7,9 @@
 //! comes last, alphabetized. IDs never appear in the visible text; each node
 //! is preceded by a hidden anchor carrying its ID, which cross-references
 //! link to.
+//!
+//! The same renderer writes the slice of one requirement ([slice]), a
+//! smaller document under the same rules.
 
 use std::collections::HashMap;
 use std::fmt::{self, Display};
@@ -14,6 +17,7 @@ use std::fmt::{self, Display};
 use blocks::Blocks;
 use inline::{anchor, escape, escape_html, link};
 
+use crate::slice::{Detail, Members};
 use crate::spec::check;
 use crate::spec::graph::SlcrRequirementsDocument;
 use crate::spec::id::{DependencyId, RequirementId, SectionId, TermId};
@@ -22,6 +26,9 @@ use crate::spec::text::Title;
 
 mod blocks;
 mod inline;
+mod slice;
+
+pub(crate) use slice::slice;
 
 /// How every rendered document begins, so that a file that begins any other
 /// way is known not to have been rendered.
@@ -33,7 +40,7 @@ const DEEPEST_HEADING: usize = 6;
 
 /// Render `graph` as Markdown.
 pub(crate) fn document(graph: &SlcrRequirementsDocument) -> String {
-    Renderer::new(graph).render()
+    Renderer::new(graph, None).render()
 }
 
 /// Whether `contents` begins as a rendered document does, which marks a file
@@ -77,6 +84,10 @@ impl Display for Number {
 /// Renders one document, with the lookups that cross-references need.
 struct Renderer<'a> {
     graph: &'a SlcrRequirementsDocument,
+    /// What a slice includes, or `None` for the whole document. A
+    /// cross-reference to a node the slice leaves out names it without
+    /// linking to it.
+    members: Option<&'a Members>,
     /// Every Section's title, the Glossary's included.
     sections: HashMap<SectionId, &'a Title>,
     requirements: HashMap<RequirementId, &'a Requirement>,
@@ -87,7 +98,7 @@ struct Renderer<'a> {
 }
 
 impl<'a> Renderer<'a> {
-    fn new(graph: &'a SlcrRequirementsDocument) -> Self {
+    fn new(graph: &'a SlcrRequirementsDocument, members: Option<&'a Members>) -> Self {
         let glossary = graph.glossary();
         let sections = graph
             .sections()
@@ -108,6 +119,7 @@ impl<'a> Renderer<'a> {
             .collect();
         Self {
             graph,
+            members,
             sections,
             requirements,
             terms,
@@ -129,16 +141,21 @@ impl<'a> Renderer<'a> {
         self.blocks.finish()
     }
 
-    /// The hidden anchor and the numbered heading of a node, or a bold
-    /// numbered paragraph below the deepest heading.
+    /// The hidden anchor and the numbered heading of a node, at the level
+    /// its depth in the containment tree gives it.
     fn heading(&mut self, id: impl Display, number: &Number, title: &Title) {
+        self.heading_at(number.depth() + 1, id, number, title);
+    }
+
+    /// The hidden anchor and the numbered heading of a node at `level`, or a
+    /// bold numbered paragraph below the deepest heading.
+    fn heading_at(&mut self, level: usize, id: impl Display, number: &Number, title: &Title) {
         let title = escape(title.as_str());
         let text = if number.depth() == 0 {
             title
         } else {
             format!("{number} {title}")
         };
-        let level = number.depth() + 1;
         let heading = if level <= DEEPEST_HEADING {
             format!("{} {text}", "#".repeat(level))
         } else {
@@ -149,10 +166,7 @@ impl<'a> Renderer<'a> {
 
     fn section(&mut self, section: &'a Section, number: &Number) {
         self.heading(section.id(), number, section.title());
-        if let Some(body) = section.body() {
-            self.blocks.prose(body);
-        }
-        self.terms_line(section.uses_term());
+        self.section_block(section);
         for (index, child) in section.children().iter().enumerate() {
             let number = number.child(index + 1);
             match child {
@@ -160,6 +174,14 @@ impl<'a> Renderer<'a> {
                 SectionChild::Requirement(child) => self.requirement(child, &number, None),
             }
         }
+    }
+
+    /// What a Section shows under its heading: its body and its Terms line.
+    fn section_block(&mut self, section: &Section) {
+        if let Some(body) = section.body() {
+            self.blocks.prose(body);
+        }
+        self.terms_line(section.uses_term());
     }
 
     /// Render `requirement`, whose containment parent is the requirement
@@ -172,32 +194,51 @@ impl<'a> Renderer<'a> {
     ) {
         let id = *requirement.id();
         self.heading(id, number, requirement.title());
-        self.blocks.prose(requirement.body());
-        if let Some(rationale) = requirement.rationale() {
-            self.labeled("Rationale", rationale.as_str());
+        self.requirement_block(requirement, parent, Detail::Full);
+        for (index, child) in requirement.children().iter().enumerate() {
+            self.requirement(child, &number.child(index + 1), Some(id));
         }
-        self.refinement(requirement);
+    }
 
-        // The containment parent is plain from the document's structure.
-        let refines: Vec<String> = requirement
-            .refines()
-            .iter()
-            .filter(|target| Some(**target) != parent)
-            .map(|target| self.requirement_link(*target))
-            .collect();
-        self.labeled("Refines", &refines.join(", "));
+    /// What a requirement shows under its heading in `detail`, whose
+    /// containment parent is the requirement `parent`, or a Section if
+    /// `None`. The parts keep their order at every detail.
+    fn requirement_block(
+        &mut self,
+        requirement: &Requirement,
+        parent: Option<RequirementId>,
+        detail: Detail,
+    ) {
+        self.blocks.prose(requirement.body());
+        if detail == Detail::Full {
+            if let Some(rationale) = requirement.rationale() {
+                self.labeled("Rationale", rationale.as_str());
+            }
+            self.refinement(requirement);
 
-        let depends_on: Vec<String> = requirement
-            .depends_on()
-            .iter()
-            .map(|target| self.dependency_link(*target))
-            .collect();
-        self.labeled("Depends on", &depends_on.join(", "));
+            // The containment parent is plain from the document's structure.
+            let refines: Vec<String> = requirement
+                .refines()
+                .iter()
+                .filter(|target| Some(**target) != parent)
+                .map(|target| self.requirement_link(*target))
+                .collect();
+            self.labeled("Refines", &refines.join(", "));
+        }
+
+        if detail >= Detail::Dependency {
+            let depends_on: Vec<String> = requirement
+                .depends_on()
+                .iter()
+                .map(|target| self.dependency_link(*target))
+                .collect();
+            self.labeled("Depends on", &depends_on.join(", "));
+        }
 
         self.terms_line(requirement.uses_term());
 
         let criteria = requirement.acceptance_criteria();
-        if !criteria.is_empty() {
+        if detail >= Detail::Dependency && !criteria.is_empty() {
             self.blocks.push("*Acceptance criteria:*");
             for criterion in criteria {
                 self.blocks.push(&format!(
@@ -207,10 +248,6 @@ impl<'a> Renderer<'a> {
                 ));
                 self.blocks.prose(criterion.body());
             }
-        }
-
-        for (index, child) in requirement.children().iter().enumerate() {
-            self.requirement(child, &number.child(index + 1), Some(id));
         }
     }
 
@@ -230,7 +267,7 @@ impl<'a> Renderer<'a> {
         };
         let items: Vec<String> = refiners
             .iter()
-            .map(|refiner| format!("- {}", link(refiner.title(), refiner.id())))
+            .map(|refiner| format!("- {}", self.requirement_link(*refiner.id())))
             .collect();
         self.blocks.push(sentence);
         self.blocks.push(&items.join("\n"));
@@ -250,13 +287,24 @@ impl<'a> Renderer<'a> {
         }
     }
 
+    /// The Glossary, with every term that what is rendered includes. A
+    /// slice that includes neither a term nor the Glossary itself leaves it
+    /// out.
     fn glossary(&mut self, number: &Number) {
         let glossary = self.graph.glossary();
+        let included = self.includes(DependencyId::Section(*glossary.id()));
+        let mut terms: Vec<&Term> = glossary
+            .terms()
+            .iter()
+            .filter(|term| self.includes_term(*term.id()))
+            .collect();
+        if !included && terms.is_empty() {
+            return;
+        }
         self.heading(glossary.id(), number, glossary.title());
-        if let Some(body) = glossary.body() {
+        if included && let Some(body) = glossary.body() {
             self.blocks.prose(body);
         }
-        let mut terms: Vec<&Term> = glossary.terms().iter().collect();
         terms.sort_by_cached_key(|term| {
             let title = term.title().as_str();
             (title.to_lowercase(), title.to_owned(), *term.id())
@@ -287,29 +335,57 @@ impl<'a> Renderer<'a> {
         self.blocks.push("</dd>\n</dl>");
     }
 
-    /// A link to the requirement `id`, or its bare ID if no such
-    /// requirement exists, which only an unchecked document allows.
+    /// Whether what is rendered includes the Section or Requirement `id`.
+    fn includes(&self, id: DependencyId) -> bool {
+        self.members
+            .is_none_or(|members| members.detail(id).is_some())
+    }
+
+    /// Whether what is rendered includes the Term `id`.
+    fn includes_term(&self, id: TermId) -> bool {
+        self.members.is_none_or(|members| members.has_term(id))
+    }
+
+    /// A link to the requirement `id`; its title alone if a slice leaves
+    /// it out; or its bare ID if no such requirement exists, which only an
+    /// unchecked document allows.
     fn requirement_link(&self, id: RequirementId) -> String {
+        let included = self.includes(DependencyId::Requirement(id));
         self.requirements.get(&id).map_or_else(
             || id.to_string(),
-            |requirement| link(requirement.title(), id),
+            |requirement| reference(requirement.title(), id, included),
         )
     }
 
     fn dependency_link(&self, id: DependencyId) -> String {
         match id {
             DependencyId::Requirement(id) => self.requirement_link(id),
-            DependencyId::Section(id) => self
-                .sections
-                .get(&id)
-                .map_or_else(|| id.to_string(), |title| link(title, id)),
+            DependencyId::Section(section) => {
+                let included = self.includes(id);
+                self.sections.get(&section).map_or_else(
+                    || section.to_string(),
+                    |title| reference(title, section, included),
+                )
+            }
         }
     }
 
     fn term_link(&self, id: TermId) -> String {
-        self.terms
-            .get(&id)
-            .map_or_else(|| id.to_string(), |term| link(term.title(), id))
+        let included = self.includes_term(id);
+        self.terms.get(&id).map_or_else(
+            || id.to_string(),
+            |term| reference(term.title(), id, included),
+        )
+    }
+}
+
+/// A link to the node `id` titled `title`, or the title alone if what is
+/// rendered doesn't include the node.
+fn reference(title: &Title, id: impl Display, included: bool) -> String {
+    if included {
+        link(title, id)
+    } else {
+        escape(title.as_str())
     }
 }
 
@@ -326,23 +402,23 @@ mod tests {
     use crate::spec::graph::UncheckedDocument;
     use crate::spec::text::SpecName;
 
-    const TODO_API_JSON: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
+    pub(super) const TODO_API_JSON: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
     const TODO_API_YAML: &str = include_str!("../../tests/fixtures/todo-api.spec.yaml");
     const TODO_API_TOML: &str = include_str!("../../tests/fixtures/todo-api.spec.toml");
     /// What the canon example renders to.
     const TODO_API_MD: &str = include_str!("../../tests/fixtures/todo-api.md");
 
-    fn canon() -> SlcrRequirementsDocument {
+    pub(super) fn canon() -> SlcrRequirementsDocument {
         serde_json::from_str(TODO_API_JSON).unwrap()
     }
 
     /// A checked document whose root, SEC-001 "Root", contains `children`,
     /// and whose Glossary, SEC-900, holds `terms`.
-    fn spec(children: Value, terms: Value) -> SlcrRequirementsDocument {
+    pub(super) fn spec(children: Value, terms: Value) -> SlcrRequirementsDocument {
         serde_json::from_value(spec_value(children, terms)).unwrap()
     }
 
-    fn spec_value(children: Value, terms: Value) -> Value {
+    pub(super) fn spec_value(children: Value, terms: Value) -> Value {
         let mut root = json!({ "kind": "section", "id": "SEC-001", "title": "Root" });
         if children != json!([]) {
             root["children"] = children;
@@ -359,12 +435,12 @@ mod tests {
         })
     }
 
-    fn section(id: u32, title: &str) -> Value {
+    pub(super) fn section(id: u32, title: &str) -> Value {
         json!({ "kind": "section", "id": format!("SEC-{id:03}"), "title": title })
     }
 
     /// A leaf MUST requirement whose body states its modality.
-    fn requirement(id: u32, title: &str) -> Value {
+    pub(super) fn requirement(id: u32, title: &str) -> Value {
         json!({
             "kind": "requirement",
             "id": format!("REQ-{id:03}"),
@@ -374,7 +450,7 @@ mod tests {
         })
     }
 
-    fn term(id: u32, title: &str, definition: &str) -> Value {
+    pub(super) fn term(id: u32, title: &str, definition: &str) -> Value {
         json!({
             "kind": "term",
             "id": format!("TERM-{id:03}"),
@@ -384,7 +460,7 @@ mod tests {
     }
 
     /// `node` with `fields` set.
-    fn with(mut node: Value, fields: Value) -> Value {
+    pub(super) fn with(mut node: Value, fields: Value) -> Value {
         let node_fields = node.as_object_mut().unwrap();
         for (key, value) in fields.as_object().unwrap() {
             node_fields.insert(key.clone(), value.clone());
@@ -402,7 +478,7 @@ mod tests {
         rendered[start..end].trim_end()
     }
 
-    fn parse(markdown: &str) -> Parser<'_> {
+    pub(super) fn parse(markdown: &str) -> Parser<'_> {
         Parser::new_ext(
             markdown,
             Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES,
@@ -410,7 +486,7 @@ mod tests {
     }
 
     /// Each heading's level and text, in order.
-    fn headings(markdown: &str) -> Vec<(usize, String)> {
+    pub(super) fn headings(markdown: &str) -> Vec<(usize, String)> {
         let mut headings = Vec::new();
         let mut current: Option<(usize, String)> = None;
         for event in parse(markdown) {
@@ -444,7 +520,7 @@ mod tests {
     }
 
     /// The IDs of the anchors in `markdown`'s raw HTML, in order.
-    fn anchors(markdown: &str) -> Vec<String> {
+    pub(super) fn anchors(markdown: &str) -> Vec<String> {
         const OPEN: &str = r#"<a id=""#;
         let mut anchors = Vec::new();
         for event in parse(markdown) {
@@ -463,7 +539,7 @@ mod tests {
     }
 
     /// The destinations of `markdown`'s links, in order.
-    fn link_targets(markdown: &str) -> Vec<String> {
+    pub(super) fn link_targets(markdown: &str) -> Vec<String> {
         parse(markdown)
             .filter_map(|event| match event {
                 Event::Start(Tag::Link { dest_url, .. }) => Some(dest_url.to_string()),
@@ -473,7 +549,7 @@ mod tests {
     }
 
     /// The text a reader sees, outside raw HTML.
-    fn visible_text(markdown: &str) -> String {
+    pub(super) fn visible_text(markdown: &str) -> String {
         let texts: Vec<String> = parse(markdown)
             .filter_map(|event| match event {
                 Event::Text(text) | Event::Code(text) => Some(text.to_string()),
@@ -540,7 +616,7 @@ mod tests {
     /// three chains of requirements each nested seven deep, below the
     /// deepest heading, where each refines its container; refinements and
     /// dependencies across chains; terms with aliases; and criteria.
-    fn synthetic() -> SlcrRequirementsDocument {
+    pub(super) fn synthetic() -> SlcrRequirementsDocument {
         const CHAINS: u32 = 3;
         const LENGTH: u32 = 7;
         let id = |chain: u32, level: u32| chain * LENGTH + level + 1;

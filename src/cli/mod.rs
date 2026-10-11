@@ -5,7 +5,7 @@ pub use not_implemented::NotImplemented;
 pub use query::{Query, QueryArgs};
 pub use render::{Render, RenderArgs};
 pub(crate) use runtime::block_on;
-pub use slice::Slice;
+pub use slice::{Slice, SliceArgs};
 pub use version::Version;
 
 mod check;

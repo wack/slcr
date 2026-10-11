@@ -1,0 +1,16 @@
+---
+source: tests/cli/slice.rs
+info:
+  program: slcr
+  args:
+    - slice
+    - REQ-001
+    - SPEC.md
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × SPEC.md is not a YAML, JSON, or TOML file
+  help: a requirements file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`
