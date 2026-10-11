@@ -10,6 +10,8 @@ mod cli;
 mod config;
 /// An abstraction over the user's filesystem, respecting $XDG_CONFIG.
 mod fs;
+/// GQL queries over a specification's graph.
+mod query;
 /// The canonical Markdown rendering of a specification.
 mod render;
 /// The specification graph: SLCR's requirements document.

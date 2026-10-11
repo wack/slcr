@@ -1,0 +1,17 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (r)-[e:HAS_CRITERION]->(c) RETURN r, e, c, c.body, e.position, r.rationale"
+    - "--format"
+    - tsv
+---
+success: true
+exit_code: 0
+----- stdout -----
+r	e	c	c.body	e.position	r.rationale
+REQ-007	(REQ-007)-[:HAS_CRITERION]->(AC-001)	AC-001	A table named `todo_list_item` is declared with a string column `title` and a boolean column `done`. A structural match against the schema or migration source is sufficient.	0	
+
+----- stderr -----

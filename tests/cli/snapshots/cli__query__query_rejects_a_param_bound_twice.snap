@@ -1,0 +1,19 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - RETURN $n
+    - "-p"
+    - n=1
+    - "-p"
+    - n=2
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × `$n` is bound more than once
+  help: pass one `--param` for each name

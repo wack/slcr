@@ -17,6 +17,7 @@ use tempfile::TempDir;
 mod check;
 mod global;
 mod init;
+mod query;
 mod render;
 mod version;
 

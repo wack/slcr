@@ -1,0 +1,18 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - RETURN $id
+    - "--param"
+    - $id=1
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value '$id=1' for '--param <NAME=JSON>': `$id` is not a parameter name: use letters, digits, and `_`, without the `$`
+
+For more information, try '--help'.

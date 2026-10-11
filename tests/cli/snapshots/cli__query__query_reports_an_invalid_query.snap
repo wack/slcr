@@ -1,0 +1,14 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - MATCH (r) RETURN s
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the query is invalid: undefined variable `s`

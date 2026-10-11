@@ -1,7 +1,9 @@
 use clap::Subcommand;
 use miette::Result;
 
-use crate::cli::{Check, CheckArgs, Eval, Init, InitArgs, Render, RenderArgs, Slice, Version};
+use crate::cli::{
+    Check, CheckArgs, Eval, Init, InitArgs, Query, QueryArgs, Render, RenderArgs, Slice, Version,
+};
 use crate::terminal::Terminal;
 
 /// A `SlcrCommand` is one of the top-level commands accepted by
@@ -12,6 +14,8 @@ pub enum SlcrCommand {
     Init(InitArgs),
     /// Render a specification as Markdown, to `SPEC.md` by default
     Render(RenderArgs),
+    /// Query a specification with GQL
+    Query(QueryArgs),
     /// Write the slice for one requirement (not yet implemented)
     Slice,
     /// Report whether the specification's requirements are satisfied (not yet implemented)
@@ -28,6 +32,7 @@ impl SlcrCommand {
         match self {
             Self::Init(args) => Init::new(console, args).dispatch(),
             Self::Render(args) => Render::new(console, args).dispatch(),
+            Self::Query(args) => Query::new(console, args).dispatch(),
             Self::Slice => Slice::new(console).dispatch(),
             Self::Eval => Eval::new(console).dispatch(),
             Self::Check(args) => Check::new(console, args).dispatch(),
@@ -78,6 +83,17 @@ mod tests {
         ] {
             let cli = Cli::parse_from(argv);
             assert!(matches!(cli.cmd(), Some(SlcrCommand::Init(_))), "{argv:?}");
+        }
+    }
+
+    #[test]
+    fn query_parses_a_query_with_or_without_a_file() {
+        for argv in [
+            &["slcr", "query", "RETURN 1"][..],
+            &["slcr", "query", "RETURN 1", "todo-api.spec.json"],
+        ] {
+            let cli = Cli::parse_from(argv);
+            assert!(matches!(cli.cmd(), Some(SlcrCommand::Query(_))), "{argv:?}");
         }
     }
 

@@ -1,0 +1,16 @@
+---
+source: tests/cli/query.rs
+info:
+  program: slcr
+  args:
+    - query
+    - "MATCH (r:Requirement {modality: 'MUST NOT'}) RETURN r"
+---
+success: true
+exit_code: 0
+----- stdout -----
+r
+-
+(0 rows)
+
+----- stderr -----
