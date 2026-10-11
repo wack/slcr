@@ -1,0 +1,18 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - "../cargo-nextest.toml"
+  env:
+    SLCR_DATA_DIR: ".data"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × ../cargo-nextest.toml is outside the project
+  help: a descriptor kept in the project must be inside the directory that holds SLCR.toml; copy it there, or publish it at an HTTPS URL

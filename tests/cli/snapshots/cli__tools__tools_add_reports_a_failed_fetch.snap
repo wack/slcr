@@ -1,0 +1,18 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - "https://127.0.0.1:1/cargo-nextest.toml"
+  env:
+    SLCR_DATA_DIR: ".data"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not fetch https://127.0.0.1:1/cargo-nextest.toml
+  ╰─▶ io: Connection refused (os error 111)

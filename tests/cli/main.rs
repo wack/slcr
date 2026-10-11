@@ -20,12 +20,15 @@ mod init;
 mod query;
 mod render;
 mod slice;
+mod tools;
 mod version;
 
 /// The canon `TodoListItem` example, in each format.
 const TODO_API_YAML: &str = include_str!("../fixtures/todo-api.spec.yaml");
 const TODO_API_JSON: &str = include_str!("../fixtures/todo-api.spec.json");
 const TODO_API_TOML: &str = include_str!("../fixtures/todo-api.spec.toml");
+/// The cargo-nextest descriptor on the Schemas page.
+const NEXTEST_DESCRIPTOR: &str = include_str!("../fixtures/cargo-nextest.descriptor.toml");
 /// What the canon example renders to.
 const TODO_API_MD: &str = include_str!("../fixtures/todo-api.md");
 
@@ -49,10 +52,18 @@ fn with_warning() -> String {
     TODO_API_YAML.replace(body, "The endpoint accepts GET")
 }
 
+/// Where in a [Workspace] `slcr` keeps its persistent data, such as the
+/// descriptor store: `SLCR_DATA_DIR`, relative to the directory `slcr`
+/// runs in. It is relative so that snapshots, which record the variable,
+/// are the same on every run.
+const DATA_HOME: &str = ".data";
+
 /// A scratch directory that a test runs `slcr` in, deleted when dropped.
 ///
 /// Commands are given paths relative to it, so the paths in their output
-/// are the same on every run.
+/// are the same on every run. `slcr`'s data directory is inside it too,
+/// at [DATA_HOME] (inside `dir`, for [Workspace::slcr_in]), so that no
+/// test touches the real one.
 struct Workspace {
     dir: TempDir,
 }
@@ -124,6 +135,7 @@ impl Workspace {
         for variable in AMBIENT {
             command.env_remove(variable);
         }
+        command.env("SLCR_DATA_DIR", DATA_HOME);
         command
     }
 }

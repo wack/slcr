@@ -20,3 +20,5 @@ mod slice;
 mod spec;
 /// Terminal output, color detection, and the miette error hook.
 mod terminal;
+/// External tools: the project manifest and tool descriptors.
+mod tools;

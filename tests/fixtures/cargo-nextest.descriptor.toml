@@ -1,0 +1,17 @@
+formatVersion = "1"
+name = "cargo-nextest"
+version = "1.0.0"
+
+[validator.schema]
+type = "object"
+required = ["test"]
+additionalProperties = false
+properties.test = { type = "string", minLength = 1, description = "Fully qualified test name." }
+
+[invoke]
+argv = ["cargo", "nextest", "run", "--no-fail-fast", "--no-tests=fail",
+        "-E", "test(={with.test})"]
+cwd = { nearest = "Cargo.toml" }
+
+[results]
+pass = [0]

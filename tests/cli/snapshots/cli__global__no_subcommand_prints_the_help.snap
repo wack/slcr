@@ -3,6 +3,8 @@ source: tests/cli/global.rs
 info:
   program: slcr
   args: []
+  env:
+    SLCR_DATA_DIR: ".data"
 ---
 success: true
 exit_code: 0
@@ -18,6 +20,7 @@ Commands:
   slice    Write the slice for one requirement: the context an agent needs to implement it
   eval     Report whether the specification's requirements are satisfied (not yet implemented)
   check    Report the invariants requirements files break
+  tools    Declare the external tools validators run, in the project manifest `SLCR.toml`
   version  Print the CLI version and exit
   help     Print this message or the help of the given subcommand(s)
 

@@ -22,6 +22,11 @@ pub(crate) mod format;
 /// The name of the application as used on the filesystem for XDG conventions.
 const APPLICATION_NAME: &str = "slcr";
 
+/// The environment variable that overrides [FileSystem::data_dir], the
+/// way `CARGO_HOME` overrides Cargo's: for sandboxes, CI caches, and
+/// tests. A relative path is relative to the working directory.
+pub(crate) const DATA_DIR_VARIABLE: &str = "SLCR_DATA_DIR";
+
 /// An abstraction over the user's filesystem ensuring mediated
 /// access to the most commonly used files.
 #[derive(Clone)]
@@ -43,6 +48,21 @@ pub struct ReadError {
     path: PathBuf,
     #[source]
     source: std::io::Error,
+}
+
+impl ReadError {
+    pub(crate) fn new(path: PathBuf, source: std::io::Error) -> Self {
+        Self { path, source }
+    }
+
+    /// The same error, naming the file as `path`: for a file that was
+    /// read through a resolved path, the path the user knows it by.
+    pub(crate) fn relabeled(self, path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            ..self
+        }
+    }
 }
 
 /// The error returned when a file to be created already exists.
@@ -224,6 +244,17 @@ impl FileSystem {
             .map_err(fail)?;
         temporary.persist(path).map_err(|err| fail(err.error))?;
         Ok(())
+    }
+
+    /// The directory for data that persists between runs, such as
+    /// installed descriptors: `$SLCR_DATA_DIR` if it is set, and otherwise
+    /// the platform's data directory, `$XDG_DATA_HOME/slcr` on Linux. It
+    /// may not exist yet.
+    pub(crate) fn data_dir(&self) -> PathBuf {
+        match std::env::var_os(DATA_DIR_VARIABLE) {
+            Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+            _ => self.xdg_dirs.data_dir().to_path_buf(),
+        }
     }
 
     /// Returns the expected directory for this particular file type.

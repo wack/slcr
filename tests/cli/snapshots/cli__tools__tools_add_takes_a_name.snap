@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - tools/cargo-nextest.toml
+    - "--as"
+    - nextest
+  env:
+    SLCR_DATA_DIR: ".data"
+---
+success: true
+exit_code: 0
+----- stdout -----
+SLCR.toml: added tool nextest 1.0.0
+
+----- stderr -----

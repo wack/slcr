@@ -1,0 +1,17 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - tools/jev.toml
+  env:
+    SLCR_DATA_DIR: ".data"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × tools/jev.toml does not exist

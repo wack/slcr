@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - "http://example.com/cargo-nextest.toml"
+  env:
+    SLCR_DATA_DIR: ".data"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'http://example.com/cargo-nextest.toml' for '<SOURCE>': http://example.com/cargo-nextest.toml is not an HTTPS URL
+
+For more information, try '--help'.
