@@ -7,16 +7,19 @@
 //! 2. R, and the requirements nested under it that the slice includes, as
 //!    the document renders them.
 //! 3. Everything else the slice includes, under "Related requirements", in
-//!    document order: what R refines, what it depends on, their ancestors,
-//!    and the requirements refining R that are housed elsewhere. Each is
-//!    one heading level below that section, with its ancestor path as a
-//!    breadcrumb rather than nested headings, since nesting would misplace
-//!    it in the document.
+//!    document order: what R refines, the requirements refining R that are
+//!    housed elsewhere, what R depends on, and the ancestors of those
+//!    dependencies. Each is one heading level below that section, with its
+//!    ancestor path as a breadcrumb rather than nested headings, since
+//!    nesting would misplace it in the document. Its Refines line names
+//!    every requirement it refines, its containment parent included, since
+//!    no heading shows that parent.
 //! 4. The Glossary, with only the terms the slice includes.
 //!
-//! Every node keeps the number it has in the document. A cross-reference to
-//! a node the slice leaves out names it without linking to it, so that
-//! every link resolves within the slice.
+//! Every node keeps the number it has in the document. A cross-reference
+//! the renderer writes to a node the slice leaves out names it without
+//! linking to it, so that each of those links resolves within the slice.
+//! Prose is copied as written, as in the document.
 
 use super::{GENERATED_PREFIX, Number, Renderer};
 use crate::slice::{Detail, Members};
@@ -75,6 +78,10 @@ impl Renderer<'_> {
         match entry.node {
             Node::Section(section) => self.section_block(section),
             Node::Requirement(requirement, parent) => {
+                // The Refines line leaves out a containment parent only
+                // where it is plain from the headings: under "Related
+                // requirements", the parent is just a breadcrumb.
+                let parent = parent.filter(|_| entry.in_place);
                 self.requirement_block(requirement, parent, entry.detail);
             }
         }
@@ -494,6 +501,28 @@ mod tests {
              Deep refiner MUST hold.\n\
              \n\
              *Refines:* [Parent](#REQ-001)"
+        );
+    }
+
+    #[test]
+    fn a_related_requirement_names_every_requirement_it_refines() {
+        // REQ-004 refines REQ-002, its container, and REQ-003, the slice's
+        // subject. Under "Related requirements" no heading shows REQ-002,
+        // which the slice leaves out.
+        let rendered = slice_of(&canon(), 3);
+        assert!(
+            rendered.ends_with(
+                "<a id=\"REQ-004\"></a>\n\
+                 ### 1.1.1.1 Request is authenticated\n\
+                 \n\
+                 *In:* [TodoList API](#SEC-001) › [Views](#SEC-002) › \
+                 [TodoListItem endpoint](#REQ-001) › POST creates an item\n\
+                 \n\
+                 The request MUST be authenticated.\n\
+                 \n\
+                 *Refines:* POST creates an item, [GET reads an item](#REQ-003)\n"
+            ),
+            "{rendered}"
         );
     }
 

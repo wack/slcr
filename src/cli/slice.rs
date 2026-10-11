@@ -65,11 +65,7 @@ impl Slice {
             .iter()
             .any(|candidate| *candidate.id() == requirement);
         if !known {
-            return Err(UnknownRequirement {
-                requirement,
-                file: path.display().to_string(),
-            }
-            .into());
+            return Err(UnknownRequirement { requirement, path }.into());
         }
 
         let members = block_on(async {
@@ -92,11 +88,11 @@ pub struct SliceFailed {
 
 /// The error returned when the specification has no such requirement.
 #[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
-#[error("{file} has no requirement {requirement}")]
+#[error("{} has no requirement {requirement}", .path.display())]
 #[diagnostic(help("`slcr query 'MATCH (r:Requirement) RETURN r, r.title'` lists them"))]
 pub struct UnknownRequirement {
     requirement: RequirementId,
-    file: String,
+    path: PathBuf,
 }
 
 #[cfg(test)]
@@ -175,7 +171,7 @@ mod tests {
                 err.downcast_ref::<UnknownRequirement>(),
                 Some(&UnknownRequirement {
                     requirement: RequirementId::new(99),
-                    file: "todo-api.yaml".to_owned(),
+                    path: PathBuf::from("todo-api.yaml"),
                 })
             );
             Ok(())
@@ -195,7 +191,7 @@ mod tests {
             (
                 &UnknownRequirement {
                     requirement: RequirementId::new(99),
-                    file: "SPEC.slcr.yml".to_owned(),
+                    path: PathBuf::from("SPEC.slcr.yml"),
                 },
                 "  × SPEC.slcr.yml has no requirement REQ-099\n  \
                  help: `slcr query 'MATCH (r:Requirement) RETURN r, r.title'` lists them\n",

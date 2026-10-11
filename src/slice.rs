@@ -1,8 +1,9 @@
 //! The agent slice of section 9 of the SLCR design document: the smallest
 //! subgraph an agent needs to implement or verify one requirement R.
 //!
-//! [members] finds what `slice(R)` includes by querying the specification's
-//! graph ([SpecGraph]), and how much of each node it includes ([Detail]):
+//! [`members`](crate::slice::members) finds what `slice(R)` includes by
+//! querying the specification's graph ([`SpecGraph`](crate::query::SpecGraph)),
+//! and how much of each node it includes ([`Detail`](crate::slice::Detail)):
 //!
 //! 1. R itself, in full.
 //! 2. R's containment ancestors, root to parent: bodies only.
@@ -25,7 +26,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use slcr_gql::{Error, Params, Value};
+use slcr_gql::ast::Query;
+use slcr_gql::{Error, Params, Value, parse_query};
 
 use crate::query::{Cell, SpecGraph};
 use crate::spec::id::{DependencyId, RequirementId, TermId};
@@ -113,12 +115,12 @@ mod hop {
 /// it.
 pub async fn members(graph: &SpecGraph, requirement: RequirementId) -> Result<Members, Error> {
     let own = BTreeSet::from([requirement.to_string()]);
-    let descendants = reach(graph, hop::REFINERS, &own).await?;
-    let refined = step(graph, hop::REFINED, &own).await?;
+    let descendants = reach(graph, &parse_query(hop::REFINERS)?, &own).await?;
+    let refined = step(graph, &parse_query(hop::REFINED)?, &own).await?;
     let implemented: BTreeSet<String> = own.union(&descendants).cloned().collect();
-    let dependencies = reach(graph, hop::DEPENDENCIES, &implemented).await?;
+    let dependencies = reach(graph, &parse_query(hop::DEPENDENCIES)?, &implemented).await?;
     let placed: BTreeSet<String> = own.union(&dependencies).cloned().collect();
-    let ancestors = reach(graph, hop::PARENTS, &placed).await?;
+    let ancestors = reach(graph, &parse_query(hop::PARENTS)?, &placed).await?;
 
     let mut members = Members {
         requirement,
@@ -131,7 +133,7 @@ pub async fn members(graph: &SpecGraph, requirement: RequirementId) -> Result<Me
     members.include(&implemented, Detail::Full);
 
     let included = members.nodes.keys().map(ToString::to_string).collect();
-    members.terms = step(graph, hop::TERMS, &included)
+    members.terms = step(graph, &parse_query(hop::TERMS)?, &included)
         .await?
         .iter()
         .map(|id| id.parse().expect("a Term ID"))
@@ -143,7 +145,7 @@ pub async fn members(graph: &SpecGraph, requirement: RequirementId) -> Result<Me
 /// may include nodes in `start`.
 async fn reach(
     graph: &SpecGraph,
-    hop: &str,
+    hop: &Query,
     start: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>, Error> {
     let mut reached = BTreeSet::new();
@@ -159,13 +161,12 @@ async fn reach(
 /// The IDs one step of `hop` away from `frontier`.
 async fn step(
     graph: &SpecGraph,
-    hop: &str,
+    hop: &Query,
     frontier: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>, Error> {
-    let query = slcr_gql::parse_query(hop)?;
     let ids = frontier.iter().cloned().map(Value::String).collect();
     let params = Params::from([("frontier".to_owned(), Value::List(ids))]);
-    let rows = graph.query(&query, &params).await?;
+    let rows = graph.query(hop, &params).await?;
     Ok(rows
         .rows
         .into_iter()
@@ -551,7 +552,7 @@ mod tests {
             hop::PARENTS,
             hop::TERMS,
         ] {
-            slcr_gql::parse_query(text).unwrap();
+            parse_query(text).unwrap();
         }
     }
 }

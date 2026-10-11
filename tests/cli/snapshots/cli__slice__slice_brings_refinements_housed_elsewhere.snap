@@ -44,6 +44,6 @@ All of the following must hold:
 
 The request MUST be authenticated.
 
-*Refines:* [GET reads an item](#REQ-003)
+*Refines:* POST creates an item, [GET reads an item](#REQ-003)
 
 ----- stderr -----

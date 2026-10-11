@@ -35,9 +35,8 @@ fn an_unknown_subcommand_is_rejected() {
 }
 
 #[test]
-fn stubbed_subcommands_are_not_implemented() {
-    let workspace = Workspace::new();
-    assert_cmd_snapshot!("eval", workspace.slcr(&["eval"]));
+fn eval_is_not_implemented() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["eval"]));
 }
 
 #[test]

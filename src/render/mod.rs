@@ -8,8 +8,9 @@
 //! is preceded by a hidden anchor carrying its ID, which cross-references
 //! link to.
 //!
-//! The same renderer writes the slice of one requirement ([slice]), a
-//! smaller document under the same rules.
+//! The same renderer writes the slice of one requirement
+//! ([`slice`](fn@crate::render::slice)), a smaller document under the same
+//! rules.
 
 use std::collections::HashMap;
 use std::fmt::{self, Display};
