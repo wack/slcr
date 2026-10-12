@@ -151,7 +151,7 @@ fn vet_project(fs: &FileSystem, cwd: &Path) -> Result<(ProjectOutcome, Vec<Outco
         .into_iter()
         .map(|file| {
             tracing::debug!(path = %file.shown().display(), "vetting a requirements file");
-            let document = file.load(fs);
+            let document = file.load_spec(fs);
             (file, document)
         })
         .collect();

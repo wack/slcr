@@ -24,3 +24,5 @@ mod spec;
 mod terminal;
 /// External tools: the project manifest and tool descriptors.
 mod tools;
+/// Validator files, which bind requirements to the tools that check them.
+mod validators;
