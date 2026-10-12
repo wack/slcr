@@ -11,13 +11,15 @@
 //!   satisfied: a coverage gap, not a finding.
 //! - Any other requirement combines the requirements that refine it with
 //!   its `refinement`. AND leaves out MAY refiners, and is vacuously
-//!   satisfied, with a warning, when that leaves none; OR and XOR count
-//!   them. Its own validators, if any, join that result under AND.
+//!   satisfied when that leaves none; OR and XOR count them. Its own
+//!   validators, if any, join that result under AND. A vacuous AND is not
+//!   a finding here: `vet` already warns of it ([vet::Warning::VacuousAnd]).
 //! - Containment plays no part: only `refines` edges do.
 //! - An unsatisfied requirement is a violation, a warning, or informational
 //!   by its modality, unless its failure is absorbed: it refines at least
 //!   one requirement and every one of them is satisfied, so it is reported
-//!   as a warning (a MAY stays informational).
+//!   as a warning (a MAY stays informational). That is a requirement's
+//!   only finding.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -191,9 +193,6 @@ pub enum Finding {
         /// What it refines, every one satisfied.
         absorbed_by: Vec<RequirementId>,
     },
-
-    #[error("{requirement} is vacuously satisfied by its refinements")]
-    VacuousAnd { requirement: RequirementId },
 }
 
 fn list(ids: &[RequirementId]) -> String {
@@ -204,9 +203,9 @@ fn list(ids: &[RequirementId]) -> String {
 impl Finding {
     pub fn requirement(&self) -> RequirementId {
         match self {
-            Self::Unsatisfied { requirement, .. }
-            | Self::Absorbed { requirement, .. }
-            | Self::VacuousAnd { requirement } => *requirement,
+            Self::Unsatisfied { requirement, .. } | Self::Absorbed { requirement, .. } => {
+                *requirement
+            }
         }
     }
 
@@ -214,7 +213,6 @@ impl Finding {
         match self {
             Self::Unsatisfied { modality, .. } => Severity::of(*modality),
             Self::Absorbed { modality, .. } => Severity::of(*modality).min(Severity::Warning),
-            Self::VacuousAnd { .. } => Severity::Warning,
         }
     }
 }
@@ -229,14 +227,12 @@ impl Diagnostic for Finding {
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        let help = match self {
-            Self::Unsatisfied { .. } => return None,
-            Self::Absorbed { .. } => "its failure is absorbed: what it refines holds without it",
-            Self::VacuousAnd { .. } => {
-                "it combines its refinements with AND, and every requirement refining it is MAY"
-            }
-        };
-        Some(Box::new(help))
+        match self {
+            Self::Unsatisfied { .. } => None,
+            Self::Absorbed { .. } => Some(Box::new(
+                "its failure is absorbed: what it refines holds without it",
+            )),
+        }
     }
 }
 
@@ -336,15 +332,8 @@ pub fn evaluate(document: &SlcrRequirementsDocument, verdicts: &Verdicts) -> Eva
     let mut coverage_gaps = Vec::new();
     for requirement in &requirements {
         let id = *requirement.id();
-        let children = refiners_of(id);
-        if children.is_empty() && verdicts.outcomes(id).is_empty() {
+        if refiners_of(id).is_empty() && verdicts.outcomes(id).is_empty() {
             coverage_gaps.push(id);
-        }
-        let vacuous = *requirement.refinement() == Some(Refinement::And)
-            && !children.is_empty()
-            && children.iter().all(|child| is_may(child));
-        if vacuous {
-            findings.push(Finding::VacuousAnd { requirement: id });
         }
         if status(&id) == Status::Unsatisfied {
             let parents = requirement.refines();
@@ -714,30 +703,29 @@ mod tests {
     }
 
     #[test]
-    fn an_and_over_only_may_refiners_is_vacuously_satisfied_with_a_warning() {
+    fn an_and_over_only_may_refiners_is_vacuously_satisfied_without_a_finding() {
+        // `vet` warns of the vacuous AND; evaluation doesn't repeat it.
         let document = document(vec![
             req(1, "MUST", Some("AND"), &[]),
             req(2, "MAY", None, &[1]),
             req(3, "MAY", None, &[1]),
         ]);
+        let evaluation = evaluate(&document, &Verdicts::new());
+        assert_eq!(evaluation.status(rid(1)), Some(Satisfied));
+        assert!(evaluation.findings().is_empty());
+        assert!(evaluation.passes(true));
+
         let evaluation = evaluate(&document, &verdicts([(2, Fail)]));
         assert_eq!(evaluation.status(rid(1)), Some(Satisfied));
         assert_eq!(
             evaluation.findings(),
-            [
-                Finding::VacuousAnd {
-                    requirement: rid(1)
-                },
-                Finding::Absorbed {
-                    requirement: rid(2),
-                    modality: Modality::May,
-                    absorbed_by: vec![rid(1)],
-                },
-            ]
+            [Finding::Absorbed {
+                requirement: rid(2),
+                modality: Modality::May,
+                absorbed_by: vec![rid(1)],
+            }]
         );
-        assert_eq!(evaluation.findings()[0].severity(), Severity::Warning);
-        assert!(evaluation.passes(false));
-        assert!(!evaluation.passes(true));
+        assert!(evaluation.passes(true));
     }
 
     #[test]
@@ -1073,13 +1061,6 @@ mod tests {
                  is satisfied: REQ-008",
                 miette::Severity::Advice,
             ),
-            (
-                Finding::VacuousAnd {
-                    requirement: rid(1),
-                },
-                "REQ-001 is vacuously satisfied by its refinements",
-                miette::Severity::Warning,
-            ),
         ];
         for (finding, message, severity) in cases {
             let diagnostic: &dyn Diagnostic = &finding;
@@ -1115,12 +1096,6 @@ mod tests {
                     "modality": "MAY",
                     "absorbedBy": ["REQ-008"]
                 }),
-            ),
-            (
-                Finding::VacuousAnd {
-                    requirement: rid(1),
-                },
-                json!({ "code": "vacuous-and", "requirement": "REQ-001" }),
             ),
         ];
         for (finding, expected) in cases {

@@ -250,9 +250,11 @@ low-level design page. It is not wired into `check` yet.
   `refines` edges count, never containment, and each requirement is
   computed once, after its refiners, without recursion.
 - A leaf is the AND of its own outcomes; one with none is Unknown and a
-  coverage gap, not a finding. AND leaves out MAY refiners (all MAY is a
-  `VacuousAnd` warning, as `vet` also reports); OR and XOR count them. A
-  requirement's own outcomes join its refiners' result under AND.
+  coverage gap, not a finding. AND leaves out MAY refiners, and is
+  vacuously Satisfied when every refiner is MAY; `vet` reports that as a
+  `VacuousAnd` warning, and satisfaction doesn't repeat it. OR and XOR
+  count MAY refiners. A requirement's own outcomes join its refiners'
+  result under AND.
 - An unsatisfied requirement's `Finding` is as severe as its modality
   (MUST/MUST NOT a violation, SHOULD/SHOULD NOT a warning, MAY
   informational), unless it is `Absorbed`: it refines something and
