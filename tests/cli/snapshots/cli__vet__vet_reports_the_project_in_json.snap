@@ -1,0 +1,66 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "project": {
+    "manifest": "SLCR.toml",
+    "passed": false,
+    "problems": [
+      {
+        "code": "matches-validator-file",
+        "patterns": [
+          "specs/*"
+        ],
+        "path": "specs/.validators.slcr.yml",
+        "message": "`specs` pattern `specs/*` matches the validator file specs/.validators.slcr.yml",
+        "help": "`specs` names specification files only; narrow the pattern so that it skips validator files, e.g. by starting the file name with `[!.]`"
+      },
+      {
+        "code": "no-match",
+        "pattern": "docs/*.yaml",
+        "message": "`specs` pattern `docs/*.yaml` matches no file",
+        "help": "check it for typos; a pattern never matches a file that a `.gitignore` ignores"
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "specs/a.yaml",
+      "passed": true,
+      "violations": 0,
+      "warnings": 0,
+      "findings": []
+    },
+    {
+      "path": "specs/b.yaml",
+      "passed": true,
+      "violations": 0,
+      "warnings": 1,
+      "findings": [
+        {
+          "code": "modality-not-stated",
+          "requirement": "REQ-003",
+          "modality": "MUST",
+          "severity": "warning",
+          "message": "the body of REQ-003 does not contain its modality keyword, MUST"
+        }
+      ]
+    }
+  ]
+}
+
+----- stderr -----
+Error:   × vetting failed for 1 of 3 files

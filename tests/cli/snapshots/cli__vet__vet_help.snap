@@ -14,11 +14,11 @@ exit_code: 0
 ----- stdout -----
 Report the invariants requirements files break, without running anything
 
-Usage: slcr vet [OPTIONS] <FILE>...
+Usage: slcr vet [OPTIONS] [FILE]...
 
 Arguments:
-  <FILE>...
-          The requirements files to vet: `.yaml`, `.yml`, `.json`, or `.toml`
+  [FILE]...
+          The requirements files to vet: `.yaml`, `.yml`, `.json`, or `.toml`. Without any, vet the project: SLCR.toml, and every specification file its `specs` patterns match
 
 Options:
       --deny-warnings

@@ -1,0 +1,22 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+specs/a.yaml: ok
+specs/b.json: ok
+
+----- stderr -----
+  × specs/a.yaml and specs/b.json both name their specification `todo-api`
+  help: a specification's name qualifies references to its requirements, such as `todo-api/REQ-001`, so it must be unique in the project: change one `spec.name`
+
+Error:   × vetting failed for 1 of 3 files
