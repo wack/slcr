@@ -16,6 +16,8 @@ mod project;
 mod query;
 /// The canonical Markdown rendering of a specification.
 mod render;
+/// Running one validator and reading its outcome.
+mod run;
 /// What the agent slice of one requirement includes.
 mod slice;
 /// The specification graph: SLCR's requirements document.
