@@ -196,6 +196,22 @@ pub struct InstallFailed {
 }
 
 impl Installed {
+    /// Each declared tool, and what installing its descriptor did or why it
+    /// failed, in the order of their keys.
+    pub(crate) fn tools(&self) -> impl Iterator<Item = (&ToolKey, &Result<Status>)> {
+        self.tools.iter().map(|tool| (&tool.key, &tool.outcome))
+    }
+
+    /// The status lines of the tools whose descriptor was fetched, or
+    /// failed to be: every line [Installed] displays, but those of tools
+    /// already installed.
+    pub(crate) fn changes(&self) -> impl Iterator<Item = String> {
+        self.tools
+            .iter()
+            .filter(|tool| !matches!(tool.outcome, Ok(Status::AlreadyInstalled)))
+            .map(ToString::to_string)
+    }
+
     /// Why each tool that failed did, in the order of their keys.
     pub(crate) fn errors(&self) -> impl Iterator<Item = &Report> {
         self.tools
@@ -636,6 +652,16 @@ mod tests {
             errors,
             ["could not fetch the descriptor tool ast-grep pins"]
         );
+        // `check` reports only what it fetched, or failed to.
+        assert_eq!(
+            installed.changes().collect::<Vec<_>>(),
+            [
+                "ast-grep: failed".to_owned(),
+                format!("jev: installed {}", pin(&jev()).abbreviated()),
+            ]
+        );
+        let keys: Vec<&str> = installed.tools().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(keys, ["ast-grep", "cargo-nextest", "jev"]);
         assert_eq!(
             installed.verdict().unwrap_err().to_string(),
             "installing failed for 1 of 3 tools"

@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fmt::{self, Display},
     path::{Path, PathBuf},
 };
@@ -10,15 +11,17 @@ use thiserror::Error;
 use super::findings::{FileFindings, ValidatorFindings, counted, passes, tally};
 use crate::Terminal;
 use crate::fs::FileSystem;
-use crate::project::{IndexedSpec, Problem, SpecIndex, discover};
+use crate::project::{IndexedSpec, Problem, ProjectFile, SpecIndex, discover};
 use crate::spec::file::RequirementsFile;
+use crate::spec::graph::UnvettedDocument;
 use crate::spec::vet::Report;
+use crate::tools::descriptor::Descriptor;
 use crate::tools::manifest::{ManifestFile, Project};
-use crate::tools::{pinned, store::DescriptorStore};
+use crate::tools::{ToolKey, pinned, store::DescriptorStore};
 use crate::validators::vet::{Context, vet as vet_validators};
 use crate::validators::{Finding, ValidatorFile};
 
-mod json;
+pub(super) mod json;
 
 /// The arguments to `slcr vet`.
 #[derive(Args, Clone, Debug)]
@@ -80,8 +83,8 @@ impl Vet {
         let (project, outcomes) = if self.args.files.is_empty() {
             let cwd = std::env::current_dir().into_diagnostic()?;
             let store = DescriptorStore::new(&fs);
-            let (project, outcomes) = vet_project(&fs, &store, &cwd)?;
-            (Some(project), outcomes)
+            let vetted = vet_project(&fs, &store, &cwd)?;
+            (Some(vetted.project), vetted.outcomes)
         } else {
             let outcomes = self
                 .args
@@ -99,58 +102,102 @@ impl Vet {
                 self.terminal.write_stdout_line(&document)?;
             }
         }
-        verdict(project.as_ref(), &outcomes, deny_warnings)
+        Ok(verdict(project.as_ref(), &outcomes, deny_warnings)?)
     }
 
     /// Write the project's problems, then each file's findings, then each
     /// validator file's, to stderr, then the manifest's status and each
     /// file's to stdout.
     fn write_human(&self, project: Option<&ProjectOutcome>, outcomes: &[Outcome]) -> Result<()> {
-        let deny_warnings = self.args.deny_warnings;
-        match project.map(|project| &project.result) {
-            Some(Err(error)) => self.terminal.write_diagnostic(error.as_ref())?,
-            Some(Ok(problems)) => {
-                for problem in problems {
-                    self.terminal.write_diagnostic(problem)?;
-                }
-            }
-            None => {}
-        }
-        for outcome in outcomes {
-            match &outcome.result {
-                Err(error) => self.terminal.write_diagnostic(error.as_ref())?,
-                Ok(report) if !report.is_clean() => {
-                    let findings = FileFindings::new(&outcome.path, report, deny_warnings);
-                    self.terminal.write_diagnostic(&findings)?;
-                }
-                Ok(_) => {}
-            }
-        }
-        let validators = project.map_or(&[][..], |project| &project.validators);
-        for outcome in validators {
-            match &outcome.result {
-                Err(error) => self.terminal.write_diagnostic(error.as_ref())?,
-                Ok(findings) if !findings.is_empty() => {
-                    let findings = ValidatorFindings::new(&outcome.path, findings);
-                    self.terminal.write_diagnostic(&findings)?;
-                }
-                Ok(_) => {}
-            }
-        }
-        if let Some(project) = project {
-            self.terminal
-                .write_stdout_line(&project.status().to_string())?;
-        }
-        for outcome in outcomes {
-            self.terminal
-                .write_stdout_line(&outcome.status().to_string())?;
-        }
-        for outcome in validators {
-            self.terminal
-                .write_stdout_line(&outcome.status().to_string())?;
-        }
-        Ok(())
+        write_findings(&self.terminal, project, outcomes, self.args.deny_warnings)?;
+        write_statuses(&self.terminal, project, outcomes)
     }
+}
+
+/// Write the project's problems, if there is a project, then each file's
+/// findings, then each validator file's, to stderr.
+pub(super) fn write_findings(
+    terminal: &Terminal,
+    project: Option<&ProjectOutcome>,
+    outcomes: &[Outcome],
+    deny_warnings: bool,
+) -> Result<()> {
+    match project.map(|project| &project.result) {
+        Some(Err(error)) => terminal.write_diagnostic(error.as_ref())?,
+        Some(Ok(problems)) => {
+            for problem in problems {
+                terminal.write_diagnostic(problem)?;
+            }
+        }
+        None => {}
+    }
+    for outcome in outcomes {
+        match &outcome.result {
+            Err(error) => terminal.write_diagnostic(error.as_ref())?,
+            Ok(report) if !report.is_clean() => {
+                let findings = FileFindings::new(&outcome.path, report, deny_warnings);
+                terminal.write_diagnostic(&findings)?;
+            }
+            Ok(_) => {}
+        }
+    }
+    let validators = project.map_or(&[][..], |project| &project.validators);
+    for outcome in validators {
+        match &outcome.result {
+            Err(error) => terminal.write_diagnostic(error.as_ref())?,
+            Ok(findings) if !findings.is_empty() => {
+                let findings = ValidatorFindings::new(&outcome.path, findings);
+                terminal.write_diagnostic(&findings)?;
+            }
+            Ok(_) => {}
+        }
+    }
+    Ok(())
+}
+
+/// Write the manifest's status, if there is a project, then each file's,
+/// then each validator file's, to stdout.
+pub(super) fn write_statuses(
+    terminal: &Terminal,
+    project: Option<&ProjectOutcome>,
+    outcomes: &[Outcome],
+) -> Result<()> {
+    if let Some(project) = project {
+        terminal.write_stdout_line(&project.status().to_string())?;
+    }
+    for outcome in outcomes {
+        terminal.write_stdout_line(&outcome.status().to_string())?;
+    }
+    let validators = project.map_or(&[][..], |project| &project.validators);
+    for outcome in validators {
+        terminal.write_stdout_line(&outcome.status().to_string())?;
+    }
+    Ok(())
+}
+
+/// What vetting a project found, and the parts of it that loaded.
+#[derive(Debug)]
+pub(super) struct VettedProject {
+    pub(super) project: ProjectOutcome,
+    /// What vetting each specification file found, in the order of their
+    /// paths.
+    pub(super) outcomes: Vec<Outcome>,
+    pub(super) loaded: Loaded,
+}
+
+/// The parts of a project that loaded, which `slcr check` runs and
+/// evaluates once the project vets cleanly; then nothing is missing.
+#[derive(Debug, Default)]
+pub(super) struct Loaded {
+    /// The project root, as an absolute path; empty if the manifest
+    /// couldn't be loaded.
+    pub(super) root: PathBuf,
+    /// Each specification that loaded, in the order of their paths.
+    pub(super) specs: Vec<(ProjectFile, UnvettedDocument)>,
+    /// Each validator file that loaded, in the order of their paths.
+    pub(super) validators: Vec<ValidatorFile>,
+    /// The descriptor of each declared tool that the store holds.
+    pub(super) descriptors: BTreeMap<ToolKey, Descriptor>,
 }
 
 /// Vet the project that holds `cwd`, an absolute path: read its manifest,
@@ -158,11 +205,11 @@ impl Vet {
 /// discover its specification files and validator files; vet each
 /// specification, check that their names are unique, then vet each
 /// validator file against them.
-fn vet_project(
+pub(super) fn vet_project(
     fs: &FileSystem,
     store: &DescriptorStore,
     cwd: &Path,
-) -> Result<(ProjectOutcome, Vec<Outcome>)> {
+) -> Result<VettedProject> {
     let project = Project::find_from(cwd)?;
     let manifest = project.shown_manifest().to_path_buf();
     tracing::debug!(manifest = %manifest.display(), "vetting a project");
@@ -175,7 +222,11 @@ fn vet_project(
                 result,
                 validators: Vec::new(),
             };
-            return Ok((project, Vec::new()));
+            return Ok(VettedProject {
+                project,
+                outcomes: Vec::new(),
+                loaded: Loaded::default(),
+            });
         }
     };
     let discovery = discover(project.root(), cwd, file.manifest().specs());
@@ -211,36 +262,55 @@ fn vet_project(
         manifest: &file,
         schemas: &schemas,
     };
+    let mut validator_files = Vec::new();
     let validators = discovery
         .validators
         .into_iter()
         .map(|file| {
             tracing::debug!(path = %file.shown().display(), "vetting a validator file");
             let path = file.shown().to_path_buf();
-            let result = ValidatorFile::load(file).map(|file| vet_validators(&file, &cx));
+            let result = ValidatorFile::load(file).map(|file| {
+                let findings = vet_validators(&file, &cx);
+                validator_files.push(file);
+                findings
+            });
             ValidatorOutcome { path, result }
         })
         .collect();
+    // It borrows `loaded`, which is taken apart next.
+    drop(index);
 
-    let outcomes = loaded
-        .into_iter()
-        .map(|(file, document)| Outcome {
-            path: file.shown().to_path_buf(),
-            result: document.map(|document| document.report()),
-        })
-        .collect();
-    let result = Ok(problems);
-    let project = ProjectOutcome {
+    let mut specs = Vec::new();
+    let mut outcomes = Vec::new();
+    for (file, document) in loaded {
+        let path = file.shown().to_path_buf();
+        let result = document.map(|document| {
+            let report = document.report();
+            specs.push((file, document));
+            report
+        });
+        outcomes.push(Outcome { path, result });
+    }
+    let project_outcome = ProjectOutcome {
         manifest,
-        result,
+        result: Ok(problems),
         validators,
     };
-    Ok((project, outcomes))
+    Ok(VettedProject {
+        project: project_outcome,
+        outcomes,
+        loaded: Loaded {
+            root: project.root().to_path_buf(),
+            specs,
+            validators: validator_files,
+            descriptors,
+        },
+    })
 }
 
 /// What vetting the project as a whole found.
 #[derive(Debug)]
-struct ProjectOutcome {
+pub(super) struct ProjectOutcome {
     /// The manifest, relative to the working directory.
     manifest: PathBuf,
     /// Every problem with the project, or why the manifest couldn't be
@@ -253,7 +323,7 @@ struct ProjectOutcome {
 
 /// What vetting one validator file found.
 #[derive(Debug)]
-struct ValidatorOutcome {
+pub(super) struct ValidatorOutcome {
     /// The file, relative to the working directory.
     path: PathBuf,
     /// Every problem with its validators, or why it couldn't be loaded.
@@ -318,7 +388,7 @@ impl Display for ProjectStatus<'_> {
 
 /// What vetting one file found.
 #[derive(Debug)]
-struct Outcome {
+pub(super) struct Outcome {
     /// The file, as given on the command line.
     path: PathBuf,
     /// Every finding, or why the file couldn't be loaded.
@@ -336,6 +406,13 @@ impl Outcome {
 
     fn status(&self) -> Status<'_> {
         Status(self)
+    }
+
+    /// How many warnings the file has; none if it couldn't be loaded.
+    pub(super) fn warnings(&self) -> usize {
+        self.result
+            .as_ref()
+            .map_or(0, |report| report.warnings().len())
     }
 }
 
@@ -370,11 +447,11 @@ fn vet_file(fs: &FileSystem, path: &Path) -> Outcome {
 /// Succeed if the project, when there is one, and every file pass, or fail
 /// naming how many didn't. The project's manifest and its validator files
 /// count as files.
-fn verdict(
+pub(super) fn verdict(
     project: Option<&ProjectOutcome>,
     outcomes: &[Outcome],
     deny_warnings: bool,
-) -> Result<()> {
+) -> Result<(), VetFailed> {
     let project_failed = project.is_some_and(|project| !project.passes());
     let validators = project.map_or(&[][..], |project| &project.validators);
     let failed = outcomes
@@ -397,14 +474,13 @@ fn verdict(
         failed,
         total: outcomes.len() + validators.len() + usize::from(project.is_some()),
         warnings_denied,
-    }
-    .into())
+    })
 }
 
 /// The error `slcr vet` fails with when any file fails.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("vetting failed for {failed} of {total} {}", if *.total == 1 { "file" } else { "files" })]
-struct VetFailed {
+pub(super) struct VetFailed {
     failed: usize,
     total: usize,
     /// Whether a file failed only because its warnings are denied.
@@ -505,8 +581,8 @@ mod tests {
         cli.cmd().clone().unwrap().dispatch(terminal)
     }
 
-    fn vet_failed(result: Result<()>) -> VetFailed {
-        let err = result.unwrap_err();
+    fn vet_failed(result: Result<(), impl Into<ErrorReport>>) -> VetFailed {
+        let err: ErrorReport = result.map_err(Into::into).unwrap_err();
         let failed = err.downcast_ref::<VetFailed>().expect("vetting failed");
         failed.clone()
     }
@@ -778,7 +854,7 @@ mod tests {
         assert!(verdict(None, &[ok(), warned()], false).is_ok());
         assert!(verdict(None, &[], false).is_ok());
 
-        let failed = |result: Result<()>| vet_failed(result);
+        let failed = |result: Result<(), VetFailed>| result.unwrap_err();
         assert_eq!(
             failed(verdict(None, &[ok(), warned()], true)),
             VetFailed {
@@ -935,6 +1011,7 @@ mod tests {
         let store = tempfile::tempdir().unwrap();
         let store = DescriptorStore::at(store.path().join("blake3"));
         vet_project(&FileSystem::new().unwrap(), &store, cwd)
+            .map(|vetted| (vetted.project, vetted.outcomes))
     }
 
     /// The cargo-nextest example on the Schemas page.
@@ -987,8 +1064,14 @@ mod tests {
         let fs = FileSystem::new().unwrap();
         store.install(&fs, NEXTEST).unwrap();
         let cwd = dir.path().join("src");
-        let (project, _) = vet_project(&fs, &store, &cwd).unwrap();
+        let vetted = vet_project(&fs, &store, &cwd).unwrap();
+        let project = vetted.project;
         assert_eq!(problems(&project), [] as [&str; 0]);
+        // What loaded is kept for `check`: the bad file isn't.
+        assert_eq!(vetted.loaded.root, dir.path());
+        assert_eq!(vetted.loaded.specs.len(), 1);
+        assert_eq!(vetted.loaded.validators.len(), 2);
+        assert_eq!(vetted.loaded.descriptors.len(), 1);
         assert_eq!(
             validator_statuses(&project),
             [

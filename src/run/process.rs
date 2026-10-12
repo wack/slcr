@@ -101,6 +101,18 @@ impl Captured {
         self.open
     }
 
+    /// What reading `chunks` from a stream captured; `open` if it was
+    /// still open when reading stopped.
+    #[cfg(test)]
+    pub(crate) fn of(chunks: &[&[u8]], open: bool) -> Self {
+        let mut captured = Self::default();
+        for chunk in chunks {
+            captured.push(chunk);
+        }
+        captured.open = open;
+        captured
+    }
+
     fn push(&mut self, chunk: &[u8]) {
         self.total += chunk.len() as u64;
         self.tail.extend_from_slice(chunk);
@@ -526,7 +538,7 @@ mod tests {
         let invocation = project.invocation(&descriptor, &json!({})).unwrap();
         assert_send(&invocation.run());
 
-        // Several at once, as `check` will run them.
+        // Several at once, as `check` runs them.
         let outcomes = block_on(async {
             let tasks: Vec<_> = (0..4)
                 .map(|_| {

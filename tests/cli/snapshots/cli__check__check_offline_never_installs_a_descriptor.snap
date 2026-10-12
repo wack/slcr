@@ -1,0 +1,26 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--offline"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+src/.validators.slcr.toml: ok
+src/mail/.validators.slcr.toml: ok
+
+----- stderr -----
+  × the descriptor tool sh pins is not installed
+  help: `slcr tools install` fetches it from its source and installs it, once its bytes match the pin
+
+Error:   × the project doesn't vet cleanly, so no validator was run
+  ╰─▶ vetting failed for 1 of 4 files
+  help: `slcr vet` reports the same problems; fix them, then check again

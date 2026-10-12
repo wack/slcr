@@ -1,6 +1,5 @@
-pub use check::Check;
+pub use check::{Check, CheckArgs};
 pub use init::{Init, InitArgs};
-pub use not_implemented::NotImplemented;
 pub use query::{Query, QueryArgs};
 pub use render::{Render, RenderArgs};
 pub(crate) use runtime::block_on;
@@ -12,7 +11,6 @@ pub use vet::{Vet, VetArgs};
 mod check;
 mod findings;
 mod init;
-mod not_implemented;
 mod query;
 mod render;
 mod runtime;
