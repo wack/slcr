@@ -359,6 +359,38 @@ in the file's `validator` array, from 1.
   `UnknownCriterion`, and `NotDeclared`, each serializing with its own
   `code`; `Finding` adds the validator's position and its label.
 
+## Running validators (`src/run/`)
+
+Running one validator, by the rules of "SLCR — Tools: Manifest,
+Descriptors, and Invocation". It is a library only: `check` doesn't call
+it yet.
+
+- `mod.rs` — `Invocation::new(Target)` resolves everything up front (the
+  descriptor, the entry's `with`, the absolute project root and validator
+  file, the qualified requirement), or fails with a `SpawnFailure`, which
+  is an error, never a red result.
+- `template.rs` — each argv template is exactly one argument: `{with.*}`
+  takes a scalar (strings verbatim, numbers and booleans as JSON spells
+  them); a missing or non-scalar field is a `SpawnFailure`. No shell, ever.
+- `cwd.rs` — `project`, `validator-dir`, or `nearest`: the validator file's
+  directory or its closest ancestor, no higher than the project root, with
+  an entry of that name.
+- `program.rs` — slcr finds the program itself, never through `Command`'s
+  platform-specific search: an executable regular file (following
+  symlinks) in an absolute entry of the PATH the child will see, so the
+  descriptor's `env.PATH` counts. Empty and relative entries and the
+  current directory are never searched.
+- `process.rs` — `Invocation::run` is async (tokio `process` and `time`)
+  and `Send`, so `check` can run many as tasks. Stdin is null; stdout and
+  stderr are read concurrently, keeping the last 64 KiB of each
+  (`Captured`). An exit code in `results.pass` is green; anything else,
+  a signal, or a timeout is red. On Unix the child leads its own process
+  group, which a timeout, or dropping the run before the child is
+  reaped, kills through `rustix` (std can't signal a group, and
+  `unsafe_code` is forbidden). That group is outside the terminal's
+  foreground group, so the caller must handle Ctrl-C by dropping its runs.
+  Output still open 2 s after the child exits is cut off, not waited for.
+
 ## Queries (`src/query/`)
 
 `slcr-gql` (a git dependency on `wack/gql-rust`, pinned by `rev`) parses and
