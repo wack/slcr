@@ -24,6 +24,8 @@ use crate::tools::descriptor::{Descriptor, EnvName, ProgramName};
 
 /// Resolving `invoke.cwd` to a directory.
 mod cwd;
+/// Running an [Invocation] and reading its outcome: a [process::Run].
+pub(crate) mod process;
 /// Finding a bare program name on `PATH`.
 mod program;
 /// Substituting placeholders into argument templates.
