@@ -1,0 +1,12 @@
+---
+source: tests/cli/tools.rs
+expression: "workspace.read(\"SLCR.toml\")"
+---
+# The project manifest.
+formatVersion = "1"
+specs = ["SPEC.slcr.yml"]
+
+[tools.cargo-nextest]
+version = "1.1.0"
+source = { path = "tools/cargo-nextest.toml" }
+pin = "blake3:c7cef33c9b2633ef1209376dbf4aef7936542839f1e5a496acc36f45a90cd82b"

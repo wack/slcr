@@ -1,0 +1,25 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - update
+    - cargo-nextest
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not parse tools/cargo-nextest.toml as TOML
+    ╭─[tools/cargo-nextest.toml:12:1]
+ 11 │ [invoke]
+ 12 │ shell = true
+    · ──┬──
+    ·   ╰── unknown field `shell`, expected one of `argv`, `cwd`, `env`, `timeout`
+ 13 │ argv = ["cargo", "nextest", "run", "--no-fail-fast", "--no-tests=fail",
+    ╰────

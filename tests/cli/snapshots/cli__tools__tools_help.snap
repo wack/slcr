@@ -17,8 +17,10 @@ Declare the external tools validators run, in the project manifest `SLCR.toml`
 Usage: slcr tools [OPTIONS] <COMMAND>
 
 Commands:
-  add   Declare a tool in SLCR.toml: fetch its descriptor, check it, pin it, and install it
-  help  Print this message or the help of the given subcommand(s)
+  add     Declare a tool in SLCR.toml: fetch its descriptor, check it, pin it, and install it
+  update  Re-fetch a declared tool's descriptor from its source, check it, re-pin it, and install it
+  remove  Remove a tool from SLCR.toml
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
       --enable-colors <ENABLE_COLORS>

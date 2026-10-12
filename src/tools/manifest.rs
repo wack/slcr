@@ -8,7 +8,7 @@ use derive_getters::Getters;
 use miette::{Diagnostic, Result};
 use serde::{Deserialize, Deserializer, de::Error as _};
 use thiserror::Error;
-use toml_edit::{DocumentMut, InlineTable, Item, Table, Value};
+use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
 use super::source::{Source, is_project_relative};
 use super::{DescriptorVersion, ToolKey, pin::Pin};
@@ -154,6 +154,19 @@ impl ToolEntry {
     }
 }
 
+/// Replace the value of `field`, a field of `table` that the manifest
+/// schema requires, with `value`, keeping the key and the whitespace and
+/// comments around the value.
+fn replace_value(table: &mut dyn TableLike, field: &str, value: String) {
+    let old = table
+        .get_mut(field)
+        .and_then(Item::as_value_mut)
+        .expect("a required field of a manifest that deserialized has a value");
+    let decor = old.decor().clone();
+    *old = Value::from(value);
+    *old.decor_mut() = decor;
+}
+
 /// An array with at least one element, and no element repeated.
 fn non_empty_set<'de, D>(deserializer: D) -> Result<Vec<ProjectGlob>, D::Error>
 where
@@ -223,8 +236,20 @@ impl Display for ProjectGlob {
 /// formatting, the way `cargo add` edits `Cargo.toml`.
 pub(crate) struct ManifestFile {
     path: PathBuf,
+    /// The manifest's path relative to the working directory.
+    shown: PathBuf,
     manifest: Manifest,
     document: DocumentMut,
+}
+
+/// The error returned when the manifest declares no tool under a name.
+#[derive(Debug, Error, Diagnostic)]
+#[error("{} declares no tool named {key}", .manifest.display())]
+#[diagnostic(help("{help}"))]
+pub struct NotDeclared {
+    manifest: PathBuf,
+    key: ToolKey,
+    help: String,
 }
 
 impl ManifestFile {
@@ -241,6 +266,7 @@ impl ManifestFile {
             .expect("a manifest that deserialized is a TOML document");
         Ok(Self {
             path,
+            shown: shown.to_path_buf(),
             manifest,
             document,
         })
@@ -248,6 +274,23 @@ impl ManifestFile {
 
     pub(crate) fn manifest(&self) -> &Manifest {
         &self.manifest
+    }
+
+    /// The entry declared under `key`.
+    pub(crate) fn tool(&self, key: &ToolKey) -> Result<&ToolEntry, NotDeclared> {
+        self.manifest.tools.get(key).ok_or_else(|| {
+            let declared: Vec<_> = self.manifest.tools.keys().map(ToolKey::as_str).collect();
+            let help = if declared.is_empty() {
+                "it declares no tools; declare one with `slcr tools add <SOURCE>`".to_owned()
+            } else {
+                format!("the tools it declares are: {}", declared.join(", "))
+            };
+            NotDeclared {
+                manifest: self.shown.clone(),
+                key: key.clone(),
+                help,
+            }
+        })
     }
 
     /// Declare `entry` under `key`, replacing any entry already there.
@@ -281,6 +324,57 @@ impl ManifestFile {
             _ => unreachable!("a manifest that deserialized has a `tools` table"),
         }
         self.manifest.tools.insert(key.clone(), entry);
+    }
+
+    /// Re-pin the tool declared under `key` to the descriptor with
+    /// `version` and `pin`, keeping its source. Its entry is edited in
+    /// place, so its position, layout, and comments survive.
+    ///
+    /// # Panics
+    ///
+    /// If the manifest declares no tool under `key`.
+    pub(crate) fn repin_tool(&mut self, key: &ToolKey, version: DescriptorVersion, pin: Pin) {
+        let table = self
+            .tools_table()
+            .and_then(|tools| tools.get_mut(key.as_str()))
+            .and_then(Item::as_table_like_mut)
+            .expect("a declared tool has an entry in the document");
+        replace_value(table, "version", version.to_string());
+        replace_value(table, "pin", pin.to_string());
+        let entry = self
+            .manifest
+            .tools
+            .get_mut(key)
+            .expect("a declared tool has an entry in the manifest");
+        entry.version = version;
+        entry.pin = pin;
+    }
+
+    /// Remove the tool declared under `key`, and return its entry. The
+    /// `tools` table goes too when it is left empty, as the schema
+    /// requires.
+    pub(crate) fn remove_tool(&mut self, key: &ToolKey) -> Result<ToolEntry, NotDeclared> {
+        self.tool(key)?;
+        let tools = self
+            .tools_table()
+            .expect("a manifest that declares a tool has a `tools` table");
+        tools.remove(key.as_str());
+        if tools.is_empty() {
+            self.document.remove("tools");
+        }
+        Ok(self
+            .manifest
+            .tools
+            .remove(key)
+            .expect("a declared tool has an entry in the manifest"))
+    }
+
+    /// The document's `tools` table, whether it is written as `[tools.*]`
+    /// headers, a `[tools]` table, or an inline table.
+    fn tools_table(&mut self) -> Option<&mut dyn TableLike> {
+        self.document
+            .get_mut("tools")
+            .and_then(Item::as_table_like_mut)
     }
 
     /// Write the manifest back, atomically.
@@ -321,6 +415,147 @@ pin = "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b"
 
     fn key(key: &str) -> ToolKey {
         ToolKey::try_from(key.to_owned()).unwrap()
+    }
+
+    fn version(version: &str) -> DescriptorVersion {
+        DescriptorVersion::try_from(version.to_owned()).unwrap()
+    }
+
+    /// A manifest that declares no tools.
+    const MINIMAL: &str = "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n";
+
+    /// `source`, loaded as the manifest of a project in a temporary
+    /// directory.
+    fn load(source: &str) -> (tempfile::TempDir, ManifestFile) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(MANIFEST), source).unwrap();
+        let file = ManifestFile::load(&Project::find_from(dir.path()).unwrap()).unwrap();
+        (dir, file)
+    }
+
+    /// Save `file`, and return what it wrote, after checking that it reads
+    /// back as the manifest `file` holds in memory.
+    fn saved(dir: &tempfile::TempDir, file: &ManifestFile) -> String {
+        file.save(&FileSystem::new().unwrap()).unwrap();
+        let written = std::fs::read_to_string(dir.path().join(MANIFEST)).unwrap();
+        assert_eq!(parse(&written).unwrap(), *file.manifest(), "{written}");
+        written
+    }
+
+    /// The tool `name`, pinned to the hash of its name, written with
+    /// dotted keys.
+    fn dotted(name: &str) -> String {
+        let pin = Pin::of(name.as_bytes());
+        format!(
+            "tools.{name}.version = \"1.0.0\"\ntools.{name}.source.path = \"{name}.toml\"\n\
+             tools.{name}.pin = \"{pin}\"\n"
+        )
+    }
+
+    /// The tool `name`, pinned to the hash of its name, with its source
+    /// in a table of its own, under its own header.
+    fn sourced(name: &str) -> String {
+        let pin = Pin::of(name.as_bytes());
+        format!(
+            "\n[tools.{name}]\nversion = \"1.0.0\"\npin = \"{pin}\"\n\n\
+             [tools.{name}.source]\npath = \"{name}.toml\"\n"
+        )
+    }
+
+    #[test]
+    fn an_undeclared_tool_is_an_error_that_names_the_declared_ones() {
+        let (_dir, file) = load(EXAMPLE);
+        let err = file.tool(&key("jev")).unwrap_err();
+        assert_eq!(err.to_string(), "SLCR.toml declares no tool named jev");
+        assert_eq!(
+            err.help().unwrap().to_string(),
+            "the tools it declares are: ast-grep, cargo-nextest"
+        );
+
+        let (_dir, file) = load(MINIMAL);
+        let err = file.tool(&key("jev")).unwrap_err();
+        assert_eq!(
+            err.help().unwrap().to_string(),
+            "it declares no tools; declare one with `slcr tools add <SOURCE>`"
+        );
+    }
+
+    #[test]
+    fn repinning_a_tool_changes_only_its_version_and_pin() {
+        let (dir, mut file) = load(EXAMPLE);
+        let pin = Pin::of(b"ast-grep");
+        file.repin_tool(&key("ast-grep"), version("0.4.0"), pin);
+
+        let entry = file.tool(&key("ast-grep")).unwrap();
+        assert_eq!(entry.version(), &version("0.4.0"));
+        assert_eq!(entry.pin(), &pin);
+        assert_eq!(
+            saved(&dir, &file),
+            EXAMPLE.replace("\"0.3.1\"", "\"0.4.0\"").replace(
+                "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b",
+                &pin.to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn removing_a_tool_removes_only_its_entry() {
+        let (dir, mut file) = load(EXAMPLE);
+        let removed = file.remove_tool(&key("cargo-nextest")).unwrap();
+        assert_eq!(removed.version(), &version("1.0.0"));
+        let keys: Vec<_> = file
+            .manifest()
+            .tools()
+            .keys()
+            .map(ToolKey::as_str)
+            .collect();
+        assert_eq!(keys, ["ast-grep"]);
+
+        let nextest = EXAMPLE.find("[tools.cargo-nextest]").unwrap()
+            ..EXAMPLE.find("[tools.ast-grep]").unwrap();
+        let mut expected = EXAMPLE.to_owned();
+        expected.replace_range(nextest, "");
+        assert_eq!(saved(&dir, &file), expected);
+    }
+
+    #[test]
+    fn removing_an_undeclared_tool_changes_nothing() {
+        let (dir, mut file) = load(EXAMPLE);
+        let err = file.remove_tool(&key("jev")).unwrap_err();
+        assert_eq!(err.to_string(), "SLCR.toml declares no tool named jev");
+        assert_eq!(file.manifest().tools().len(), 2);
+        assert_eq!(saved(&dir, &file), EXAMPLE);
+    }
+
+    #[test]
+    fn tools_written_with_dotted_keys_are_edited_in_place() {
+        let (jev, curl) = (dotted("jev"), dotted("curl"));
+        let (dir, mut file) = load(&format!("{MINIMAL}{jev}{curl}"));
+        file.repin_tool(&key("curl"), version("2.0.0"), Pin::of(b"new"));
+        file.remove_tool(&key("jev")).unwrap();
+        let repinned = curl
+            .replace("\"1.0.0\"", "\"2.0.0\"")
+            .replace(&Pin::of(b"curl").to_string(), &Pin::of(b"new").to_string());
+        assert_eq!(saved(&dir, &file), format!("{MINIMAL}{repinned}"));
+
+        file.remove_tool(&key("curl")).unwrap();
+        assert_eq!(saved(&dir, &file), MINIMAL);
+    }
+
+    #[test]
+    fn a_tool_with_a_source_table_is_edited_in_place() {
+        let (jev, curl) = (sourced("jev"), sourced("curl"));
+        let (dir, mut file) = load(&format!("{MINIMAL}{jev}{curl}"));
+        file.repin_tool(&key("curl"), version("2.0.0"), Pin::of(b"new"));
+        // The source's own header goes with its tool.
+        file.remove_tool(&key("jev")).unwrap();
+        let repinned = curl
+            .replace("\"1.0.0\"", "\"2.0.0\"")
+            .replace(&Pin::of(b"curl").to_string(), &Pin::of(b"new").to_string());
+        assert_eq!(saved(&dir, &file), format!("{MINIMAL}{repinned}"));
+
+        file.remove_tool(&key("curl")).unwrap();
+        assert_eq!(saved(&dir, &file), MINIMAL);
     }
 
     #[test]
