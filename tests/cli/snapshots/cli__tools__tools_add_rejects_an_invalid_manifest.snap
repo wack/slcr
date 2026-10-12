@@ -1,0 +1,23 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - tools/cargo-nextest.toml
+  env:
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not parse SLCR.toml as TOML
+   ╭─[SLCR.toml:3:9]
+ 2 │ formatVersion = "1"
+ 3 │ specs = ["../SPEC.slcr.yml"]
+   ·         ──────────┬─────────
+   ·                   ╰── "../SPEC.slcr.yml" is not a glob relative to the project root, which uses forward slashes, with no leading `/` and no `..` segment
+   ╰────

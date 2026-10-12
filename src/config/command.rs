@@ -3,7 +3,7 @@ use miette::Result;
 
 use crate::cli::{
     Check, CheckArgs, Eval, Init, InitArgs, Query, QueryArgs, Render, RenderArgs, Slice, SliceArgs,
-    Version,
+    Tools, ToolsArgs, Version,
 };
 use crate::terminal::Terminal;
 
@@ -23,6 +23,8 @@ pub enum SlcrCommand {
     Eval,
     /// Report the invariants requirements files break
     Check(CheckArgs),
+    /// Declare the external tools validators run, in the project manifest `SLCR.toml`
+    Tools(ToolsArgs),
     /// Print the CLI version and exit
     Version,
 }
@@ -37,6 +39,7 @@ impl SlcrCommand {
             Self::Slice(args) => Slice::new(console, args).dispatch(),
             Self::Eval => Eval::new(console).dispatch(),
             Self::Check(args) => Check::new(console, args).dispatch(),
+            Self::Tools(args) => Tools::new(console, args).dispatch(),
             Self::Version => Version::new(console).dispatch(),
         }
     }

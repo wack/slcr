@@ -45,6 +45,21 @@ pub struct ReadError {
     source: std::io::Error,
 }
 
+impl ReadError {
+    pub(crate) fn new(path: PathBuf, source: std::io::Error) -> Self {
+        Self { path, source }
+    }
+
+    /// The same error, naming the file as `path`: for a file that was
+    /// read through a resolved path, the path the user knows it by.
+    pub(crate) fn relabeled(self, path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            ..self
+        }
+    }
+}
+
 /// The error returned when a file to be created already exists.
 #[derive(Debug, Error, Diagnostic)]
 #[error("{} already exists", .path.display())]
@@ -226,12 +241,22 @@ impl FileSystem {
         Ok(())
     }
 
+    /// The directory for data that persists between runs, such as
+    /// installed descriptors: the platform's data directory, as the
+    /// `directories` crate determines it. On Linux that is
+    /// `$XDG_DATA_HOME/slcr`, or `~/.local/share/slcr` when `XDG_DATA_HOME`
+    /// is unset; on macOS, `~/Library/Application Support/slcr`. It may not
+    /// exist yet.
+    pub(crate) fn data_dir(&self) -> PathBuf {
+        self.xdg_dirs.data_dir().to_path_buf()
+    }
+
     /// Returns the expected directory for this particular file type.
     fn dir(&self, typ: DirectoryType) -> Result<PathBuf> {
         match typ {
             DirectoryType::Cache => Ok(self.xdg_dirs.cache_dir().to_path_buf()),
             DirectoryType::Pwd => std::env::current_dir().into_diagnostic(),
-            DirectoryType::Data => Ok(self.xdg_dirs.data_dir().to_path_buf()),
+            DirectoryType::Data => Ok(self.data_dir()),
         }
     }
 

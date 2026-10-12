@@ -3,8 +3,6 @@
 //! What a slice includes and how it renders are the library's to test;
 //! these tests pin what the command reports and writes.
 
-use insta_cmd::assert_cmd_snapshot;
-
 use super::{
     TODO_API_JSON, TODO_API_MD, TODO_API_TOML, TODO_API_YAML, Workspace, with_violation,
     with_warning,

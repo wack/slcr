@@ -6,6 +6,7 @@ pub use query::{Query, QueryArgs};
 pub use render::{Render, RenderArgs};
 pub(crate) use runtime::block_on;
 pub use slice::{Slice, SliceArgs};
+pub use tools::{Tools, ToolsArgs};
 pub use version::Version;
 
 mod check;
@@ -17,4 +18,5 @@ mod query;
 mod render;
 mod runtime;
 mod slice;
+mod tools;
 mod version;

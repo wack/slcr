@@ -2,8 +2,6 @@
 //! `--log-level` and `--enable-colors` flags. These flags act the same
 //! whichever subcommand they're given to, so each is covered once here.
 
-use insta_cmd::assert_cmd_snapshot;
-
 use super::{TODO_API_YAML, Workspace, with_violation};
 
 /// Run `body` with log lines' timestamps, which change every run, redacted.

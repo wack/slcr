@@ -92,6 +92,14 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   `check` reports them; a file that breaks an invariant fails with
   `SliceFailed`, and an ID the file lacks with `UnknownRequirement`. A
   malformed ID is a clap usage error.
+- `tools add SOURCE [--as NAME]` declares a tool in the project manifest,
+  `SLCR.toml` (`src/tools/`): it finds the project root by walking up to
+  the nearest `SLCR.toml`, fetches the descriptor from an `https://` URL or
+  a path inside the project, validates it, pins its BLAKE3 hash, installs
+  it in the descriptor store, and only then writes `[tools.<NAME>]`
+  (`toml_edit`, so the rest of the file is untouched). The name defaults to
+  the descriptor's `name`; a different tool already declared under it is an
+  error, and re-adding an identical entry changes nothing.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
   `dispatch()` (see `src/cli/runtime.rs`), as `query` and `slice` do.
 - All user-facing output goes through `Terminal` (`src/terminal/`), which owns
@@ -174,6 +182,43 @@ refines, `Dependency` for the `dependsOn` closure of R and its refinement
 descendants, `Full` for R and those descendants); a node included for several
 reasons gets the greatest.
 
+## Tools (`src/tools/`)
+
+The project manifest and tool descriptors, from the manifest and descriptor
+JSON Schemas on the Notion "Schemas" page and the rules on "SLCR — Tools:
+Manifest, Descriptors, and Invocation" (which win over the older
+low-level design page). The MVP has exit-code results only, no lockfile,
+and no caching.
+
+- `add.rs` — `add`, the whole of `slcr tools add`; `src/cli/tools.rs` only
+  builds its `Environment` (filesystem, `DescriptorStore`, `Fetcher`, working
+  directory) and prints the result. Test new behavior here, with an
+  `Environment` of your own, and keep CLI snapshots for what a user sees.
+- `manifest.rs` — `Project` (root discovery; a case-only near miss such as
+  `slcr.toml` is an error, so macOS and Linux CI agree), `Manifest` (typed,
+  `deny_unknown_fields`), and `ManifestFile`, which edits the TOML document
+  in place.
+- `descriptor.rs` — `Descriptor::parse` checks the schema's grammar through
+  serde, then the `x-checkInvariants` that concern the descriptor alone:
+  `validator.schema` compiles as a self-contained draft 2020-12 schema of
+  `type = "object"`, and every `{with.<field>}` names a required scalar
+  property. Argument templates are parsed into `Segment`s up front.
+- `pin.rs` — `blake3:` plus 64 lowercase hex; nothing else parses.
+- `source.rs` — `{ url }` or `{ path }` (project-relative, and still inside
+  the project after following symlinks). `Fetcher` fetches URLs with async
+  `reqwest`: HTTPS only, even across redirects, bodies capped at 1 MiB. It
+  builds its client on first use, so path sources never load the platform's
+  certificate authorities.
+- `https_server.rs` (tests only) — a local HTTPS server with a throwaway
+  certificate authority, and a production `Fetcher` that trusts only it, so
+  fetching is tested for real: redirects, statuses, the size cap.
+- `store.rs` — the content-addressed store at
+  `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
+  text and returns the pin it filed it under. The data directory is the
+  `directories` crate's `ProjectDirs::data_dir()`: `$XDG_DATA_HOME/slcr` on
+  Linux (`~/.local/share/slcr` if unset), `~/Library/Application
+  Support/slcr` on macOS.
+
 ## Queries (`src/query/`)
 
 `slcr-gql` (a git dependency on `wack/gql-rust`, pinned by `rev`) parses and
@@ -218,7 +263,7 @@ Two layers, both run by `cargo make test`:
 ## CLI snapshot tests (`tests/cli/`)
 
 `tests/cli/main.rs` is the harness; each subcommand has its own module
-(`init.rs`, `render.rs`, `check.rs`, `query.rs`, `slice.rs`, `version.rs`), and
+(`init.rs`, `render.rs`, `check.rs`, `query.rs`, `slice.rs`, `tools.rs`, `version.rs`), and
 `global.rs` covers top-level behavior. Snapshots are in `tests/cli/snapshots/`, named
 `cli__<module>__<name>.snap`, and are committed.
 
@@ -227,7 +272,13 @@ Two layers, both run by `cargo make test`:
   a subdirectory). Pass paths relative to the workspace so output is the same on
   every run. `slcr()` removes `LOG_LEVEL`, `CLICOLOR`, `CLICOLOR_FORCE`, and
   `NO_COLOR` so the developer's or CI's environment can't leak in; add to
-  `AMBIENT` in `main.rs` if a new variable changes output. Don't `env_clear()`:
+  `AMBIENT` in `main.rs` if a new variable changes output. It also points
+  `XDG_DATA_HOME` (read on Linux) and `HOME` (read on macOS) into the
+  workspace, so `slcr`'s data directory, and with it the descriptor store,
+  is the workspace's `DATA_DIR`, never the real one. insta-cmd records every
+  variable a command sets in the snapshot's header, so `main.rs` wraps
+  `assert_cmd_snapshot!` to redact those two (headers only, never output);
+  use the wrapper, not `insta_cmd`'s. Don't `env_clear()`:
   coverage collection relies on inherited variables.
 - **What to snapshot.** `assert_cmd_snapshot!(command)` records the exit code,
   stdout, and stderr. Assert side effects too: `workspace.files()` for what was
