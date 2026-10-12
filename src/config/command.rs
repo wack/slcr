@@ -23,7 +23,7 @@ pub enum SlcrCommand {
     Check,
     /// Report the invariants requirements and validator files break, without running anything
     Vet(VetArgs),
-    /// Declare the external tools validators run, in the project manifest `SLCR.toml`
+    /// Declare and inspect the external tools validators run, in the project manifest `SLCR.toml`
     Tools(ToolsArgs),
     /// Print the CLI version and exit
     Version,

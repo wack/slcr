@@ -1,0 +1,17 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - list
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+SLCR.toml declares no tools; declare one with `slcr tools add <SOURCE>`
+
+----- stderr -----

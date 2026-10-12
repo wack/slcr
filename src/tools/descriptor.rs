@@ -8,8 +8,9 @@ use std::{
 use derive_getters::Getters;
 use miette::Diagnostic;
 use serde::{
-    Deserialize, Deserializer,
+    Deserialize, Deserializer, Serialize, Serializer,
     de::{self, Error as _, MapAccess, Visitor},
+    ser::SerializeMap,
 };
 use serde_json::Value;
 use thiserror::Error;
@@ -59,8 +60,8 @@ struct ValidatorSection {
 }
 
 /// How SLCR runs one validator: directly, never through a shell, with
-/// stdin closed.
-#[derive(Clone, Debug, PartialEq, Eq, Getters, Deserialize)]
+/// stdin closed. It serializes as the descriptor writes it.
+#[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Invoke {
     argv: Argv,
@@ -76,7 +77,7 @@ pub(crate) struct Invoke {
 }
 
 /// How a run's outcome becomes green or red.
-#[derive(Clone, Debug, PartialEq, Eq, Getters, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Results {
     /// The exit codes that mean green. Any other is red.
@@ -136,6 +137,16 @@ where
 pub(crate) struct Argv {
     program: ProgramName,
     args: Vec<Template>,
+}
+
+/// The argument vector serializes as it is written: the program, then
+/// each template.
+impl Serialize for Argv {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let program = std::iter::once(self.program.as_str().to_owned());
+        let args = self.args.iter().map(ToString::to_string);
+        serializer.collect_seq(program.chain(args))
+    }
 }
 
 impl TryFrom<Vec<String>> for Argv {
@@ -271,6 +282,23 @@ impl Template {
     }
 }
 
+/// A template displays as it is written, with literal braces escaped, so
+/// that it parses back to itself.
+impl Display for Template {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for segment in &self.0 {
+            match segment {
+                Segment::Literal(text) => {
+                    f.write_str(&text.replace('{', "{{").replace('}', "}}"))?;
+                }
+                Segment::With(field) => write!(f, "{{with.{field}}}")?,
+                Segment::Builtin(builtin) => write!(f, "{{{builtin}}}")?,
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Segment {
     /// The placeholder whose name is `name`, the text between its braces.
     fn placeholder(name: &str) -> Result<Self, String> {
@@ -308,6 +336,32 @@ pub(crate) enum Cwd {
     /// file's directory, no higher than the project root, that holds the
     /// named file.
     Nearest(FileName),
+}
+
+/// A working directory serializes as it is written: `"project"`,
+/// `"validator-dir"`, or `{ "nearest": "<file>" }`.
+impl Serialize for Cwd {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Project => serializer.serialize_str("project"),
+            Self::ValidatorDir => serializer.serialize_str("validator-dir"),
+            Self::Nearest(file) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("nearest", file.as_str())?;
+                map.end()
+            }
+        }
+    }
+}
+
+impl Display for Cwd {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Project => f.write_str("project"),
+            Self::ValidatorDir => f.write_str("validator-dir"),
+            Self::Nearest(file) => write!(f, "nearest {}", file.as_str()),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Cwd {
@@ -378,7 +432,7 @@ impl FileName {
 }
 
 /// The name of an environment variable: `^[A-Za-z_][A-Za-z0-9_]*$`.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
 pub(crate) struct EnvName(String);
 
@@ -680,6 +734,64 @@ mod tests {
         ] {
             assert!(Template::parse(invalid).is_err(), "{invalid}");
         }
+    }
+
+    #[test]
+    fn templates_display_as_they_parse() {
+        for template in [
+            "",
+            "plain",
+            "test(={with.test})",
+            "{{{slcr.requirement}}}-{slcr.project_root}{slcr.validator_dir}",
+            "{{}}{{with.x}}",
+        ] {
+            let parsed = Template::parse(template).unwrap();
+            assert_eq!(parsed.to_string(), template);
+            assert_eq!(Template::parse(&parsed.to_string()).unwrap(), parsed);
+        }
+    }
+
+    #[test]
+    fn invoke_and_results_serialize_as_they_are_written() {
+        let source = NEXTEST.replace(
+            "cwd = { nearest = \"Cargo.toml\" }",
+            "cwd = { nearest = \"Cargo.toml\" }\nenv = { RUST_LOG = \"warn\" }\ntimeout = 600",
+        );
+        let descriptor = parse(&source).unwrap();
+        assert_eq!(
+            serde_json::to_value(descriptor.invoke()).unwrap(),
+            serde_json::json!({
+                "argv": ["cargo", "nextest", "run", "--no-fail-fast", "--no-tests=fail", "-E",
+                         "test(={with.test})"],
+                "cwd": { "nearest": "Cargo.toml" },
+                "env": { "RUST_LOG": "warn" },
+                "timeout": 600
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(descriptor.results()).unwrap(),
+            serde_json::json!({ "pass": [0] })
+        );
+        for (cwd, json, shown) in [
+            ("\"project\"", serde_json::json!("project"), "project"),
+            (
+                "\"validator-dir\"",
+                serde_json::json!("validator-dir"),
+                "validator-dir",
+            ),
+        ] {
+            let source = NEXTEST.replace("{ nearest = \"Cargo.toml\" }", cwd);
+            let descriptor = parse(&source).unwrap();
+            assert_eq!(
+                serde_json::to_value(descriptor.invoke().cwd()).unwrap(),
+                json
+            );
+            assert_eq!(descriptor.invoke().cwd().to_string(), shown);
+        }
+        assert_eq!(
+            parse(NEXTEST).unwrap().invoke().cwd().to_string(),
+            "nearest Cargo.toml"
+        );
     }
 
     #[test]

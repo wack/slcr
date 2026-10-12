@@ -137,6 +137,12 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 - `tools remove NAME` deletes the entry, and the `tools` table with it if
   it was the last. The descriptor stays in the store, which other projects
   may pin it from.
+- `tools list` writes every declared tool (key, version, source, pin, and
+  whether the store holds its descriptor) as a table, or with
+  `--format json`. `tools show NAME` writes the descriptor a declared tool
+  pins: its `invoke`, `results.pass`, and validator schema, which is what
+  a validator's `with` must satisfy. Both read the store only; `show`
+  fails with the `tools::pinned` problem `vet` would report.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
   `dispatch()` (see `src/cli/runtime.rs`), as `query` and `slice` do.
 - All user-facing output goes through `Terminal` (`src/terminal/`), which owns
@@ -227,8 +233,9 @@ Manifest, Descriptors, and Invocation" (which win over the older
 low-level design page). The MVP has exit-code results only, no lockfile,
 and no caching.
 
-- `add.rs`, `update.rs`, `remove.rs` — the whole of `slcr tools add`,
-  `update`, and `remove`; `src/cli/tools.rs` only builds their
+- `add.rs`, `update.rs`, `remove.rs`, `list.rs`, `show.rs` — the whole of
+  `slcr tools add`, `update`, `remove`, `list`, and `show`;
+  `src/cli/tools.rs` only builds their
   `Environment` (`mod.rs`: filesystem, `DescriptorStore`, `Fetcher`, working
   directory) and prints the result. Test new behavior there, with the
   shared test `Fixture` (`fixture.rs`), and keep CLI snapshots for what a

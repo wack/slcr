@@ -1,5 +1,6 @@
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use miette::{IntoDiagnostic, Result};
+use serde::Serialize;
 
 use super::block_on;
 use crate::Terminal;
@@ -7,7 +8,9 @@ use crate::fs::FileSystem;
 use crate::tools::{
     Environment, InvalidToolKey, ToolKey,
     add::add,
+    list::list,
     remove::remove,
+    show::show,
     source::{Fetcher, SourceArg},
     store::DescriptorStore,
     update::update,
@@ -20,8 +23,8 @@ pub struct ToolsArgs {
     command: ToolsCommand,
 }
 
-/// The subcommands of `slcr tools`, which edit the `[tools]` table of the
-/// project manifest, `SLCR.toml`.
+/// The subcommands of `slcr tools`, which edit and read the `[tools]`
+/// table of the project manifest, `SLCR.toml`.
 #[derive(Subcommand, Clone, Debug)]
 pub enum ToolsCommand {
     /// Declare a tool in SLCR.toml: fetch its descriptor, check it, pin it,
@@ -32,6 +35,12 @@ pub enum ToolsCommand {
     Update(KeyArgs),
     /// Remove a tool from SLCR.toml
     Remove(KeyArgs),
+    /// List the tools SLCR.toml declares, and whether each one's descriptor
+    /// is installed
+    List(ListArgs),
+    /// Print a declared tool's installed descriptor: how it runs, and the
+    /// schema each validator's `with` must satisfy
+    Show(ShowArgs),
 }
 
 /// The arguments to `slcr tools add`.
@@ -56,11 +65,53 @@ pub struct KeyArgs {
     key: ToolKey,
 }
 
+/// The arguments to `slcr tools list`.
+#[derive(Args, Clone, Debug)]
+pub struct ListArgs {
+    /// How to write the tools.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
+    format: OutputFormat,
+}
+
+/// The arguments to `slcr tools show`.
+#[derive(Args, Clone, Debug)]
+pub struct ShowArgs {
+    /// The name the tool is declared under in SLCR.toml.
+    #[arg(value_name = "NAME", value_parser = parse_key)]
+    key: ToolKey,
+
+    /// How to write the tool.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
+    format: OutputFormat,
+}
+
+/// How `slcr tools list` and `slcr tools show` write what they find.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum OutputFormat {
+    /// Text for people.
+    #[default]
+    Human,
+    /// One JSON document.
+    Json,
+}
+
+impl OutputFormat {
+    /// `found` in this format.
+    fn write<T: std::fmt::Display + Serialize>(self, found: &T) -> String {
+        match self {
+            Self::Human => found.to_string(),
+            Self::Json => serde_json::to_string_pretty(found)
+                .expect("what the tools commands find serializes"),
+        }
+    }
+}
+
 fn parse_key(value: &str) -> Result<ToolKey, InvalidToolKey> {
     ToolKey::try_from(value.to_owned())
 }
 
-/// Edit the tools a project declares.
+/// Edit and read the tools a project declares. `list` and `show` read
+/// descriptors from the descriptor store only, and never fetch one.
 pub struct Tools {
     terminal: Terminal,
     args: ToolsArgs,
@@ -88,6 +139,10 @@ impl Tools {
             }
             ToolsCommand::Update(KeyArgs { key }) => block_on(update(&env, key))??.to_string(),
             ToolsCommand::Remove(KeyArgs { key }) => remove(&fs, &cwd, key)?.to_string(),
+            ToolsCommand::List(ListArgs { format }) => format.write(&list(&fs, &store, &cwd)?),
+            ToolsCommand::Show(ShowArgs { key, format }) => {
+                format.write(&show(&fs, &store, &cwd, key)?)
+            }
         };
         self.terminal.write_stdout_line(&status)
     }

@@ -1,0 +1,41 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - list
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+{
+  "manifest": "SLCR.toml",
+  "tools": [
+    {
+      "key": "ast-grep",
+      "version": "0.3.1",
+      "source": {
+        "path": "tools/ast-grep.toml"
+      },
+      "pin": "blake3:5bc0b3fd8b555f669bc368ce79f8ffbe4d7c34a78082ddc90c8023dff525ea21",
+      "descriptor": "not-installed"
+    },
+    {
+      "key": "cargo-nextest",
+      "version": "1.0.0",
+      "source": {
+        "path": "tools/cargo-nextest.toml"
+      },
+      "pin": "blake3:3aa337b9c338f5f5e93e6664416047b687e73343e4d92158aab2e6329f1e6e92",
+      "descriptor": "installed"
+    }
+  ]
+}
+
+----- stderr -----
