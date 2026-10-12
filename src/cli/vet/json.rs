@@ -37,21 +37,58 @@
 //! the code. A file that couldn't be loaded has an `error` instead of
 //! findings; its `labels` locate the problem in the file, with 1-based
 //! `line` and `column` and a byte `offset` and `length`.
+//!
+//! When `vet` is given no files and vets the project, the document also
+//! has a `project` object, before `files`, describing the manifest and
+//! every problem with the project as a whole. Like a finding, a problem
+//! has a kebab-case `code` and the fields that go with it, then its
+//! `message` and any `help`:
+//!
+//! ```json
+//! {
+//!   "passed": false,
+//!   "project": {
+//!     "manifest": "SLCR.toml",
+//!     "passed": false,
+//!     "problems": [
+//!       {
+//!         "code": "no-match",
+//!         "pattern": "docs/*.yml",
+//!         "message": "`specs` pattern `docs/*.yml` matches no file",
+//!         "help": "check it for typos; a pattern never matches a file that a `.gitignore` ignores"
+//!       }
+//!     ]
+//!   },
+//!   "files": []
+//! }
+//! ```
+//!
+//! A manifest that couldn't be loaded has an `error`, shaped like a file's,
+//! instead of `problems`, and `files` is empty.
 
 use miette::{Diagnostic, LabeledSpan, Report as ErrorReport};
 use serde::Serialize;
 
-use super::Outcome;
+use super::{Outcome, ProjectOutcome};
+use crate::project::Problem;
 use crate::spec::vet::Finding;
 
-/// The JSON document describing `outcomes`.
-pub(super) fn document(outcomes: &[Outcome], deny_warnings: bool) -> String {
+/// The JSON document describing `project`, if `vet` vetted one, and
+/// `outcomes`.
+pub(super) fn document(
+    project: Option<&ProjectOutcome>,
+    outcomes: &[Outcome],
+    deny_warnings: bool,
+) -> String {
+    let project = project.map(ProjectJson::new);
     let files: Vec<File<'_>> = outcomes
         .iter()
         .map(|outcome| File::new(outcome, deny_warnings))
         .collect();
     let document = Document {
-        passed: files.iter().all(|file| file.passed),
+        passed: project.as_ref().is_none_or(|project| project.passed)
+            && files.iter().all(|file| file.passed),
+        project,
         files,
     };
     serde_json::to_string_pretty(&document).expect("vetting results serialize to JSON")
@@ -59,9 +96,65 @@ pub(super) fn document(outcomes: &[Outcome], deny_warnings: bool) -> String {
 
 #[derive(Serialize)]
 struct Document<'a> {
-    /// Whether every file passed.
+    /// Whether the project, if any, and every file passed.
     passed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project: Option<ProjectJson<'a>>,
     files: Vec<File<'a>>,
+}
+
+#[derive(Serialize)]
+struct ProjectJson<'a> {
+    /// The manifest's path, relative to the working directory.
+    manifest: String,
+    passed: bool,
+    #[serde(flatten)]
+    result: ProjectResult<'a>,
+}
+
+impl<'a> ProjectJson<'a> {
+    fn new(project: &'a ProjectOutcome) -> Self {
+        let result = match &project.result {
+            Ok(problems) => ProjectResult::Vetted {
+                problems: problems.iter().map(ProblemJson::new).collect(),
+            },
+            Err(error) => ProjectResult::Unloadable {
+                error: ErrorJson::new(error),
+            },
+        };
+        Self {
+            manifest: project.manifest.display().to_string(),
+            passed: project.passes(),
+            result,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ProjectResult<'a> {
+    Vetted { problems: Vec<ProblemJson<'a>> },
+    Unloadable { error: ErrorJson },
+}
+
+#[derive(Serialize)]
+struct ProblemJson<'a> {
+    /// The `code` and the fields that go with it.
+    #[serde(flatten)]
+    problem: &'a Problem,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    help: Option<String>,
+}
+
+impl<'a> ProblemJson<'a> {
+    fn new(problem: &'a Problem) -> Self {
+        Self {
+            problem,
+            message: problem.to_string(),
+            help: problem.help().map(|help| help.to_string()),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -242,7 +335,18 @@ mod tests {
     }
 
     fn parsed(outcomes: &[Outcome], deny_warnings: bool) -> Value {
-        serde_json::from_str(&document(outcomes, deny_warnings)).unwrap()
+        serde_json::from_str(&document(None, outcomes, deny_warnings)).unwrap()
+    }
+
+    fn parsed_project(project: &ProjectOutcome, outcomes: &[Outcome]) -> Value {
+        serde_json::from_str(&document(Some(project), outcomes, false)).unwrap()
+    }
+
+    fn project(result: Result<Vec<Problem>, ErrorReport>) -> ProjectOutcome {
+        ProjectOutcome {
+            manifest: PathBuf::from("../SLCR.toml"),
+            result,
+        }
     }
 
     /// The canon example with REQ-009 refining a missing REQ-099 instead of
@@ -349,6 +453,70 @@ mod tests {
     #[test]
     fn vetting_nothing_passes() {
         assert_eq!(parsed(&[], false), json!({ "passed": true, "files": [] }));
+    }
+
+    #[test]
+    fn a_clean_project_passes() {
+        let document = parsed_project(&project(Ok(Vec::new())), &[outcome("a.json", todo_api())]);
+        assert_eq!(
+            document,
+            json!({
+                "passed": true,
+                "project": {
+                    "manifest": "../SLCR.toml",
+                    "passed": true,
+                    "problems": []
+                },
+                "files": [{
+                    "path": "a.json",
+                    "passed": true,
+                    "violations": 0,
+                    "warnings": 0,
+                    "findings": []
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn project_problems_carry_their_code_fields_message_and_help() {
+        let problems = vec![Problem::NoMatch {
+            pattern: "docs/*.yml".to_owned(),
+        }];
+        let document = parsed_project(&project(Ok(problems)), &[outcome("a.json", todo_api())]);
+        assert_eq!(document["passed"], false);
+        assert_eq!(document["files"][0]["passed"], true);
+        assert_eq!(
+            document["project"],
+            json!({
+                "manifest": "../SLCR.toml",
+                "passed": false,
+                "problems": [{
+                    "code": "no-match",
+                    "pattern": "docs/*.yml",
+                    "message": "`specs` pattern `docs/*.yml` matches no file",
+                    "help": "check it for typos; a pattern never matches a file that a \
+                             `.gitignore` ignores"
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn an_unloadable_manifest_explains_why() {
+        let document = parsed_project(&project(Err(miette::miette!("unreadable"))), &[]);
+        assert_eq!(
+            document,
+            json!({
+                "passed": false,
+                "project": {
+                    "manifest": "../SLCR.toml",
+                    "passed": false,
+                    "error": { "message": "unreadable" }
+                },
+                "files": []
+            })
+        );
     }
 
     #[test]

@@ -1,0 +1,21 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+specs/todo-api.yaml: ok
+
+----- stderr -----
+  × `specs` pattern `specs/*` matches specs/notes.md, which is not a YAML, JSON, or TOML file
+  help: a specification file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`
+
+Error:   × vetting failed for 1 of 2 files

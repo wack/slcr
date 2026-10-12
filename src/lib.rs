@@ -10,6 +10,8 @@ mod cli;
 mod config;
 /// An abstraction over the user's filesystem, respecting $XDG_CONFIG.
 mod fs;
+/// A project's specifications: discovering, loading, and indexing them.
+mod project;
 /// GQL queries over a specification's graph.
 mod query;
 /// The canonical Markdown rendering of a specification.

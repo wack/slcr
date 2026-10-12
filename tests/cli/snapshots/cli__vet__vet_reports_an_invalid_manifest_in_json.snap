@@ -1,0 +1,38 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "project": {
+    "manifest": "SLCR.toml",
+    "passed": false,
+    "error": {
+      "message": "could not parse SLCR.toml as TOML",
+      "labels": [
+        {
+          "message": "missing field `specs`",
+          "line": 1,
+          "column": 1,
+          "offset": 0,
+          "length": 19
+        }
+      ]
+    }
+  },
+  "files": []
+}
+
+----- stderr -----
+Error:   × vetting failed for 1 of 1 file
