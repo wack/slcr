@@ -417,6 +417,147 @@ pin = "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b"
         ToolKey::try_from(key.to_owned()).unwrap()
     }
 
+    fn version(version: &str) -> DescriptorVersion {
+        DescriptorVersion::try_from(version.to_owned()).unwrap()
+    }
+
+    /// A manifest that declares no tools.
+    const MINIMAL: &str = "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n";
+
+    /// `source`, loaded as the manifest of a project in a temporary
+    /// directory.
+    fn load(source: &str) -> (tempfile::TempDir, ManifestFile) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(MANIFEST), source).unwrap();
+        let file = ManifestFile::load(&Project::find_from(dir.path()).unwrap()).unwrap();
+        (dir, file)
+    }
+
+    /// Save `file`, and return what it wrote, after checking that it reads
+    /// back as the manifest `file` holds in memory.
+    fn saved(dir: &tempfile::TempDir, file: &ManifestFile) -> String {
+        file.save(&FileSystem::new().unwrap()).unwrap();
+        let written = std::fs::read_to_string(dir.path().join(MANIFEST)).unwrap();
+        assert_eq!(parse(&written).unwrap(), *file.manifest(), "{written}");
+        written
+    }
+
+    /// The tool `name`, pinned to the hash of its name, written with
+    /// dotted keys.
+    fn dotted(name: &str) -> String {
+        let pin = Pin::of(name.as_bytes());
+        format!(
+            "tools.{name}.version = \"1.0.0\"\ntools.{name}.source.path = \"{name}.toml\"\n\
+             tools.{name}.pin = \"{pin}\"\n"
+        )
+    }
+
+    /// The tool `name`, pinned to the hash of its name, with its source
+    /// in a table of its own, under its own header.
+    fn sourced(name: &str) -> String {
+        let pin = Pin::of(name.as_bytes());
+        format!(
+            "\n[tools.{name}]\nversion = \"1.0.0\"\npin = \"{pin}\"\n\n\
+             [tools.{name}.source]\npath = \"{name}.toml\"\n"
+        )
+    }
+
+    #[test]
+    fn an_undeclared_tool_is_an_error_that_names_the_declared_ones() {
+        let (_dir, file) = load(EXAMPLE);
+        let err = file.tool(&key("jev")).unwrap_err();
+        assert_eq!(err.to_string(), "SLCR.toml declares no tool named jev");
+        assert_eq!(
+            err.help().unwrap().to_string(),
+            "the tools it declares are: ast-grep, cargo-nextest"
+        );
+
+        let (_dir, file) = load(MINIMAL);
+        let err = file.tool(&key("jev")).unwrap_err();
+        assert_eq!(
+            err.help().unwrap().to_string(),
+            "it declares no tools; declare one with `slcr tools add <SOURCE>`"
+        );
+    }
+
+    #[test]
+    fn repinning_a_tool_changes_only_its_version_and_pin() {
+        let (dir, mut file) = load(EXAMPLE);
+        let pin = Pin::of(b"ast-grep");
+        file.repin_tool(&key("ast-grep"), version("0.4.0"), pin);
+
+        let entry = file.tool(&key("ast-grep")).unwrap();
+        assert_eq!(entry.version(), &version("0.4.0"));
+        assert_eq!(entry.pin(), &pin);
+        assert_eq!(
+            saved(&dir, &file),
+            EXAMPLE.replace("\"0.3.1\"", "\"0.4.0\"").replace(
+                "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b",
+                &pin.to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn removing_a_tool_removes_only_its_entry() {
+        let (dir, mut file) = load(EXAMPLE);
+        let removed = file.remove_tool(&key("cargo-nextest")).unwrap();
+        assert_eq!(removed.version(), &version("1.0.0"));
+        let keys: Vec<_> = file
+            .manifest()
+            .tools()
+            .keys()
+            .map(ToolKey::as_str)
+            .collect();
+        assert_eq!(keys, ["ast-grep"]);
+
+        let nextest = EXAMPLE.find("[tools.cargo-nextest]").unwrap()
+            ..EXAMPLE.find("[tools.ast-grep]").unwrap();
+        let mut expected = EXAMPLE.to_owned();
+        expected.replace_range(nextest, "");
+        assert_eq!(saved(&dir, &file), expected);
+    }
+
+    #[test]
+    fn removing_an_undeclared_tool_changes_nothing() {
+        let (dir, mut file) = load(EXAMPLE);
+        let err = file.remove_tool(&key("jev")).unwrap_err();
+        assert_eq!(err.to_string(), "SLCR.toml declares no tool named jev");
+        assert_eq!(file.manifest().tools().len(), 2);
+        assert_eq!(saved(&dir, &file), EXAMPLE);
+    }
+
+    #[test]
+    fn tools_written_with_dotted_keys_are_edited_in_place() {
+        let (jev, curl) = (dotted("jev"), dotted("curl"));
+        let (dir, mut file) = load(&format!("{MINIMAL}{jev}{curl}"));
+        file.repin_tool(&key("curl"), version("2.0.0"), Pin::of(b"new"));
+        file.remove_tool(&key("jev")).unwrap();
+        let repinned = curl
+            .replace("\"1.0.0\"", "\"2.0.0\"")
+            .replace(&Pin::of(b"curl").to_string(), &Pin::of(b"new").to_string());
+        assert_eq!(saved(&dir, &file), format!("{MINIMAL}{repinned}"));
+
+        file.remove_tool(&key("curl")).unwrap();
+        assert_eq!(saved(&dir, &file), MINIMAL);
+    }
+
+    #[test]
+    fn a_tool_with_a_source_table_is_edited_in_place() {
+        let (jev, curl) = (sourced("jev"), sourced("curl"));
+        let (dir, mut file) = load(&format!("{MINIMAL}{jev}{curl}"));
+        file.repin_tool(&key("curl"), version("2.0.0"), Pin::of(b"new"));
+        // The source's own header goes with its tool.
+        file.remove_tool(&key("jev")).unwrap();
+        let repinned = curl
+            .replace("\"1.0.0\"", "\"2.0.0\"")
+            .replace(&Pin::of(b"curl").to_string(), &Pin::of(b"new").to_string());
+        assert_eq!(saved(&dir, &file), format!("{MINIMAL}{repinned}"));
+
+        file.remove_tool(&key("curl")).unwrap();
+        assert_eq!(saved(&dir, &file), MINIMAL);
+    }
+
     #[test]
     fn the_schema_page_example_parses() {
         let manifest = parse(EXAMPLE).unwrap();

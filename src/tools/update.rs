@@ -107,6 +107,7 @@ mod tests {
     use crate::tools::https_server::{HttpsServer, Reply};
     use crate::tools::manifest::NotDeclared;
     use crate::tools::source::{Fetcher, SourceError};
+    use crate::tools::store::{DescriptorStore, StoreUnavailable};
 
     /// NEXTEST with its version bumped.
     fn newer() -> String {
@@ -115,6 +116,16 @@ mod tests {
 
     fn key(key: &str) -> ToolKey {
         ToolKey::try_from(key.to_owned()).unwrap()
+    }
+
+    /// A manifest that declares cargo-nextest 1.0.0 from `url`, pinned to
+    /// NEXTEST.
+    fn declaring_url(url: &str) -> String {
+        format!(
+            "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n\n[tools.cargo-nextest]\n\
+             version = \"1.0.0\"\nsource = {{ url = \"{url}\" }}\npin = \"{}\"\n",
+            Pin::of(NEXTEST.as_bytes())
+        )
     }
 
     impl Fixture {
@@ -205,16 +216,7 @@ mod tests {
         let fixture = Fixture::new();
         block_on(async {
             let server = HttpsServer::start(vec![("/nextest.toml", Reply::ok(newer()))]).await;
-            fixture.write(
-                "SLCR.toml",
-                format!(
-                    "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n\n\
-                     [tools.cargo-nextest]\nversion = \"1.0.0\"\n\
-                     source = {{ url = \"{}\" }}\npin = \"{}\"\n",
-                    server.https("/nextest.toml"),
-                    Pin::of(NEXTEST.as_bytes())
-                ),
-            );
+            fixture.write("SLCR.toml", declaring_url(&server.https("/nextest.toml")));
             let updated = fixture
                 .update_with(&server.fetcher(), "cargo-nextest")
                 .await
@@ -305,10 +307,98 @@ mod tests {
     fn an_invalid_descriptor_installs_and_pins_nothing() {
         let fixture = Fixture::declared();
         let before = fixture.manifest();
-        let invalid = newer().replace("{with.test}", "{with.name}");
-        fixture.write("tools/cargo-nextest.toml", &invalid);
-        assert!(fixture.update("cargo-nextest").is_err());
+        for invalid in [
+            newer().replace("{with.test}", "{with.name}").into_bytes(),
+            newer()
+                .replace("[invoke]\n", "[invoke]\nshell = true\n")
+                .into_bytes(),
+            b"name = \"\xff\"".to_vec(),
+        ] {
+            fixture.write("tools/cargo-nextest.toml", &invalid);
+            assert!(fixture.update("cargo-nextest").is_err());
+            assert_eq!(fixture.manifest(), before);
+            assert!(!fixture.store.path(&Pin::of(&invalid)).exists());
+        }
+    }
+
+    #[test]
+    fn a_failed_fetch_changes_nothing() {
+        let fixture = Fixture::new();
+        block_on(async {
+            let server = HttpsServer::start(Vec::new()).await;
+            let manifest = declaring_url(&server.https("/missing.toml"));
+            fixture.write("SLCR.toml", &manifest);
+            let err = fixture
+                .update_with(&server.fetcher(), "cargo-nextest")
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(err.downcast_ref(), Some(SourceError::Fetch { .. })),
+                "{err:?}"
+            );
+            assert_eq!(fixture.manifest(), manifest);
+        })
+        .unwrap();
+        assert!(fixture.store_is_empty());
+    }
+
+    #[test]
+    fn a_descriptor_that_fails_to_install_is_not_pinned() {
+        let fixture = Fixture::declared();
+        let before = fixture.manifest();
+        fixture.write("tools/cargo-nextest.toml", newer());
+        // A file where the store's directory would be.
+        fixture.write("not-a-directory", "");
+        let store = DescriptorStore::at(fixture.project().join("not-a-directory/blake3"));
+        let cwd = fixture.project();
+        let fetcher = Fetcher::new();
+        let env = Environment {
+            store: &store,
+            ..fixture.env(&fetcher, &cwd)
+        };
+
+        let err = block_on(update(&env, key("cargo-nextest")))
+            .unwrap()
+            .unwrap_err();
+        assert!(err.downcast_ref::<StoreUnavailable>().is_some(), "{err:?}");
         assert_eq!(fixture.manifest(), before);
-        assert!(!fixture.installed(&invalid));
+    }
+
+    #[test]
+    fn a_version_that_disagrees_with_the_pin_is_corrected() {
+        // A hand edit changed the version but not the pin.
+        let fixture = Fixture::declared();
+        let edited = fixture
+            .manifest()
+            .replace("version = \"1.0.0\"", "version = \"0.9.0\"");
+        fixture.write("SLCR.toml", &edited);
+
+        let updated = fixture.update("cargo-nextest").unwrap();
+        assert_eq!(updated.change, Change::Updated);
+        assert_eq!(
+            updated.to_string(),
+            "SLCR.toml: updated tool cargo-nextest 0.9.0 -> 1.0.0"
+        );
+        assert_eq!(
+            fixture.manifest(),
+            edited.replace("version = \"0.9.0\"", "version = \"1.0.0\"")
+        );
+    }
+
+    #[test]
+    fn the_manifest_is_named_relative_to_the_working_directory() {
+        let fixture = Fixture::declared();
+        fixture.write("tools/cargo-nextest.toml", newer());
+        let cwd = fixture.project().join("crates/api");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let fetcher = Fetcher::new();
+        let env = fixture.env(&fetcher, &cwd);
+        let updated = block_on(update(&env, key("cargo-nextest")))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            updated.to_string(),
+            "../../SLCR.toml: updated tool cargo-nextest 1.0.0 -> 1.1.0"
+        );
     }
 }

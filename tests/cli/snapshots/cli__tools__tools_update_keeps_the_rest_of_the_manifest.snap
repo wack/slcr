@@ -1,0 +1,21 @@
+---
+source: tests/cli/tools.rs
+expression: "workspace.read(\"SLCR.toml\")"
+---
+# The project manifest.
+formatVersion = "1"
+specs = ["SPEC.slcr.yml"]
+
+# Runs the test suite.
+[tools.cargo-nextest]
+version = "1.1.0"  # copied from the descriptor
+source  = { path = "tools/cargo-nextest.toml" }
+pin     = "blake3:c7cef33c9b2633ef1209376dbf4aef7936542839f1e5a496acc36f45a90cd82b"  # never edited by hand
+
+# Lints the code.
+[tools.ast-grep]
+version = "0.3.1"
+source  = { path = "tools/ast-grep.toml" }
+pin     = "blake3:5bc0b3fd8b555f669bc368ce79f8ffbe4d7c34a78082ddc90c8023dff525ea21"
+
+# The end.

@@ -1,0 +1,15 @@
+---
+source: tests/cli/tools.rs
+expression: "workspace.read(\"SLCR.toml\")"
+---
+# The project manifest.
+formatVersion = "1"
+specs = ["SPEC.slcr.yml"]
+
+# Lints the code.
+[tools.ast-grep]
+version = "0.3.1"
+source  = { path = "tools/ast-grep.toml" }
+pin     = "blake3:5bc0b3fd8b555f669bc368ce79f8ffbe4d7c34a78082ddc90c8023dff525ea21"
+
+# The end.

@@ -168,4 +168,18 @@ mod tests {
         );
         assert_eq!(fixture.manifest(), MANIFEST);
     }
+
+    #[test]
+    fn the_manifest_is_named_relative_to_the_working_directory() {
+        let fixture = Fixture::new();
+        fixture.add("tools/cargo-nextest.toml", None).unwrap();
+        let cwd = fixture.project().join("crates/api");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let removed = remove(&fixture.fs, &cwd, key("cargo-nextest")).unwrap();
+        assert_eq!(
+            removed.to_string(),
+            "../../SLCR.toml: removed tool cargo-nextest 1.0.0"
+        );
+        assert_eq!(fixture.manifest(), MANIFEST);
+    }
 }
