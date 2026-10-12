@@ -1,0 +1,20 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "../todo-api.slcr.toml"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+../todo-api.slcr.toml: created specification todo-api
+SLCR.toml: left the existing project manifest unchanged
+
+----- stderr -----
+  ⚠ ../todo-api.slcr.toml is outside the project of SLCR.toml, whose `specs` can't list it
+  help: move the file into the project, or run `slcr init` where it starts a project of its own

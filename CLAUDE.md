@@ -61,7 +61,9 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   minus any `.slcr`/`.spec`, or, for `SPEC.slcr.*`, after its directory; an
   invalid result is an error, never slugified. `--title` defaults to the name.
   Unless `Project::find_from` finds an `SLCR.toml` in the working directory
-  or a parent (which it leaves untouched, and says so), it also creates
+  or a parent (which it leaves untouched, and says so, warning with
+  `Unlisted` if its `specs`, expanded by `project::discover`, don't match
+  the new file, or can't be read to tell), it also creates
   `SLCR.toml` in the working directory, with `formatVersion` and `specs`
   listing FILE relative to it; FILE outside the working directory, or with
   glob metacharacters, is then an error (`InvalidSpecPath`), as is a

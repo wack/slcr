@@ -10,10 +10,13 @@ use thiserror::Error;
 
 use crate::Terminal;
 use crate::fs::{File, FileSystem};
+use crate::project::discover;
 use crate::spec::file::{DEFAULT_FILE, RequirementsFile, base_name};
 use crate::spec::graph::SlcrRequirementsDocument;
 use crate::spec::text::{InvalidSpecName, InvalidTitle, SpecName, Title};
-use crate::tools::manifest::{MANIFEST, NewManifest, Project, ProjectError, ProjectGlob};
+use crate::tools::manifest::{
+    MANIFEST, ManifestFile, NewManifest, Project, ProjectError, ProjectGlob,
+};
 
 /// The stem of the well-known file name, whatever its extension. Its
 /// specification is named after the directory that holds it.
@@ -87,7 +90,7 @@ impl Init {
         // A project found in a parent directory is left alone too:
         // projects don't nest.
         let manifest = match Project::find_from(&cwd) {
-            Ok(project) => ManifestStatus::Existing(project.shown_manifest().to_path_buf()),
+            Ok(project) => ManifestStatus::Existing(project),
             Err(ProjectError::NotFound) => {
                 ManifestStatus::New(NewManifest::new(listed(&path, &cwd)?))
             }
@@ -105,8 +108,82 @@ impl Init {
             name: document.spec().name(),
         };
         self.terminal.write_stdout_line(&created.to_string())?;
-        self.terminal.write_stdout_line(&manifest.to_string())
+        self.terminal.write_stdout_line(&manifest.to_string())?;
+        if let ManifestStatus::Existing(project) = &manifest
+            && let Some(unlisted) = unlisted(project, &cwd, &path)
+        {
+            self.terminal.write_diagnostic(&unlisted)?;
+        }
+        Ok(())
     }
+}
+
+/// Why an existing project's manifest doesn't list the specification
+/// `slcr init` just created at `path`, if it doesn't: its `specs` don't
+/// match the file, the file is outside the project, or the manifest can't
+/// be read to tell.
+fn unlisted(project: &Project, cwd: &Path, path: &Path) -> Option<Unlisted> {
+    let manifest = project.shown_manifest().to_path_buf();
+    let spec = path.to_path_buf();
+    // The file exists now, so it resolves, as the project's root did.
+    let absolute = std::fs::canonicalize(cwd.join(path)).ok()?;
+    let Ok(relative) = absolute.strip_prefix(project.root()) else {
+        return Some(Unlisted::Outside { manifest, spec });
+    };
+    let Ok(file) = ManifestFile::load(project) else {
+        return Some(Unlisted::Unreadable { manifest, spec });
+    };
+    let discovery = discover(project.root(), cwd, file.manifest().specs());
+    if discovery
+        .files
+        .iter()
+        .any(|file| file.relative() == relative)
+    {
+        return None;
+    }
+    let entry = relative
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+    Some(Unlisted::NotMatched {
+        manifest,
+        spec,
+        entry,
+    })
+}
+
+/// A warning that the project's manifest doesn't list a new
+/// specification, so `slcr vet` and `slcr check` won't read it.
+#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
+#[diagnostic(severity(Warning))]
+pub enum Unlisted {
+    #[error("the `specs` of {} don't match {}", .manifest.display(), .spec.display())]
+    #[diagnostic(help("add \"{entry}\" to `specs` so that `slcr vet` and `slcr check` read it"))]
+    NotMatched {
+        manifest: PathBuf,
+        spec: PathBuf,
+        /// The file's path relative to the project root: the entry to add.
+        entry: String,
+    },
+
+    #[error(
+        "{} is outside the project of {}, whose `specs` can't list it",
+        .spec.display(),
+        .manifest.display()
+    )]
+    #[diagnostic(help(
+        "move the file into the project, or run `slcr init` where it starts a project of its own"
+    ))]
+    Outside { manifest: PathBuf, spec: PathBuf },
+
+    #[error(
+        "could not read {} to tell whether its `specs` match {}",
+        .manifest.display(),
+        .spec.display()
+    )]
+    #[diagnostic(help("`slcr vet` reports what is wrong with the manifest"))]
+    Unreadable { manifest: PathBuf, spec: PathBuf },
 }
 
 /// What `slcr init` does with the project manifest, which it reports as
@@ -114,18 +191,18 @@ impl Init {
 enum ManifestStatus {
     /// Create one in the working directory, with these contents.
     New(NewManifest),
-    /// Leave alone the one at this path, relative to the working directory.
-    Existing(PathBuf),
+    /// Leave alone the one of this project.
+    Existing(Project),
 }
 
 impl Display for ManifestStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::New(_) => write!(f, "{MANIFEST}: created project manifest"),
-            Self::Existing(path) => write!(
+            Self::Existing(project) => write!(
                 f,
                 "{}: left the existing project manifest unchanged",
-                path.display()
+                project.shown_manifest().display()
             ),
         }
     }
@@ -695,7 +772,8 @@ title = "Glossary"
     #[test]
     fn a_manifest_in_a_parent_directory_is_left_unchanged_and_not_nested() {
         Jail::expect_with(|jail| {
-            // Not even a valid manifest: `init` never reads it.
+            // Not even a valid manifest: `init` only warns that it can't
+            // tell whether it lists the new file.
             jail.create_file("SLCR.toml", "not = [toml")?;
             jail.create_dir("a/b")?;
             jail.change_dir("a/b")?;
@@ -1001,10 +1079,102 @@ title = "Glossary"
             ManifestStatus::New(NewManifest::new(spec)).to_string(),
             "SLCR.toml: created project manifest"
         );
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(MANIFEST), "").unwrap();
+        std::fs::create_dir(dir.path().join("docs")).unwrap();
+        let project = Project::find_from(&dir.path().join("docs")).unwrap();
         assert_eq!(
-            ManifestStatus::Existing(PathBuf::from("../SLCR.toml")).to_string(),
+            ManifestStatus::Existing(project).to_string(),
             "../SLCR.toml: left the existing project manifest unchanged"
         );
+    }
+
+    /// What [unlisted] says of `path` in the project around the working
+    /// directory.
+    fn unlisted_in(path: &str) -> Option<Unlisted> {
+        let cwd = std::env::current_dir().unwrap();
+        let project = Project::find_from(&cwd).unwrap();
+        unlisted(&project, &cwd, Path::new(path))
+    }
+
+    #[test]
+    fn a_specification_the_manifest_lists_needs_no_warning() {
+        Jail::expect_with(|jail| {
+            jail.create_file(
+                "SLCR.toml",
+                "formatVersion = \"1\"\nspecs = [\"docs/*.toml\"]\n",
+            )?;
+            jail.create_dir("docs")?;
+            run(&["docs/api.slcr.toml"]).unwrap();
+            assert_eq!(unlisted_in("docs/api.slcr.toml"), None);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_specification_the_manifest_does_not_list_is_named_with_its_entry() {
+        Jail::expect_with(|jail| {
+            jail.create_file(
+                "SLCR.toml",
+                "formatVersion = \"1\"\nspecs = [\"docs/*.toml\"]\n",
+            )?;
+            jail.create_dir("specs/api")?;
+            jail.change_dir("specs")?;
+            run(&["api/billing.slcr.json"]).unwrap();
+            let warning = unlisted_in("api/billing.slcr.json").unwrap();
+            assert_eq!(
+                warning,
+                Unlisted::NotMatched {
+                    manifest: PathBuf::from("../SLCR.toml"),
+                    spec: PathBuf::from("api/billing.slcr.json"),
+                    entry: "specs/api/billing.slcr.json".to_owned(),
+                }
+            );
+            assert_eq!(
+                render_plain(&warning),
+                "  ⚠ the `specs` of ../SLCR.toml don't match api/billing.slcr.json\n  \
+                 help: add \"specs/api/billing.slcr.json\" to `specs` so that `slcr vet` and\n        \
+                 `slcr check` read it\n"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_specification_outside_the_project_cannot_be_listed() {
+        Jail::expect_with(|jail| {
+            jail.create_dir("project")?;
+            jail.create_file(
+                "project/SLCR.toml",
+                "formatVersion = \"1\"\nspecs = [\"*.toml\"]\n",
+            )?;
+            jail.change_dir("project")?;
+            run(&["../todo-api.json"]).unwrap();
+            assert_eq!(
+                unlisted_in("../todo-api.json"),
+                Some(Unlisted::Outside {
+                    manifest: PathBuf::from("SLCR.toml"),
+                    spec: PathBuf::from("../todo-api.json"),
+                })
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn an_unreadable_manifest_is_reported_but_not_fatal() {
+        Jail::expect_with(|jail| {
+            jail.create_file("SLCR.toml", "not = [toml")?;
+            run(&["--name", "todo-api"]).unwrap();
+            assert_eq!(
+                unlisted_in("SPEC.slcr.toml"),
+                Some(Unlisted::Unreadable {
+                    manifest: PathBuf::from("SLCR.toml"),
+                    spec: PathBuf::from("SPEC.slcr.toml"),
+                })
+            );
+            Ok(())
+        });
     }
 
     #[test]
