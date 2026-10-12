@@ -61,7 +61,9 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   minus any `.slcr`/`.spec`, or, for `SPEC.slcr.*`, after its directory; an
   invalid result is an error, never slugified. `--title` defaults to the name.
   Unless `Project::find_from` finds an `SLCR.toml` in the working directory
-  or a parent (which it leaves untouched, and says so), it also creates
+  or a parent (which it leaves untouched, and says so, warning with
+  `Unlisted` if its `specs`, expanded by `project::discover`, don't match
+  the new file, or can't be read to tell), it also creates
   `SLCR.toml` in the working directory, with `formatVersion` and `specs`
   listing FILE relative to it; FILE outside the working directory, or with
   glob metacharacters, is then an error (`InvalidSpecPath`), as is a
@@ -69,7 +71,7 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   never overwrites anything (even a dangling symlink) and never creates a
   missing directory; it creates both or neither, removing the spec if the
   manifest can't be written.
-- `vet <FILE>...` loads each requirements file with
+- `vet [FILE]...` loads each requirements file with
   `RequirementsFile::unvetted()`, writes every finding to stderr as a miette
   diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,
   and fails with `VetFailed` if any file can't be loaded or breaks an
@@ -78,8 +80,15 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   serialize with a kebab-case `code` plus their fields, so renaming a
   `Violation` or `Warning` variant or field changes that output. Like
   `terraform validate`, `vet` runs nothing and never uses the network.
-  Vetting validator files, the manifest, and pinned descriptors is still to
-  come.
+  Given no FILE, it vets the project (`src/project/`): it finds `SLCR.toml`
+  as `tools` does, discovers the files its `specs` match, and vets each the
+  same way, named relative to the working directory. The manifest counts as
+  one more file, with its own status line (`SLCR.toml: 2 problems`): it fails
+  if it can't be parsed or the project has a `project::Problem`, each written
+  as its own diagnostic. In JSON, those go in a `project` object that only
+  project mode adds, and problems serialize like findings, so renaming a
+  `Problem` variant or field changes that output too. Vetting validator files
+  and pinned descriptors is still to come.
 - `render [FILE]` renders a specification (default `SPEC.slcr.toml`) as
   Markdown with `render::document`, to FILE's base name plus `.md` beside it
   (`SPEC.slcr.toml` → `SPEC.md`), to `--output PATH`, or to stdout with `-o -`.
@@ -244,6 +253,40 @@ and no caching.
   Linux (`~/.local/share/slcr` if unset), `~/Library/Application
   Support/slcr` on macOS.
 
+## Projects (`src/project/`)
+
+A project's specifications: the files the manifest's `specs` match, loaded
+and indexed by `spec.name`. The rules are the manifest schema's and those on
+"SLCR — Tools: Manifest, Descriptors, and Invocation". Every problem is
+collected, never just the first, as a `Problem` (`problem.rs`), whose paths,
+like `SpecFile::shown`, are relative to the working directory.
+
+- `discover.rs` — `discover` expands each pattern under the project root:
+  `globset` with `literal_separator`, so `*` never crosses a `/` but does
+  match a leading dot, and an `ignore` walk that sees hidden files (never
+  `.git`) and skips what git ignores: in a git repository, the `.gitignore`
+  files of the project and its parents up to the repository's root,
+  `.git/info/exclude`, and the global excludes; outside one, as for git,
+  nothing (`require_git(true)`). A
+  file matched twice counts once; files are ordered by project-relative
+  path. A pattern that is invalid or matches nothing, a match that is a
+  validator file (`.validators.slcr.*`) or has no specification format's
+  extension, and an unreadable directory are each a `Problem`.
+- `mod.rs` — `SpecFile`: a discovered file's project-relative, shown, and
+  absolute paths; `load` reads it unvetted through
+  `FileSystem::load_file_at`, so errors name the shown path.
+- `index.rs` — `SpecIndex` borrows loaded specifications by name; a second
+  file with a name already taken is a `DuplicateSpecName` problem naming
+  both. `resolve` turns a `QualifiedRequirementId` into its specification
+  and requirement, or fails with `UnresolvedRequirement` (`UnknownSpec`,
+  whose help lists the names, or `UnknownRequirement`). `Resolved::criterion`
+  resolves a validator's `AC-<n>` among the requirement's own acceptance
+  criteria, or fails with `UnknownCriterion`, whose help lists them and names
+  the requirement that does contain it, if one does.
+- `qualified.rs` — `QualifiedRequirementId`, such as `todo-api/REQ-002`: a
+  `SpecName`, `/`, and a `RequirementId`, the validator schema's pattern.
+  The qualifier is the name, never a path.
+
 ## Queries (`src/query/`)
 
 `slcr-gql` (a git dependency on `wack/gql-rust`, pinned by `rev`) parses and
@@ -267,7 +310,9 @@ language and the graph a specification maps to.
 `File::extension()` to TOML / JSON / YAML (`serde-saphyr`). A file that can't be
 read fails with a `ReadError` naming its path; one that can't be deserialized
 fails with a `ParseError` that labels the problem in the file's source when the
-deserializer reports a location. Generated text goes through
+deserializer reports a location; `load_file_at` reads a file from one path,
+such as an absolute one, while errors name it by the `File`'s own path.
+Generated text goes through
 `replace_file`, which writes atomically via a temporary file and never
 creates a directory. Implement `File` for
 files at dynamic paths, or `StaticFile` for fixed-name files under a

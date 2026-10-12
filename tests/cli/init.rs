@@ -86,6 +86,35 @@ fn init_uses_the_manifest_of_a_parent_directory() {
 }
 
 #[test]
+fn init_warns_when_the_manifest_does_not_list_the_new_file() {
+    let workspace = Workspace::new();
+    workspace.file("SLCR.toml", MANIFEST).dir("specs");
+    assert_cmd_snapshot!(workspace.slcr_in("specs", &["init", "billing.slcr.json"]));
+    assert_eq!(workspace.files(), ["SLCR.toml", "specs/billing.slcr.json"]);
+    assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
+}
+
+#[test]
+fn init_warns_when_the_new_file_is_outside_the_project() {
+    let workspace = Workspace::new();
+    workspace.file("project/SLCR.toml", MANIFEST);
+    assert_cmd_snapshot!(workspace.slcr_in("project", &["init", "../todo-api.slcr.toml"]));
+    assert_eq!(
+        workspace.files(),
+        ["project/SLCR.toml", "todo-api.slcr.toml"]
+    );
+}
+
+#[test]
+fn init_warns_when_the_manifest_cannot_be_read() {
+    let workspace = Workspace::new();
+    workspace.file("SLCR.toml", "not = [toml");
+    assert_cmd_snapshot!(workspace.slcr(&["init", "--name", "todo-api"]));
+    assert_eq!(workspace.files(), ["SLCR.toml", "SPEC.slcr.toml"]);
+    assert_eq!(workspace.read("SLCR.toml"), "not = [toml");
+}
+
+#[test]
 fn init_rejects_a_misnamed_manifest() {
     let workspace = Workspace::new();
     workspace.file("slcr.toml", MANIFEST).dir("billing");

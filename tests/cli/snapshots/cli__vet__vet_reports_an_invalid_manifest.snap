@@ -1,0 +1,25 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: could not be loaded
+
+----- stderr -----
+  × could not parse SLCR.toml as TOML
+   ╭─[SLCR.toml:2:9]
+ 1 │ formatVersion = "1"
+ 2 │ specs = ["../SPEC.slcr.yml"]
+   ·         ──────────┬─────────
+   ·                   ╰── "../SPEC.slcr.yml" is not a glob relative to the project root, which uses forward slashes, with no leading `/` and no `..` segment
+   ╰────
+
+Error:   × vetting failed for 1 of 1 file

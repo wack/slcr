@@ -1,0 +1,20 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - billing.slcr.json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+billing.slcr.json: created specification billing
+../SLCR.toml: left the existing project manifest unchanged
+
+----- stderr -----
+  ⚠ the `specs` of ../SLCR.toml don't match billing.slcr.json
+  help: add "specs/billing.slcr.json" to `specs` so that `slcr vet` and `slcr check` read it

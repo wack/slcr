@@ -1,0 +1,21 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+docs/api/api.slcr.toml: ok
+
+----- stderr -----
+  × `specs` pattern `docs/**/*.slcr.toml` matches the validator file docs/api/.validators.slcr.toml
+  help: `specs` names specification files only; narrow the pattern so that it skips validator files, e.g. by starting the file name with `[!.]`
+
+Error:   × vetting failed for 1 of 2 files

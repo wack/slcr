@@ -8,14 +8,12 @@ info:
     HOME: "[HOME]"
     XDG_DATA_HOME: "[DATA_HOME]"
 ---
-success: false
-exit_code: 2
+success: true
+exit_code: 0
 ----- stdout -----
+SLCR.toml: ok
+SPEC.slcr.yml: ok
+docs/.drafts/drafts.slcr.toml: ok
+docs/api/billing.slcr.json: ok
 
 ----- stderr -----
-error: the following required arguments were not provided:
-  <FILE>...
-
-Usage: slcr vet <FILE>...
-
-For more information, try '--help'.
