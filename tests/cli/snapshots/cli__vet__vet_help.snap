@@ -1,21 +1,24 @@
 ---
-source: tests/cli/check.rs
+source: tests/cli/vet.rs
 info:
   program: slcr
   args:
-    - check
+    - vet
     - "--help"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-Report the invariants requirements files break
+Report the invariants requirements files break, without running anything
 
-Usage: slcr check [OPTIONS] <FILE>...
+Usage: slcr vet [OPTIONS] <FILE>...
 
 Arguments:
   <FILE>...
-          The requirements files to check: `.yaml`, `.yml`, `.json`, or `.toml`
+          The requirements files to vet: `.yaml`, `.yml`, `.json`, or `.toml`
 
 Options:
       --deny-warnings

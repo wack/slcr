@@ -1,5 +1,5 @@
 //! Invariants of the specification graph that its JSON Schema cannot
-//! express, from the schema's `x-checkInvariants` annotation.
+//! express, from the schema's `x-vetInvariants` annotation.
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -130,7 +130,7 @@ pub enum Warning {
     VacuousAnd { requirement: RequirementId },
 }
 
-/// One thing a check found, borrowed from its [Report]: a broken invariant
+/// One thing vetting found, borrowed from its [Report]: a broken invariant
 /// or a warning. It serializes as what it wraps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
@@ -150,7 +150,7 @@ impl<'a> Finding<'a> {
     }
 }
 
-/// Everything a check found in a document: the invariants it breaks and
+/// Everything vetting found in a document: the invariants it breaks and
 /// the warnings, each in document order.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Report {
@@ -167,7 +167,7 @@ impl Report {
         &self.warnings
     }
 
-    /// Whether the check found nothing at all, not even a warning.
+    /// Whether vetting found nothing at all, not even a warning.
     pub fn is_clean(&self) -> bool {
         self.violations.is_empty() && self.warnings.is_empty()
     }
@@ -180,7 +180,7 @@ impl Report {
     }
 }
 
-/// Check every invariant, including those that are only warnings.
+/// Vet every invariant, including those that are only warnings.
 pub(super) fn report(graph: &SlcrRequirementsDocument) -> Report {
     Report {
         violations: violations(graph),
@@ -188,7 +188,7 @@ pub(super) fn report(graph: &SlcrRequirementsDocument) -> Report {
     }
 }
 
-/// Check every invariant that is an error rather than a warning.
+/// Vet every invariant that is an error rather than a warning.
 pub(super) fn invariants(graph: &SlcrRequirementsDocument) -> Result<(), Violations> {
     let violations = violations(graph);
     if violations.is_empty() {
@@ -213,7 +213,7 @@ fn violations(graph: &SlcrRequirementsDocument) -> Vec<Violation> {
     .collect()
 }
 
-/// Check the invariants that are only warnings.
+/// Vet the invariants that are only warnings.
 pub(super) fn warnings(graph: &SlcrRequirementsDocument) -> Vec<Warning> {
     let requirements = graph.requirements();
     let refiners = refiners(&requirements);
@@ -592,17 +592,17 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::spec::graph::UncheckedDocument;
+    use crate::spec::graph::UnvettedDocument;
 
     const TODO_API: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
 
-    /// Read a graph without checking its invariants.
-    fn unchecked(value: Value) -> UncheckedDocument {
+    /// Read a graph without vetting its invariants.
+    fn unvetted(value: Value) -> UnvettedDocument {
         serde_json::from_value(value).unwrap()
     }
 
     fn violations(value: Value) -> Vec<Violation> {
-        match invariants(unchecked(value).document()) {
+        match invariants(unvetted(value).document()) {
             Ok(()) => Vec::new(),
             Err(violations) => violations.violations,
         }
@@ -1045,7 +1045,7 @@ mod tests {
         let mut leaf = req("REQ-001", "It MUST work.", "MUST");
         leaf["refinement"] = json!("OR");
         leaf["usesTerm"] = json!(["TERM-005"]);
-        let err = invariants(unchecked(graph(vec![leaf], vec![])).document()).unwrap_err();
+        let err = invariants(unvetted(graph(vec![leaf], vec![])).document()).unwrap_err();
         assert_eq!(
             err.to_string(),
             "the specification graph breaks its invariants:\n  \
@@ -1073,7 +1073,7 @@ mod tests {
             vec![],
         );
         assert_eq!(
-            unchecked(value).document().warnings(),
+            unvetted(value).document().warnings(),
             [Warning::ModalityNotStated {
                 requirement: rid(1),
                 modality: Modality::Must,
@@ -1114,7 +1114,7 @@ mod tests {
         one["refines"] = json!(["REQ-001"]);
         two["refines"] = json!(["REQ-001"]);
         assert_eq!(
-            unchecked(graph(vec![parent, one, two], vec![]))
+            unvetted(graph(vec![parent, one, two], vec![]))
                 .document()
                 .warnings(),
             [Warning::VacuousAnd {
@@ -1132,7 +1132,7 @@ mod tests {
         one["refines"] = json!(["REQ-001"]);
         two["refines"] = json!(["REQ-001"]);
         assert_eq!(
-            unchecked(graph(vec![parent, one, two], vec![]))
+            unvetted(graph(vec![parent, one, two], vec![]))
                 .document()
                 .warnings(),
             []
@@ -1147,7 +1147,7 @@ mod tests {
         let mut one = req("REQ-002", "It MAY accept OAuth.", "MAY");
         one["refines"] = json!(["REQ-001"]);
         assert_eq!(
-            unchecked(graph(vec![parent, one], vec![]))
+            unvetted(graph(vec![parent, one], vec![]))
                 .document()
                 .warnings(),
             []
@@ -1157,7 +1157,7 @@ mod tests {
     #[test]
     fn the_canon_example_reports_nothing() {
         let value: Value = serde_json::from_str(TODO_API).unwrap();
-        let report = unchecked(value).report();
+        let report = unvetted(value).report();
         assert!(report.is_clean());
         assert_eq!(report, Report::default());
         assert_eq!(report.findings().count(), 0);
@@ -1168,7 +1168,7 @@ mod tests {
         // REQ-001 is a leaf with a `refinement`, and doesn't state its MUST.
         let mut leaf = req("REQ-001", "There is an endpoint.", "MUST");
         leaf["refinement"] = json!("OR");
-        let report = unchecked(graph(vec![leaf], vec![])).report();
+        let report = unvetted(graph(vec![leaf], vec![])).report();
         assert_eq!(
             report.violations(),
             [Violation::UnexpectedRefinement {
@@ -1186,7 +1186,7 @@ mod tests {
 
     #[test]
     fn a_report_with_only_warnings_is_not_clean() {
-        let report = unchecked(graph(vec![req("REQ-001", "No keyword.", "MAY")], vec![])).report();
+        let report = unvetted(graph(vec![req("REQ-001", "No keyword.", "MAY")], vec![])).report();
         assert!(report.violations().is_empty());
         assert!(!report.is_clean());
     }
@@ -1196,7 +1196,7 @@ mod tests {
         let mut leaf = req("REQ-001", "There is an endpoint.", "MUST");
         leaf["refinement"] = json!("OR");
         let second = req("REQ-002", "Another one.", "SHOULD");
-        let report = unchecked(graph(vec![leaf, second], vec![])).report();
+        let report = unvetted(graph(vec![leaf, second], vec![])).report();
         let findings: Vec<Finding<'_>> = report.findings().collect();
         assert_eq!(
             findings,

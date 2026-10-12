@@ -30,7 +30,7 @@ pub struct SliceArgs {
 /// needs to implement or verify it, rendered as Markdown.
 ///
 /// The specification must break none of its invariants; its findings,
-/// warnings included, are reported on stderr as `slcr check` reports them.
+/// warnings included, are reported on stderr as `slcr vet` reports them.
 /// The slice is written to stdout.
 pub struct Slice {
     terminal: Terminal,
@@ -51,13 +51,13 @@ impl Slice {
 
         tracing::debug!(path = %path.display(), %requirement, "slicing a requirements file");
         let fs = FileSystem::new()?;
-        let unchecked = fs.load_file(file.unchecked())?;
-        let report = unchecked.report();
+        let unvetted = fs.load_file(file.unvetted())?;
+        let report = unvetted.report();
         if !report.is_clean() {
             let findings = FileFindings::new(&path, &report, false);
             self.terminal.write_diagnostic(&findings)?;
         }
-        let Ok(document) = unchecked.into_checked() else {
+        let Ok(document) = unvetted.into_vetted() else {
             return Err(SliceFailed { path }.into());
         };
         let known = document

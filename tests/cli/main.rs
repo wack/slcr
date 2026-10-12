@@ -31,7 +31,6 @@ macro_rules! assert_cmd_snapshot {
     }};
 }
 
-mod check;
 mod global;
 mod init;
 mod query;
@@ -39,6 +38,7 @@ mod render;
 mod slice;
 mod tools;
 mod version;
+mod vet;
 
 /// The canon `TodoListItem` example, in each format.
 const TODO_API_YAML: &str = include_str!("../fixtures/todo-api.spec.yaml");

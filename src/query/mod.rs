@@ -1,7 +1,7 @@
 //! GQL queries over a specification, in the read-only SLCR query profile
 //! that `slcr-gql` implements (see its `PROFILE.md`).
 //!
-//! A [SpecGraph] materializes a checked document into an in-memory property
+//! A [SpecGraph] materializes a vetted document into an in-memory property
 //! graph ([materialize]), runs queries against it, and resolves what they
 //! return into [Cell]s, which name nodes by their SLCR IDs.
 

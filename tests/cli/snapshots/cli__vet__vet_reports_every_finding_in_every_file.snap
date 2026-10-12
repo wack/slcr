@@ -1,9 +1,9 @@
 ---
-source: tests/cli/check.rs
+source: tests/cli/vet.rs
 info:
   program: slcr
   args:
-    - check
+    - vet
     - ok.yaml
     - warned.yaml
     - broken.yaml
@@ -11,6 +11,9 @@ info:
     - invalid.yaml
     - missing.yaml
     - notes.md
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
@@ -52,4 +55,4 @@ Error:
   × notes.md is not a YAML, JSON, or TOML file
   help: a requirements file's name must end in `.yaml`, `.yml`, `.json`, or `.toml`
 
-Error:   × the check failed for 5 of 7 files
+Error:   × vetting failed for 5 of 7 files

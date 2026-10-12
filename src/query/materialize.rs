@@ -3,7 +3,7 @@
 //!
 //! The mapping is the one `slcr-gql` documents in its `PROFILE.md` ("The
 //! SLCR graph") and implements in `slcr_gql::load_spec`, which reads only
-//! JSON. Materializing slcr's own checked document instead reads every
+//! JSON. Materializing slcr's own vetted document instead reads every
 //! format slcr does, through one schema. The tests hold the two to the same
 //! graph, element for element, in the same insertion order: a query without
 //! `ORDER BY` returns rows in insertion order, so order is part of the
@@ -59,7 +59,7 @@ type BoxFuture<'a, T> = std::pin::Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// Load `document` into `store`, returning each node's ID in the store by
 /// its SLCR ID.
 ///
-/// A checked document has unique IDs and no dangling references, so only
+/// A vetted document has unique IDs and no dangling references, so only
 /// the store can fail.
 pub async fn materialize(
     document: &SlcrRequirementsDocument,
