@@ -1,0 +1,28 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: ok
+SPEC.slcr.yml: ok
+src/.validators.slcr.toml: could not be loaded
+
+----- stderr -----
+  × could not parse src/.validators.slcr.toml as TOML
+    ╭─[src/.validators.slcr.toml:11:13]
+ 10 │ requirement = "todo-api/REQ-007"
+ 11 │ criterion = "AC-1"
+    ·             ───┬──
+    ·                ╰── `AC-1` is not a valid acceptance criterion ID
+ 12 │ tool = "cargo-nextest"
+    ╰────
+
+Error:   × vetting failed for 1 of 3 files

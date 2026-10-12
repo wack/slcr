@@ -1,6 +1,7 @@
-//! An SLCR project's specifications: the files its manifest's `specs`
+//! An SLCR project's files: the specifications its manifest's `specs`
 //! patterns match, loaded and indexed by name, so that a qualified
-//! reference such as `todo-api/REQ-002` resolves to its requirement.
+//! reference such as `todo-api/REQ-002` resolves to its requirement, and
+//! the validator files beside the code.
 //!
 //! The rules are those of the manifest schema on the Notion "Schemas"
 //! page and of "SLCR — Tools: Manifest, Descriptors, and Invocation".
@@ -27,9 +28,10 @@ pub(crate) mod problem;
 /// `<spec-name>/REQ-<n>`: a requirement named from outside its spec.
 pub(crate) mod qualified;
 
-/// A specification file of a project, found by [discover].
+/// A file of a project, found by [discover]: a specification or a
+/// validator file.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct SpecFile {
+pub(crate) struct ProjectFile {
     /// Relative to the project root, which orders the project's files.
     relative: PathBuf,
     /// Relative to the working directory: how messages name the file.
@@ -37,10 +39,10 @@ pub(crate) struct SpecFile {
     absolute: PathBuf,
 }
 
-impl SpecFile {
+impl ProjectFile {
     /// The file at `relative` in the project rooted at `root`, named
     /// relative to `cwd`. Both are absolute.
-    fn new(root: &Path, cwd: &Path, relative: PathBuf) -> Self {
+    pub(crate) fn new(root: &Path, cwd: &Path, relative: PathBuf) -> Self {
         let absolute = root.join(&relative);
         Self {
             shown: relative_to(&absolute, cwd),
@@ -60,9 +62,14 @@ impl SpecFile {
         &self.shown
     }
 
-    /// Read the specification without vetting it. Errors name the file by
-    /// its [SpecFile::shown] path.
-    pub(crate) fn load(&self, fs: &FileSystem) -> Result<UnvettedDocument> {
+    /// The absolute path.
+    pub(crate) fn absolute(&self) -> &Path {
+        &self.absolute
+    }
+
+    /// Read the specification in the file without vetting it. Errors name
+    /// the file by its [ProjectFile::shown] path.
+    pub(crate) fn load_spec(&self, fs: &FileSystem) -> Result<UnvettedDocument> {
         let file = RequirementsFile::new(&self.shown)?.unvetted();
         fs.load_file_at(file, &self.absolute)
     }
@@ -117,7 +124,7 @@ mod tests {
 
     #[test]
     fn a_spec_file_is_named_relative_to_the_working_directory() {
-        let file = SpecFile::new(
+        let file = ProjectFile::new(
             Path::new("/p"),
             Path::new("/p/docs"),
             PathBuf::from("specs/a.yaml"),

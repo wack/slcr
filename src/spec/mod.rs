@@ -13,7 +13,7 @@ pub(crate) mod id;
 /// The four node kinds and the Glossary.
 pub(crate) mod node;
 /// Deserializers for fields that canonical form omits when empty.
-mod optional;
+pub(crate) mod optional;
 /// Deserializing tagged nodes without losing the location of errors.
 mod tagged;
 /// Validated strings: titles, Markdown prose, and specification names.

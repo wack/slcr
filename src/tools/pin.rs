@@ -39,6 +39,14 @@ impl Pin {
     pub(crate) fn hex(&self) -> impl Display {
         self.0.to_hex()
     }
+
+    /// The pin cut to its first 12 hex characters and an ellipsis, such
+    /// as `blake3:af1349b9f5f9…`: short enough to name a descriptor in a
+    /// message, and never mistaken for a whole pin.
+    pub(crate) fn abbreviated(&self) -> String {
+        let hex = self.0.to_hex();
+        format!("{PREFIX}{}…", &hex[..12])
+    }
 }
 
 impl FromStr for Pin {
@@ -101,6 +109,11 @@ mod tests {
             pin.hex().to_string(),
             EMPTY.strip_prefix("blake3:").unwrap()
         );
+    }
+
+    #[test]
+    fn an_abbreviated_pin_keeps_twelve_hex_characters() {
+        assert_eq!(Pin::of(b"").abbreviated(), "blake3:af1349b9f5f9…");
     }
 
     #[test]

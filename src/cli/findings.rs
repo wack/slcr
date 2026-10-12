@@ -6,6 +6,7 @@ use std::{
 use miette::{Diagnostic, Severity};
 
 use crate::spec::vet::{Finding, Report};
+use crate::validators::Finding as ValidatorFinding;
 
 /// Whether a file with `report` passes: it breaks no invariant and, if
 /// warnings are denied, has no warning.
@@ -14,7 +15,7 @@ pub(super) fn passes(report: &Report, deny_warnings: bool) -> bool {
 }
 
 /// `count` and `noun`, pluralized: "1 warning", "2 warnings".
-fn counted(count: usize, noun: &str) -> String {
+pub(super) fn counted(count: usize, noun: &str) -> String {
     match count {
         1 => format!("1 {noun}"),
         _ => format!("{count} {noun}s"),
@@ -79,6 +80,41 @@ impl Diagnostic for FileFindings<'_> {
 
     fn related<'b>(&'b self) -> Option<Box<dyn Iterator<Item = &'b dyn Diagnostic> + 'b>> {
         Some(Box::new(self.report.findings().map(Finding::diagnostic)))
+    }
+}
+
+/// Everything vetting found in one validator file, as one error whose
+/// related diagnostics are the findings, each labeling its validator.
+#[derive(Debug)]
+pub(super) struct ValidatorFindings<'a> {
+    headline: String,
+    findings: &'a [ValidatorFinding],
+}
+
+impl<'a> ValidatorFindings<'a> {
+    pub(super) fn new(path: &Path, findings: &'a [ValidatorFinding]) -> Self {
+        Self {
+            headline: format!("{}: {}", path.display(), counted(findings.len(), "problem")),
+            findings,
+        }
+    }
+}
+
+impl Display for ValidatorFindings<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.headline)
+    }
+}
+
+impl std::error::Error for ValidatorFindings<'_> {}
+
+impl Diagnostic for ValidatorFindings<'_> {
+    fn related<'b>(&'b self) -> Option<Box<dyn Iterator<Item = &'b dyn Diagnostic> + 'b>> {
+        Some(Box::new(
+            self.findings
+                .iter()
+                .map(|finding| finding as &dyn Diagnostic),
+        ))
     }
 }
 

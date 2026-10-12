@@ -10,7 +10,7 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use serde::{Deserialize, Deserializer, de::Error as _};
 
 /// Deserialize an optional value that, when present, is not `null`.
-pub(super) fn some<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+pub(crate) fn some<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,

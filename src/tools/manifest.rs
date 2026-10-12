@@ -13,6 +13,7 @@ use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 use super::source::{Source, is_project_relative};
 use super::{DescriptorVersion, ToolKey, pin::Pin};
 use crate::fs::{FileSystem, ReadError, format::Format};
+use crate::project::problem::display;
 use crate::spec::graph::FormatVersion;
 
 /// The project manifest's name. Its directory is the project root.
@@ -261,13 +262,29 @@ pub(crate) struct ManifestFile {
 }
 
 /// The error returned when the manifest declares no tool under a name.
-#[derive(Debug, Error, Diagnostic)]
+///
+/// It serializes like a [crate::project::Problem], with the `code`
+/// `tool-not-declared`.
+#[derive(Debug, Error, PartialEq, Eq, Serialize)]
+#[serde(tag = "code", rename = "tool-not-declared")]
 #[error("{} declares no tool named {key}", .manifest.display())]
-#[diagnostic(help("{help}"))]
 pub struct NotDeclared {
+    #[serde(serialize_with = "display")]
     manifest: PathBuf,
     key: ToolKey,
-    help: String,
+    /// The keys the manifest does declare.
+    declared: Vec<ToolKey>,
+}
+
+impl Diagnostic for NotDeclared {
+    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        let declared: Vec<_> = self.declared.iter().map(ToolKey::as_str).collect();
+        Some(Box::new(if declared.is_empty() {
+            "it declares no tools; declare one with `slcr tools add <SOURCE>`".to_owned()
+        } else {
+            format!("the tools it declares are: {}", declared.join(", "))
+        }))
+    }
 }
 
 impl ManifestFile {
@@ -296,18 +313,10 @@ impl ManifestFile {
 
     /// The entry declared under `key`.
     pub(crate) fn tool(&self, key: &ToolKey) -> Result<&ToolEntry, NotDeclared> {
-        self.manifest.tools.get(key).ok_or_else(|| {
-            let declared: Vec<_> = self.manifest.tools.keys().map(ToolKey::as_str).collect();
-            let help = if declared.is_empty() {
-                "it declares no tools; declare one with `slcr tools add <SOURCE>`".to_owned()
-            } else {
-                format!("the tools it declares are: {}", declared.join(", "))
-            };
-            NotDeclared {
-                manifest: self.shown.clone(),
-                key: key.clone(),
-                help,
-            }
+        self.manifest.tools.get(key).ok_or_else(|| NotDeclared {
+            manifest: self.shown.clone(),
+            key: key.clone(),
+            declared: self.manifest.tools.keys().cloned().collect(),
         })
     }
 
