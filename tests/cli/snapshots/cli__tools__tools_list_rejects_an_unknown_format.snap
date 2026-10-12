@@ -1,0 +1,22 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - list
+    - "--format"
+    - yaml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'yaml' for '--format <FORMAT>'
+  [possible values: human, json]
+
+For more information, try '--help'.

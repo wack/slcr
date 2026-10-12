@@ -3,18 +3,11 @@
 
 use insta::assert_snapshot;
 
-use super::{DATA_DIR, NEXTEST_DESCRIPTOR, Workspace};
+use super::{DATA_DIR, NEXTEST_DESCRIPTOR, Workspace, stored};
 
 /// A manifest that declares no tools yet.
 const MANIFEST: &str =
     "# The project manifest.\nformatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n";
-
-/// Where the descriptor store files a descriptor, relative to the
-/// workspace: under the BLAKE3 hash of its bytes.
-fn stored(descriptor: &str) -> String {
-    let hex = blake3::hash(descriptor.as_bytes()).to_hex();
-    format!("{DATA_DIR}/descriptors/blake3/{hex}.toml")
-}
 
 /// A workspace that is a project with no tools, and the cargo-nextest
 /// descriptor kept in it.
@@ -542,4 +535,123 @@ fn tools_remove_rejects_an_invalid_manifest() {
     workspace.file("SLCR.toml", &invalid);
     assert_cmd_snapshot!(workspace.slcr(&["tools", "remove", "cargo-nextest"]));
     assert_eq!(workspace.read("SLCR.toml"), invalid);
+}
+
+#[test]
+fn tools_update_installs_a_descriptor_that_vet_reports_missing() {
+    let workspace = declared();
+    let installed = stored(NEXTEST_DESCRIPTOR);
+    std::fs::remove_file(workspace.path(&installed)).unwrap();
+    workspace.file("SPEC.slcr.yml", super::TODO_API_YAML);
+    assert!(!workspace.slcr(&["vet"]).status().unwrap().success());
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
+    assert_eq!(workspace.read(&installed), NEXTEST_DESCRIPTOR);
+    assert!(workspace.slcr(&["vet"]).status().unwrap().success());
+}
+
+#[test]
+fn tools_list_help() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "list", "--help"]));
+}
+
+/// [commented], with cargo-nextest's descriptor installed and ast-grep's
+/// not.
+fn half_installed() -> Workspace {
+    let workspace = commented();
+    workspace.install(NEXTEST_DESCRIPTOR);
+    workspace
+}
+
+#[test]
+fn tools_list_lists_every_declared_tool() {
+    let workspace = half_installed();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "list"]));
+    // Listing fetches and installs nothing.
+    assert_eq!(
+        workspace.files(),
+        [
+            stored(NEXTEST_DESCRIPTOR).as_str(),
+            "SLCR.toml",
+            "tools/cargo-nextest.toml"
+        ]
+    );
+}
+
+#[test]
+fn tools_list_reports_in_json() {
+    let workspace = half_installed();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "list", "--format", "json"]));
+}
+
+#[test]
+fn tools_list_reports_a_manifest_without_tools() {
+    assert_cmd_snapshot!(project().slcr(&["tools", "list"]));
+}
+
+#[test]
+fn tools_list_requires_a_manifest() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "list"]));
+}
+
+#[test]
+fn tools_list_rejects_an_unknown_format() {
+    assert_cmd_snapshot!(project().slcr(&["tools", "list", "--format", "yaml"]));
+}
+
+#[test]
+fn tools_show_help() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "show", "--help"]));
+}
+
+#[test]
+fn tools_show_prints_a_declared_tool_s_descriptor() {
+    let workspace = declared();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "show", "cargo-nextest"]));
+}
+
+#[test]
+fn tools_show_reports_in_json() {
+    let workspace = declared();
+    let args = ["tools", "show", "cargo-nextest", "--format", "json"];
+    assert_cmd_snapshot!(workspace.slcr(&args));
+}
+
+#[test]
+fn tools_show_requires_a_declared_tool() {
+    assert_cmd_snapshot!(half_installed().slcr(&["tools", "show", "jev"]));
+}
+
+#[test]
+fn tools_show_reports_a_descriptor_that_is_not_installed() {
+    let workspace = half_installed();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "show", "ast-grep"]));
+    // Nothing was fetched or installed.
+    assert_eq!(workspace.files().len(), 3);
+}
+
+#[test]
+fn tools_show_reports_a_corrupted_descriptor() {
+    let workspace = declared();
+    workspace.file(&stored(NEXTEST_DESCRIPTOR), newer());
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "show", "cargo-nextest"]));
+}
+
+#[test]
+fn tools_show_reports_a_version_the_manifest_does_not_declare() {
+    let workspace = declared();
+    let manifest = workspace
+        .read("SLCR.toml")
+        .replace("version = \"1.0.0\"", "version = \"0.9.0\"");
+    workspace.file("SLCR.toml", manifest);
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "show", "cargo-nextest"]));
+}
+
+#[test]
+fn tools_show_requires_a_manifest() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "show", "cargo-nextest"]));
+}
+
+#[test]
+fn tools_show_rejects_an_invalid_name() {
+    assert_cmd_snapshot!(project().slcr(&["tools", "show", "Nextest"]));
 }

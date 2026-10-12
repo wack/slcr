@@ -1,0 +1,21 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+
+----- stderr -----
+  × the installed descriptor of tool cargo-nextest does not hash to its pin
+  help: the descriptor store's copy changed after it was installed; `slcr tools update cargo-nextest` fetches it from its source and installs it again
+
+Error:   × vetting failed for 1 of 2 files

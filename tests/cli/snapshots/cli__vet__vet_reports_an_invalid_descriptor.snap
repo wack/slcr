@@ -1,0 +1,27 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+
+----- stderr -----
+  × the installed descriptor of tool cargo-nextest is not a valid descriptor
+  ╰─▶   × blake3:564b0234a7c6… is not a valid descriptor
+      
+      Error:
+        × `{with.name}` in `invoke.argv` does not name a field of `validator.schema`
+        help: declare `name` in the validator schema's top-level `properties`, and list it in `required`
+      
+  help: `slcr tools update cargo-nextest` fetches its source again, which must serve a valid descriptor
+
+Error:   × vetting failed for 1 of 2 files

@@ -1,0 +1,52 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "project": {
+    "manifest": "SLCR.toml",
+    "passed": false,
+    "problems": [
+      {
+        "code": "descriptor-version-mismatch",
+        "tool": "cargo-nextest",
+        "declared": "0.9.0",
+        "actual": "1.0.0",
+        "message": "tool cargo-nextest is declared as version 0.9.0, but the descriptor it pins is version 1.0.0",
+        "help": "a tool's version is copied from its descriptor; `slcr tools update cargo-nextest` corrects it"
+      },
+      {
+        "code": "descriptor-not-installed",
+        "tool": "jev",
+        "pin": "blake3:d674de30856dc86a0c28afb5ecdf2b2539800b8fc4e8a6a538e80d8a246f0d6f",
+        "message": "the descriptor tool jev pins is not installed",
+        "help": "`slcr tools update jev` fetches it from its source and installs it, re-pinning the tool if the source serves other bytes now"
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "SPEC.slcr.yml",
+      "passed": true,
+      "violations": 0,
+      "warnings": 0,
+      "findings": []
+    }
+  ],
+  "validators": []
+}
+
+----- stderr -----
+Error:   × vetting failed for 1 of 2 files

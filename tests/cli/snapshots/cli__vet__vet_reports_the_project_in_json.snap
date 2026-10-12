@@ -59,8 +59,17 @@ exit_code: 1
         }
       ]
     }
+  ],
+  "validators": [
+    {
+      "path": "specs/.validators.slcr.yml",
+      "passed": false,
+      "error": {
+        "message": "could not parse specs/.validators.slcr.yml as YAML: unexpected end of input"
+      }
+    }
   ]
 }
 
 ----- stderr -----
-Error:   × vetting failed for 1 of 3 files
+Error:   × vetting failed for 2 of 4 files
