@@ -85,10 +85,17 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   same way, named relative to the working directory. The manifest counts as
   one more file, with its own status line (`SLCR.toml: 2 problems`): it fails
   if it can't be parsed or the project has a `project::Problem`, each written
-  as its own diagnostic. In JSON, those go in a `project` object that only
-  project mode adds, and problems serialize like findings, so renaming a
-  `Problem` variant or field changes that output too. Vetting validator files
-  and pinned descriptors is still to come.
+  as its own diagnostic. Those include each declared tool whose pinned
+  descriptor the store doesn't hold, holds corrupted or invalid, or holds
+  with another version (`tools::pinned`); the store is read, never filled.
+  Then each validator file the walk finds (`src/validators/`) gets a status
+  line (`src/.validators.slcr.toml: 2 problems`) and one diagnostic whose
+  related diagnostics are its `validators::Finding`s, each labeling its
+  validator in the source. In JSON, project problems go in a `project`
+  object and validator files in a `validators` array, both only in project
+  mode, and problems serialize like findings, so renaming a `Problem`
+  variant or field (of `project`, `validators`, or `tools::pinned`) changes
+  that output too.
 - `render [FILE]` renders a specification (default `SPEC.slcr.toml`) as
   Markdown with `render::document`, to FILE's base name plus `.md` beside it
   (`SPEC.slcr.toml` → `SPEC.md`), to `--output PATH`, or to stdout with `-o -`.
@@ -246,9 +253,17 @@ and no caching.
 - `https_server.rs` (tests only) — a local HTTPS server with a throwaway
   certificate authority, and a production `Fetcher` that trusts only it, so
   fetching is tested for real: redirects, statuses, the size cap.
+- `pinned.rs` — `load` reads the descriptor a manifest entry pins from the
+  store, and `version_problem` compares its version with the entry's; each
+  failure is a `DescriptorProblem`, whose help names `slcr tools update`,
+  which re-installs a descriptor the store lost or corrupted. Nothing here
+  fetches: only `add`, `update`, and (eventually) `check` may.
 - `store.rs` — the content-addressed store at
   `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
-  text and returns the pin it filed it under. The data directory is the
+  text and returns the pin it filed it under, and `load` returns the
+  descriptor filed under a pin once its bytes hash to it and it parses,
+  naming it in errors by `Pin::abbreviated`, never by its absolute path.
+  The data directory is the
   `directories` crate's `ProjectDirs::data_dir()`: `$XDG_DATA_HOME/slcr` on
   Linux (`~/.local/share/slcr` if unset), `~/Library/Application
   Support/slcr` on macOS.
@@ -256,10 +271,11 @@ and no caching.
 ## Projects (`src/project/`)
 
 A project's specifications: the files the manifest's `specs` match, loaded
-and indexed by `spec.name`. The rules are the manifest schema's and those on
-"SLCR — Tools: Manifest, Descriptors, and Invocation". Every problem is
-collected, never just the first, as a `Problem` (`problem.rs`), whose paths,
-like `SpecFile::shown`, are relative to the working directory.
+and indexed by `spec.name`, and its validator files. The rules are the
+manifest schema's and those on "SLCR — Tools: Manifest, Descriptors, and
+Invocation". Every problem is collected, never just the first, as a
+`Problem` (`problem.rs`), whose paths, like `ProjectFile::shown`, are
+relative to the working directory.
 
 - `discover.rs` — `discover` expands each pattern under the project root:
   `globset` with `literal_separator`, so `*` never crosses a `/` but does
@@ -271,9 +287,12 @@ like `SpecFile::shown`, are relative to the working directory.
   file matched twice counts once; files are ordered by project-relative
   path. A pattern that is invalid or matches nothing, a match that is a
   validator file (`.validators.slcr.*`) or has no specification format's
-  extension, and an unreadable directory are each a `Problem`.
-- `mod.rs` — `SpecFile`: a discovered file's project-relative, shown, and
-  absolute paths; `load` reads it unvetted through
+  extension, and an unreadable directory are each a `Problem`. The same
+  walk, whatever the patterns, finds every validator file; a second one in
+  a directory is a `DuplicateValidatorFile` problem, and both are still
+  vetted.
+- `mod.rs` — `ProjectFile`: a discovered file's project-relative, shown,
+  and absolute paths; `load_spec` reads a specification unvetted through
   `FileSystem::load_file_at`, so errors name the shown path.
 - `index.rs` — `SpecIndex` borrows loaded specifications by name; a second
   file with a name already taken is a `DuplicateSpecName` problem naming
@@ -286,6 +305,36 @@ like `SpecFile::shown`, are relative to the working directory.
 - `qualified.rs` — `QualifiedRequirementId`, such as `todo-api/REQ-002`: a
   `SpecName`, `/`, and a `RequirementId`, the validator schema's pattern.
   The qualifier is the name, never a path.
+
+## Validators (`src/validators/`)
+
+Validator files, from the validator file JSON Schema on the Notion
+"Schemas" page and the rules on "SLCR — Tools: Manifest, Descriptors, and
+Invocation". Validators are anonymous: a finding names one by its position
+in the file's `validator` array, from 1.
+
+- `file.rs` — `ValidatorFile::load` reads `.validators.slcr.<ext>` in the
+  format its extension names, through `Format::parse`, so a schema error is
+  labeled where it is. `Validator` reuses `QualifiedRequirementId`,
+  `CriterionId`, and `ToolKey`; `with` is a JSON object, never null and
+  never holding a TOML date, and an omitted one is checked as `{}`.
+  `is_identical` compares canonical validators: key order is irrelevant,
+  and an omitted `with` equals `{}`.
+- `locate.rs` — after a file parses, it is read again into a shape that
+  keeps only locations (`toml::Spanned` for TOML, `serde_saphyr::Spanned`
+  for YAML and for JSON, which YAML 1.2 reads), so findings can label the
+  field at fault, cut to its first line. A file it can't map gets no labels.
+- `vet.rs` — `vet` checks the schema's `x-vetInvariants` against a
+  `Context` (the `SpecIndex`, the manifest, and each loaded descriptor's
+  compiled schema): the requirement resolves, the criterion is the
+  requirement's own, the tool is declared, `with` satisfies the tool's
+  validator schema (one finding per schema error, with its JSON Pointer),
+  and no validator repeats an earlier one. A check that depends on one that
+  failed is skipped, as is an unknown specification when some
+  specification couldn't be loaded.
+- `problem.rs` — `Problem` reuses `UnresolvedRequirement`,
+  `UnknownCriterion`, and `NotDeclared`, each serializing with its own
+  `code`; `Finding` adds the validator's position and its label.
 
 ## Queries (`src/query/`)
 
@@ -345,7 +394,8 @@ Two layers, both run by `cargo make test`:
   `AMBIENT` in `main.rs` if a new variable changes output. It also points
   `XDG_DATA_HOME` (read on Linux) and `HOME` (read on macOS) into the
   workspace, so `slcr`'s data directory, and with it the descriptor store,
-  is the workspace's `DATA_DIR`, never the real one. insta-cmd records every
+  is the workspace's `DATA_DIR`, never the real one; `workspace.install(..)`
+  files a descriptor there, at `stored(..)`, as `slcr tools add` would. insta-cmd records every
   variable a command sets in the snapshot's header, so `main.rs` wraps
   `assert_cmd_snapshot!` to redact those two (headers only, never output);
   use the wrapper, not `insta_cmd`'s. Don't `env_clear()`:

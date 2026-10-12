@@ -1,0 +1,23 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+src/.validators.slcr.toml: ok
+src/.validators.slcr.yml: ok
+
+----- stderr -----
+  × src/.validators.slcr.toml and src/.validators.slcr.yml are validator files in the same directory
+  help: a directory holds at most one validator file: move one's validators into the other, and delete it
+
+Error:   × vetting failed for 1 of 4 files

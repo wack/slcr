@@ -31,7 +31,8 @@ exit_code: 1
       ]
     }
   },
-  "files": []
+  "files": [],
+  "validators": []
 }
 
 ----- stderr -----

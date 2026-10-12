@@ -7,13 +7,16 @@ use clap::{Args, ValueEnum};
 use miette::{Diagnostic, IntoDiagnostic, Report as ErrorReport, Result};
 use thiserror::Error;
 
-use super::findings::{FileFindings, passes, tally};
+use super::findings::{FileFindings, ValidatorFindings, counted, passes, tally};
 use crate::Terminal;
 use crate::fs::FileSystem;
 use crate::project::{IndexedSpec, Problem, SpecIndex, discover};
 use crate::spec::file::RequirementsFile;
 use crate::spec::vet::Report;
 use crate::tools::manifest::{ManifestFile, Project};
+use crate::tools::{pinned, store::DescriptorStore};
+use crate::validators::vet::{Context, vet as vet_validators};
+use crate::validators::{Finding, ValidatorFile};
 
 mod json;
 
@@ -21,8 +24,9 @@ mod json;
 #[derive(Args, Clone, Debug)]
 pub struct VetArgs {
     /// The requirements files to vet: `.yaml`, `.yml`, `.json`, or `.toml`.
-    /// Without any, vet the project: SLCR.toml, and every specification
-    /// file its `specs` patterns match.
+    /// Without any, vet the project: SLCR.toml and the descriptors its
+    /// tools pin, every specification file its `specs` patterns match, and
+    /// every validator file.
     #[arg(value_name = "FILE")]
     files: Vec<PathBuf>,
 
@@ -54,11 +58,13 @@ pub enum OutputFormat {
 /// with `--deny-warnings`, has a warning.
 ///
 /// Given no files, it vets the project that holds the working directory:
-/// its manifest, which counts as one more file, and every specification
-/// file the manifest's `specs` patterns match. A problem with the project
-/// as a whole, such as a pattern that matches nothing or two
-/// specifications with the same name, fails the manifest. Either way,
-/// nothing is run and the network is never used.
+/// its manifest, which counts as one more file, every specification file
+/// the manifest's `specs` patterns match, and every validator file. A
+/// problem with the project as a whole, such as a pattern that matches
+/// nothing, two specifications with the same name, or a declared tool
+/// whose pinned descriptor isn't installed, fails the manifest. Either
+/// way, nothing is run and the network is never used: descriptors are read
+/// from the descriptor store only.
 pub struct Vet {
     terminal: Terminal,
     args: VetArgs,
@@ -73,7 +79,8 @@ impl Vet {
         let fs = FileSystem::new()?;
         let (project, outcomes) = if self.args.files.is_empty() {
             let cwd = std::env::current_dir().into_diagnostic()?;
-            let (project, outcomes) = vet_project(&fs, &cwd)?;
+            let store = DescriptorStore::new(&fs);
+            let (project, outcomes) = vet_project(&fs, &store, &cwd)?;
             (Some(project), outcomes)
         } else {
             let outcomes = self
@@ -95,8 +102,9 @@ impl Vet {
         verdict(project.as_ref(), &outcomes, deny_warnings)
     }
 
-    /// Write the project's problems, then each file's findings, to
-    /// stderr, then the manifest's status and each file's to stdout.
+    /// Write the project's problems, then each file's findings, then each
+    /// validator file's, to stderr, then the manifest's status and each
+    /// file's to stdout.
     fn write_human(&self, project: Option<&ProjectOutcome>, outcomes: &[Outcome]) -> Result<()> {
         let deny_warnings = self.args.deny_warnings;
         match project.map(|project| &project.result) {
@@ -118,6 +126,17 @@ impl Vet {
                 Ok(_) => {}
             }
         }
+        let validators = project.map_or(&[][..], |project| &project.validators);
+        for outcome in validators {
+            match &outcome.result {
+                Err(error) => self.terminal.write_diagnostic(error.as_ref())?,
+                Ok(findings) if !findings.is_empty() => {
+                    let findings = ValidatorFindings::new(&outcome.path, findings);
+                    self.terminal.write_diagnostic(&findings)?;
+                }
+                Ok(_) => {}
+            }
+        }
         if let Some(project) = project {
             self.terminal
                 .write_stdout_line(&project.status().to_string())?;
@@ -126,14 +145,24 @@ impl Vet {
             self.terminal
                 .write_stdout_line(&outcome.status().to_string())?;
         }
+        for outcome in validators {
+            self.terminal
+                .write_stdout_line(&outcome.status().to_string())?;
+        }
         Ok(())
     }
 }
 
 /// Vet the project that holds `cwd`, an absolute path: read its manifest,
-/// discover its specification files and vet each, then check that their
-/// names are unique.
-fn vet_project(fs: &FileSystem, cwd: &Path) -> Result<(ProjectOutcome, Vec<Outcome>)> {
+/// and check the descriptor each declared tool pins as `store` holds it;
+/// discover its specification files and validator files; vet each
+/// specification, check that their names are unique, then vet each
+/// validator file against them.
+fn vet_project(
+    fs: &FileSystem,
+    store: &DescriptorStore,
+    cwd: &Path,
+) -> Result<(ProjectOutcome, Vec<Outcome>)> {
     let project = Project::find_from(cwd)?;
     let manifest = project.shown_manifest().to_path_buf();
     tracing::debug!(manifest = %manifest.display(), "vetting a project");
@@ -141,7 +170,12 @@ fn vet_project(fs: &FileSystem, cwd: &Path) -> Result<(ProjectOutcome, Vec<Outco
         Ok(file) => file,
         Err(error) => {
             let result = Err(error);
-            return Ok((ProjectOutcome { manifest, result }, Vec::new()));
+            let project = ProjectOutcome {
+                manifest,
+                result,
+                validators: Vec::new(),
+            };
+            return Ok((project, Vec::new()));
         }
     };
     let discovery = discover(project.root(), cwd, file.manifest().specs());
@@ -155,11 +189,39 @@ fn vet_project(fs: &FileSystem, cwd: &Path) -> Result<(ProjectOutcome, Vec<Outco
             (file, document)
         })
         .collect();
-    let (_, duplicates) = SpecIndex::new(loaded.iter().filter_map(|(file, document)| {
+    let (index, duplicates) = SpecIndex::new(loaded.iter().filter_map(|(file, document)| {
         let document = document.as_ref().ok()?;
         Some(IndexedSpec { file, document })
     }));
     problems.extend(duplicates);
+
+    let (descriptors, unusable) = pinned::load_all(fs, store, file.manifest().tools());
+    problems.extend(unusable.into_iter().map(Problem::Descriptor));
+    // Each loaded descriptor's schema compiled when it was checked.
+    let schemas = descriptors
+        .iter()
+        .filter_map(|(key, descriptor)| {
+            let schema = jsonschema::draft202012::new(descriptor.schema()).ok()?;
+            Some((key.clone(), schema))
+        })
+        .collect();
+    let cx = Context {
+        specs: &index,
+        complete: loaded.iter().all(|(_, document)| document.is_ok()),
+        manifest: &file,
+        schemas: &schemas,
+    };
+    let validators = discovery
+        .validators
+        .into_iter()
+        .map(|file| {
+            tracing::debug!(path = %file.shown().display(), "vetting a validator file");
+            let path = file.shown().to_path_buf();
+            let result = ValidatorFile::load(file).map(|file| vet_validators(&file, &cx));
+            ValidatorOutcome { path, result }
+        })
+        .collect();
+
     let outcomes = loaded
         .into_iter()
         .map(|(file, document)| Outcome {
@@ -168,7 +230,12 @@ fn vet_project(fs: &FileSystem, cwd: &Path) -> Result<(ProjectOutcome, Vec<Outco
         })
         .collect();
     let result = Ok(problems);
-    Ok((ProjectOutcome { manifest, result }, outcomes))
+    let project = ProjectOutcome {
+        manifest,
+        result,
+        validators,
+    };
+    Ok((project, outcomes))
 }
 
 /// What vetting the project as a whole found.
@@ -179,6 +246,45 @@ struct ProjectOutcome {
     /// Every problem with the project, or why the manifest couldn't be
     /// loaded.
     result: Result<Vec<Problem>, ErrorReport>,
+    /// What vetting each validator file found, in the order of their
+    /// paths; none if the manifest couldn't be loaded.
+    validators: Vec<ValidatorOutcome>,
+}
+
+/// What vetting one validator file found.
+#[derive(Debug)]
+struct ValidatorOutcome {
+    /// The file, relative to the working directory.
+    path: PathBuf,
+    /// Every problem with its validators, or why it couldn't be loaded.
+    result: Result<Vec<Finding>, ErrorReport>,
+}
+
+impl ValidatorOutcome {
+    /// Whether the file passes. Its problems are never warnings.
+    fn passes(&self) -> bool {
+        self.result.as_ref().is_ok_and(Vec::is_empty)
+    }
+
+    fn status(&self) -> ValidatorStatus<'_> {
+        ValidatorStatus(self)
+    }
+}
+
+/// A validator file's one-line status, e.g.
+/// `src/.validators.slcr.toml: 2 problems`.
+struct ValidatorStatus<'a>(&'a ValidatorOutcome);
+
+impl Display for ValidatorStatus<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let outcome = self.0;
+        write!(f, "{}: ", outcome.path.display())?;
+        match &outcome.result {
+            Err(_) => f.write_str("could not be loaded"),
+            Ok(findings) if findings.is_empty() => f.write_str("ok"),
+            Ok(findings) => f.write_str(&counted(findings.len(), "problem")),
+        }
+    }
 }
 
 impl ProjectOutcome {
@@ -262,17 +368,23 @@ fn vet_file(fs: &FileSystem, path: &Path) -> Outcome {
 }
 
 /// Succeed if the project, when there is one, and every file pass, or fail
-/// naming how many didn't. The project's manifest counts as a file.
+/// naming how many didn't. The project's manifest and its validator files
+/// count as files.
 fn verdict(
     project: Option<&ProjectOutcome>,
     outcomes: &[Outcome],
     deny_warnings: bool,
 ) -> Result<()> {
     let project_failed = project.is_some_and(|project| !project.passes());
+    let validators = project.map_or(&[][..], |project| &project.validators);
     let failed = outcomes
         .iter()
         .filter(|outcome| !outcome.passes(deny_warnings))
         .count()
+        + validators
+            .iter()
+            .filter(|outcome| !outcome.passes())
+            .count()
         + usize::from(project_failed);
     if failed == 0 {
         return Ok(());
@@ -283,7 +395,7 @@ fn verdict(
         .any(|outcome| !outcome.passes(deny_warnings) && outcome.passes(false));
     Err(VetFailed {
         failed,
-        total: outcomes.len() + usize::from(project.is_some()),
+        total: outcomes.len() + validators.len() + usize::from(project.is_some()),
         warnings_denied,
     }
     .into())
@@ -693,6 +805,73 @@ mod tests {
         ProjectOutcome {
             manifest: PathBuf::from("SLCR.toml"),
             result,
+            validators: Vec::new(),
+        }
+    }
+
+    fn validator_file(path: &str, result: Result<Vec<Finding>, ErrorReport>) -> ValidatorOutcome {
+        ValidatorOutcome {
+            path: PathBuf::from(path),
+            result,
+        }
+    }
+
+    /// A problem with the first validator of a file.
+    fn duplicate() -> Finding {
+        let source = miette::NamedSource::new("v", String::new());
+        Finding::new(
+            2,
+            crate::validators::Problem::DuplicateValidator { first: 1 },
+            None,
+            std::sync::Arc::new(source),
+        )
+    }
+
+    #[test]
+    fn validator_files_count_as_files_in_the_verdict() {
+        let ok = || outcome("ok.json", todo_api());
+        let mut clean = project(Ok(Vec::new()));
+        clean.validators = vec![validator_file("a/.validators.slcr.toml", Ok(Vec::new()))];
+        assert!(verdict(Some(&clean), &[ok()], true).is_ok());
+
+        let mut failing = project(Ok(Vec::new()));
+        failing.validators = vec![
+            validator_file("a/.validators.slcr.toml", Ok(vec![duplicate()])),
+            validator_file(
+                "b/.validators.slcr.json",
+                Err(miette::miette!("unreadable")),
+            ),
+            validator_file("c/.validators.slcr.yml", Ok(Vec::new())),
+        ];
+        assert_eq!(
+            vet_failed(verdict(Some(&failing), &[ok()], false)),
+            VetFailed {
+                failed: 2,
+                total: 5,
+                warnings_denied: false,
+            }
+        );
+    }
+
+    #[test]
+    fn validator_file_statuses_count_their_problems() {
+        let cases = [
+            (validator_file("v.toml", Ok(Vec::new())), "v.toml: ok"),
+            (
+                validator_file("v.toml", Ok(vec![duplicate()])),
+                "v.toml: 1 problem",
+            ),
+            (
+                validator_file("v.toml", Ok(vec![duplicate(), duplicate()])),
+                "v.toml: 2 problems",
+            ),
+            (
+                validator_file("v.toml", Err(miette::miette!("unreadable"))),
+                "v.toml: could not be loaded",
+            ),
+        ];
+        for (outcome, status) in cases {
+            assert_eq!(outcome.status().to_string(), status);
         }
     }
 
@@ -751,6 +930,123 @@ mod tests {
         }
     }
 
+    /// Vet the project that holds `cwd`, with an empty descriptor store.
+    fn vet_in(cwd: &Path) -> Result<(ProjectOutcome, Vec<Outcome>)> {
+        let store = tempfile::tempdir().unwrap();
+        let store = DescriptorStore::at(store.path().join("blake3"));
+        vet_project(&FileSystem::new().unwrap(), &store, cwd)
+    }
+
+    /// The cargo-nextest example on the Schemas page.
+    const NEXTEST: &str = include_str!("../../tests/fixtures/cargo-nextest.descriptor.toml");
+
+    /// A manifest whose `specs` are `specs/*` and that declares
+    /// cargo-nextest, pinned to NEXTEST.
+    fn declaring_nextest() -> String {
+        format!(
+            "formatVersion = \"1\"\nspecs = [\"specs/*\"]\n\n[tools.cargo-nextest]\n\
+             version = \"1.0.0\"\nsource = {{ path = \"nextest.toml\" }}\npin = \"blake3:{}\"\n",
+            blake3::hash(NEXTEST.as_bytes()).to_hex()
+        )
+    }
+
+    /// The messages of the problems with the project.
+    fn problems(project: &ProjectOutcome) -> Vec<String> {
+        let problems = project.result.as_ref().unwrap();
+        problems.iter().map(ToString::to_string).collect()
+    }
+
+    /// The statuses of the project's validator files.
+    fn validator_statuses(project: &ProjectOutcome) -> Vec<String> {
+        project
+            .validators
+            .iter()
+            .map(|outcome| outcome.status().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn the_project_s_validator_files_are_vetted_against_it() {
+        let dir = project_dir(&[
+            ("SLCR.toml", &declaring_nextest()),
+            ("specs/todo.yaml", TODO_API_YAML),
+            (
+                "src/.validators.slcr.toml",
+                "formatVersion = \"1\"\n[[validator]]\nrequirement = \"todo-api/REQ-002\"\n\
+                 tool = \"cargo-nextest\"\nwith = { test = \"a::b\" }\n",
+            ),
+            (
+                "src/api/.validators.slcr.yml",
+                "formatVersion: \"1\"\nvalidator:\n  - requirement: todo-api/REQ-099\n    \
+                 tool: cargo-nextest\n    with: { test: 1 }\n",
+            ),
+            ("src/bad/.validators.slcr.json", "{"),
+        ]);
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = DescriptorStore::at(store_dir.path().join("blake3"));
+        let fs = FileSystem::new().unwrap();
+        store.install(&fs, NEXTEST).unwrap();
+        let cwd = dir.path().join("src");
+        let (project, _) = vet_project(&fs, &store, &cwd).unwrap();
+        assert_eq!(problems(&project), [] as [&str; 0]);
+        assert_eq!(
+            validator_statuses(&project),
+            [
+                ".validators.slcr.toml: ok",
+                "api/.validators.slcr.yml: 2 problems",
+                "bad/.validators.slcr.json: could not be loaded",
+            ]
+        );
+        let findings: Vec<String> = project.validators[1]
+            .result
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(
+            findings,
+            [
+                "validator 1: `todo-api/REQ-099` names REQ-099, which the specification \
+                 `todo-api` (../specs/todo.yaml) doesn't have",
+                "validator 1: `with` at `/test` does not satisfy the validator schema of \
+                 cargo-nextest: 1 is not of type \"string\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn descriptor_problems_count_against_the_manifest() {
+        let dir = project_dir(&[
+            ("SLCR.toml", &declaring_nextest()),
+            ("specs/todo.yaml", TODO_API_YAML),
+            (
+                "src/.validators.slcr.toml",
+                "formatVersion = \"1\"\n[[validator]]\nrequirement = \"todo-api/REQ-002\"\n\
+                 tool = \"cargo-nextest\"\n",
+            ),
+            ("src/.validators.slcr.yaml", "formatVersion: \"1\"\n"),
+        ]);
+        let (project, _) = vet_in(dir.path()).unwrap();
+        assert_eq!(
+            problems(&project),
+            [
+                "src/.validators.slcr.toml and src/.validators.slcr.yaml are validator files in \
+                 the same directory",
+                "the descriptor tool cargo-nextest pins is not installed",
+            ]
+        );
+        assert!(!project.passes());
+        // Without its descriptor, a tool's `with` isn't checked.
+        assert_eq!(
+            validator_statuses(&project),
+            [
+                "src/.validators.slcr.toml: ok",
+                "src/.validators.slcr.yaml: could not be loaded",
+            ]
+        );
+    }
+
     /// A project in a temporary directory, holding `files`.
     fn project_dir(files: &[(&str, &str)]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -786,8 +1082,7 @@ mod tests {
             ),
         ]);
         let cwd = dir.path().join("specs");
-        let fs = FileSystem::new().unwrap();
-        let (project, outcomes) = vet_project(&fs, &cwd).unwrap();
+        let (project, outcomes) = vet_in(&cwd).unwrap();
         assert_eq!(project.manifest, PathBuf::from("../SLCR.toml"));
         assert!(project.passes(), "{:?}", project.result);
         assert_eq!(
@@ -812,8 +1107,7 @@ mod tests {
             ("b.yaml", TODO_API_YAML),
             ("c.yaml", "[unclosed\n"),
         ]);
-        let fs = FileSystem::new().unwrap();
-        let (project, outcomes) = vet_project(&fs, dir.path()).unwrap();
+        let (project, outcomes) = vet_in(dir.path()).unwrap();
         let problems: Vec<String> = project
             .result
             .unwrap()
@@ -834,8 +1128,7 @@ mod tests {
     #[test]
     fn an_unloadable_manifest_vets_no_file() {
         let dir = project_dir(&[("SLCR.toml", "specs = 1\n"), ("a.yaml", TODO_API_YAML)]);
-        let fs = FileSystem::new().unwrap();
-        let (project, outcomes) = vet_project(&fs, dir.path()).unwrap();
+        let (project, outcomes) = vet_in(dir.path()).unwrap();
         let error = project.result.unwrap_err();
         assert!(error.downcast_ref::<ParseError>().is_some(), "{error:?}");
         assert!(outcomes.is_empty());
@@ -844,8 +1137,7 @@ mod tests {
     #[test]
     fn vetting_a_project_needs_one() {
         let dir = project_dir(&[]);
-        let fs = FileSystem::new().unwrap();
-        let err = vet_project(&fs, dir.path()).unwrap_err();
+        let err = vet_in(dir.path()).unwrap_err();
         assert!(err.downcast_ref::<ProjectError>().is_some(), "{err:?}");
     }
 

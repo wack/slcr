@@ -1,0 +1,184 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "project": {
+    "manifest": "SLCR.toml",
+    "passed": true,
+    "problems": []
+  },
+  "files": [
+    {
+      "path": "SPEC.slcr.yml",
+      "passed": true,
+      "violations": 0,
+      "warnings": 0,
+      "findings": []
+    }
+  ],
+  "validators": [
+    {
+      "path": "src/.validators.slcr.toml",
+      "passed": false,
+      "problems": [
+        {
+          "validator": 2,
+          "code": "unknown-spec",
+          "id": "billing/REQ-001",
+          "known": [
+            "todo-api"
+          ],
+          "message": "`billing/REQ-001` names the specification `billing`, which the project doesn't have",
+          "help": "the project's specifications are: todo-api",
+          "labels": [
+            {
+              "line": 9,
+              "column": 15,
+              "offset": 166,
+              "length": 17
+            }
+          ]
+        },
+        {
+          "validator": 3,
+          "code": "unknown-requirement",
+          "id": "todo-api/REQ-099",
+          "path": "SPEC.slcr.yml",
+          "message": "`todo-api/REQ-099` names REQ-099, which the specification `todo-api` (SPEC.slcr.yml) doesn't have",
+          "labels": [
+            {
+              "line": 14,
+              "column": 15,
+              "offset": 273,
+              "length": 18
+            }
+          ]
+        },
+        {
+          "validator": 4,
+          "code": "unknown-criterion",
+          "criterion": "AC-001",
+          "requirement": "todo-api/REQ-001",
+          "path": "SPEC.slcr.yml",
+          "owner": "REQ-007",
+          "criteria": [],
+          "message": "`AC-001` is not an acceptance criterion of `todo-api/REQ-001` (SPEC.slcr.yml)",
+          "help": "AC-001 belongs to REQ-007; REQ-001 has no acceptance criteria",
+          "labels": [
+            {
+              "line": 20,
+              "column": 13,
+              "offset": 410,
+              "length": 8
+            }
+          ]
+        },
+        {
+          "validator": 5,
+          "code": "tool-not-declared",
+          "manifest": "SLCR.toml",
+          "key": "ast-grep",
+          "declared": [
+            "cargo-nextest"
+          ],
+          "message": "SLCR.toml declares no tool named ast-grep",
+          "help": "the tools it declares are: cargo-nextest",
+          "labels": [
+            {
+              "line": 26,
+              "column": 8,
+              "offset": 533,
+              "length": 10
+            }
+          ]
+        },
+        {
+          "validator": 6,
+          "code": "invalid-with",
+          "tool": "cargo-nextest",
+          "pointer": "/test",
+          "reason": "\"\" is shorter than 1 character",
+          "message": "`with` at `/test` does not satisfy the validator schema of cargo-nextest: \"\" is shorter than 1 character",
+          "help": "`slcr tools show cargo-nextest` prints the schema",
+          "labels": [
+            {
+              "line": 32,
+              "column": 8,
+              "offset": 665,
+              "length": 29
+            }
+          ]
+        },
+        {
+          "validator": 6,
+          "code": "invalid-with",
+          "tool": "cargo-nextest",
+          "pointer": "",
+          "reason": "Additional properties are not allowed ('filter' was unexpected)",
+          "message": "`with` does not satisfy the validator schema of cargo-nextest: Additional properties are not allowed ('filter' was unexpected)",
+          "help": "`slcr tools show cargo-nextest` prints the schema",
+          "labels": [
+            {
+              "line": 32,
+              "column": 8,
+              "offset": 665,
+              "length": 29
+            }
+          ]
+        },
+        {
+          "validator": 7,
+          "code": "duplicate-validator",
+          "first": 1,
+          "message": "it is identical to validator 1",
+          "help": "remove one of them: identical validators check the same thing twice",
+          "labels": [
+            {
+              "line": 34,
+              "column": 1,
+              "offset": 696,
+              "length": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/views/.validators.slcr.json",
+      "passed": true,
+      "problems": []
+    },
+    {
+      "path": "src/views/items/.validators.slcr.yml",
+      "passed": false,
+      "error": {
+        "message": "could not parse src/views/items/.validators.slcr.yml as YAML",
+        "labels": [
+          {
+            "message": "`validator` must hold at least one validator",
+            "line": 1,
+            "column": 12,
+            "offset": 11,
+            "length": 1
+          }
+        ]
+      }
+    }
+  ]
+}
+
+----- stderr -----
+Error:   × vetting failed for 2 of 5 files

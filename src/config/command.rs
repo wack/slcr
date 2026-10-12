@@ -21,7 +21,7 @@ pub enum SlcrCommand {
     Slice(SliceArgs),
     /// Run every validator and report whether the requirements are satisfied (not yet implemented)
     Check,
-    /// Report the invariants requirements files break, without running anything
+    /// Report the invariants requirements and validator files break, without running anything
     Vet(VetArgs),
     /// Declare the external tools validators run, in the project manifest `SLCR.toml`
     Tools(ToolsArgs),

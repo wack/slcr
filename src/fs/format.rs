@@ -47,6 +47,9 @@ impl Format {
                 Err(err) => yaml_error(&source, &err),
             },
         };
+        // An empty file has nothing to label, so the message belongs in
+        // the headline.
+        let span = span.filter(|_| !source.is_empty());
         Err(ParseError {
             path: path.to_path_buf(),
             format: self,
@@ -339,9 +342,9 @@ mod tests {
 
     #[test]
     fn json_errors_before_the_first_column_have_an_empty_span() {
-        let err = error(Format::Json, "");
+        let err = error(Format::Json, "\n");
         assert_eq!(err.message(), "EOF while parsing a value");
-        assert_eq!(err.span(), Some(SourceSpan::from((0, 0))));
+        assert_eq!(err.span(), Some(SourceSpan::from((1, 0))));
 
         let err = error(Format::Json, r#"{"name": "x"}"#);
         assert_eq!(err.message(), "missing field `code`");
@@ -395,6 +398,12 @@ mod tests {
         for format in [Format::Json, Format::Toml, Format::Yaml] {
             let err = error(format, "");
             assert!(!err.message().is_empty(), "{format}");
+            // With nothing to label, the headline says what is wrong.
+            assert_eq!(err.span(), None, "{format}");
+            assert_eq!(
+                err.to_string(),
+                format!("could not parse doc as {format}: {}", err.message())
+            );
         }
     }
 
