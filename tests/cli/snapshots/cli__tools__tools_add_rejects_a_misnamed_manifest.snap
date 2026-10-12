@@ -1,0 +1,18 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - cargo-nextest.toml
+  env:
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × slcr.toml is not named SLCR.toml
+  help: the manifest's name is case-sensitive: rename it to SLCR.toml

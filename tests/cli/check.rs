@@ -1,7 +1,5 @@
 //! `slcr check <FILE>... [--deny-warnings] [--format human|json]`.
 
-use insta_cmd::assert_cmd_snapshot;
-
 use super::{TODO_API_JSON, TODO_API_TOML, TODO_API_YAML, Workspace, with_violation, with_warning};
 
 /// A workspace holding one file of each kind `check` tells apart.

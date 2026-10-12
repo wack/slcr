@@ -1,0 +1,21 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - tools/cargo-nextest.toml
+    - "--as"
+    - Nextest
+  env:
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'Nextest' for '--as <NAME>': "Nextest" is not a valid tool name
+
+For more information, try '--help'.

@@ -100,6 +100,18 @@ impl Display for Markdown {
     }
 }
 
+/// Whether `value` is lowercase ASCII letters and digits in dash-separated
+/// words, the schemas' pattern `^[a-z0-9]+(?:-[a-z0-9]+)*$`: specification
+/// names, descriptor names, and manifest keys all take this form.
+pub(crate) fn is_slug(value: &str) -> bool {
+    value.split('-').all(|word| {
+        !word.is_empty()
+            && word
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+    })
+}
+
 /// A specification's name, such as `todo-api`: lowercase ASCII letters and
 /// digits in dash-separated words. It qualifies references to the
 /// specification's nodes.
@@ -124,15 +136,8 @@ impl SpecName {
 impl TryFrom<String> for SpecName {
     type Error = InvalidSpecName;
 
-    /// Mirrors the schema's pattern, `^[a-z0-9]+(?:-[a-z0-9]+)*$`.
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        let valid = value.split('-').all(|word| {
-            !word.is_empty()
-                && word
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
-        });
-        if valid {
+        if is_slug(&value) {
             Ok(Self(value))
         } else {
             Err(InvalidSpecName(value))

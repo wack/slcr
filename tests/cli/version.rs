@@ -1,7 +1,5 @@
 //! `slcr version`.
 
-use insta_cmd::assert_cmd_snapshot;
-
 use super::Workspace;
 
 #[test]

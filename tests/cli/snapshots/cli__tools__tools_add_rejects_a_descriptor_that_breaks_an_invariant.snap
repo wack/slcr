@@ -1,0 +1,21 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - tools/cargo-nextest.toml
+  env:
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × tools/cargo-nextest.toml is not a valid descriptor
+
+Error: 
+  × `{with.name}` in `invoke.argv` does not name a field of `validator.schema`
+  help: declare `name` in the validator schema's top-level `properties`, and list it in `required`
