@@ -1,0 +1,244 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "interrupted": false,
+  "descriptors": [
+    {
+      "tool": "sh",
+      "status": "already-installed"
+    }
+  ],
+  "vet": {
+    "passed": true,
+    "project": {
+      "manifest": "SLCR.toml",
+      "passed": true,
+      "problems": []
+    },
+    "files": [
+      {
+        "path": "SPEC.slcr.yml",
+        "passed": true,
+        "violations": 0,
+        "warnings": 0,
+        "findings": []
+      }
+    ],
+    "validators": [
+      {
+        "path": "src/.validators.slcr.toml",
+        "passed": true,
+        "problems": []
+      },
+      {
+        "path": "src/mail/.validators.slcr.toml",
+        "passed": true,
+        "problems": []
+      }
+    ]
+  },
+  "validators": [
+    {
+      "file": "src/.validators.slcr.toml",
+      "position": 1,
+      "requirement": "shop/REQ-002",
+      "tool": "sh",
+      "outcome": "red",
+      "reason": {
+        "code": "exit-code"
+      },
+      "exitCode": 101,
+      "durationMs": "[DURATION]",
+      "stdout": {
+        "text": "test cart::total ... FAILED\n",
+        "bytes": 28,
+        "truncated": false,
+        "cutOff": false
+      },
+      "stderr": {
+        "text": "expected 3\n",
+        "bytes": 11,
+        "truncated": false,
+        "cutOff": false
+      }
+    },
+    {
+      "file": "src/.validators.slcr.toml",
+      "position": 2,
+      "requirement": "shop/REQ-004",
+      "tool": "sh",
+      "outcome": "green",
+      "exitCode": 0,
+      "durationMs": "[DURATION]",
+      "stdout": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      },
+      "stderr": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      }
+    },
+    {
+      "file": "src/.validators.slcr.toml",
+      "position": 3,
+      "requirement": "shop/REQ-005",
+      "tool": "sh",
+      "outcome": "red",
+      "reason": {
+        "code": "exit-code"
+      },
+      "exitCode": 2,
+      "durationMs": "[DURATION]",
+      "stdout": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      },
+      "stderr": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      }
+    },
+    {
+      "file": "src/mail/.validators.slcr.toml",
+      "position": 1,
+      "requirement": "shop/REQ-006",
+      "tool": "sh",
+      "outcome": "green",
+      "exitCode": 0,
+      "durationMs": "[DURATION]",
+      "stdout": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      },
+      "stderr": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      }
+    },
+    {
+      "file": "src/mail/.validators.slcr.toml",
+      "position": 2,
+      "requirement": "shop/REQ-007",
+      "tool": "sh",
+      "outcome": "green",
+      "exitCode": 0,
+      "durationMs": "[DURATION]",
+      "stdout": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      },
+      "stderr": {
+        "text": "",
+        "bytes": 0,
+        "truncated": false,
+        "cutOff": false
+      }
+    }
+  ],
+  "specs": [
+    {
+      "name": "shop",
+      "file": "SPEC.slcr.yml",
+      "passed": false,
+      "summary": {
+        "satisfied": 4,
+        "unsatisfied": 3,
+        "unknown": 0,
+        "violations": 2,
+        "warnings": 1,
+        "informational": 0,
+        "coverageGaps": 0
+      },
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "status": "unsatisfied"
+        },
+        {
+          "id": "REQ-002",
+          "status": "unsatisfied"
+        },
+        {
+          "id": "REQ-003",
+          "status": "satisfied"
+        },
+        {
+          "id": "REQ-004",
+          "status": "satisfied"
+        },
+        {
+          "id": "REQ-005",
+          "status": "unsatisfied"
+        },
+        {
+          "id": "REQ-006",
+          "status": "satisfied"
+        },
+        {
+          "id": "REQ-007",
+          "status": "satisfied"
+        }
+      ],
+      "findings": [
+        {
+          "code": "unsatisfied",
+          "requirement": "REQ-001",
+          "modality": "MUST",
+          "severity": "violation",
+          "message": "REQ-001, a MUST requirement, is unsatisfied"
+        },
+        {
+          "code": "unsatisfied",
+          "requirement": "REQ-002",
+          "modality": "MUST",
+          "severity": "violation",
+          "message": "REQ-002, a MUST requirement, is unsatisfied"
+        },
+        {
+          "code": "absorbed",
+          "requirement": "REQ-005",
+          "modality": "MUST",
+          "absorbedBy": [
+            "REQ-003"
+          ],
+          "severity": "warning",
+          "message": "REQ-005, a MUST requirement, is unsatisfied, but every requirement it refines is satisfied: REQ-003",
+          "help": "its failure is absorbed: what it refines holds without it"
+        }
+      ],
+      "coverageGaps": []
+    }
+  ]
+}
+
+----- stderr -----
+Error:   × check failed: 2 violations

@@ -1,0 +1,17 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not find SLCR.toml in the working directory or any parent directory
+  help: create SLCR.toml at the project root, with `formatVersion = "1"` and the specification files the project consumes, e.g. `specs = ["SPEC.slcr.toml"]`

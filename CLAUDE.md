@@ -50,11 +50,42 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `dispatch(self) -> miette::Result<()>`. To add a command: add a variant to
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
-- `check` is a stub returning `cli::NotImplemented`. It will run every
-  validator and report whether each requirement is satisfied, unsatisfied, or
-  unknown; it vets the project first, and it is the only command besides
-  `tools add`, `update`, and `install` that may fetch a descriptor missing
-  from the store. "Check" means only this.
+- `check` runs every validator and reports whether each requirement is
+  satisfied, unsatisfied, or unknown (`src/cli/check/`). "Check" means only
+  this. It takes no FILE: it works on the project, found as `vet` finds it.
+  1. Unless `--offline`, it installs every pinned descriptor the store
+     lacks with `tools::install::install`, exactly as `tools install` does
+     (never re-pinning, never writing the manifest), with a status line for
+     each it fetched; a failed install fails it with `InstallFailed`. It is
+     the only command besides `tools add`, `update`, and `install` that may
+     fetch a descriptor.
+  2. It vets the project with `vet::vet_project`, which also returns what
+     loaded (`vet::Loaded`), and writes vet's findings to stderr. If vetting
+     fails, warnings aside (so with `--offline`, a missing descriptor), it
+     writes vet's statuses too and fails with `NotVetted`, running nothing.
+  3. `schedule::run_all` runs every validator in report order (validator
+     file, then position), at most `-j N` at once (default
+     `available_parallelism`), building each `Invocation` just before it
+     runs. Each status line (`src/.validators.slcr.toml validator 1
+     (shop/REQ-002, sh): red (exit 1)`) is written as soon as it and every
+     one before it have finished, so output is the same for any `-j`.
+     Ctrl-C (`tokio::signal::ctrl_c`, listened for before anything starts)
+     aborts every run, which kills its process group, and fails with
+     `Interrupted`.
+  4. Green and red runs become `satisfaction::Verdicts` under their
+     validator's qualified requirement (a spawn failure gives none), and
+     each specification is evaluated. Stderr gets each spawn failure, each
+     red validator (as severe as its requirement's finding, with the last
+     20 lines of its stderr and stdout), and each specification's findings;
+     stdout a summary line each (`shop: 5 satisfied, 2 unsatisfied, 0
+     unknown (1 coverage gap)`).
+
+  It fails with `CheckFailed` if a validator couldn't be run or a finding
+  is a violation, or, with `--deny-warnings`, on any warning, vet's
+  included; unknown requirements and informational findings never fail it.
+  `--format json` writes one document instead (`src/cli/check/json.rs`),
+  which embeds vet's and every validator's whole captured output. No
+  durations appear in human output.
 - `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
   root `SEC-001`, Glossary `SEC-002`) at `FILE`, by default the well-known
   `SPEC.slcr.toml` (`spec::file::DEFAULT_FILE`, also the default FILE of
@@ -242,7 +273,8 @@ reasons gets the greatest.
 `satisfaction::evaluate(document, verdicts)` is a pure function from one
 specification and its validators' `Verdicts` (each requirement's
 `Outcome`s: pass or fail) to an `Evaluation`, following section 6 of the
-low-level design page. It is not wired into `check` yet.
+low-level design page. `check` evaluates each specification with it once
+every validator has run.
 
 - Statuses (`Satisfied`, `Unsatisfied`, `Unknown`) follow strong Kleene
   logic: a result is decided only when every resolution of the unknowns
@@ -305,7 +337,7 @@ and no caching.
   for a descriptor the store lost or corrupted, and `slcr tools update`
   for one whose pinned bytes are invalid or whose version disagrees with
   the entry's. Nothing here fetches: only `add`, `update`, `install`, and
-  (eventually) `check` may. `install.rs` reuses `version_problem`, so
+  `check` may. `install.rs` reuses `version_problem`, so
   `tools install` reports a version mismatch as `vet` does.
 - `store.rs` — the content-addressed store at
   `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
@@ -388,8 +420,8 @@ in the file's `validator` array, from 1.
 ## Running validators (`src/run/`)
 
 Running one validator, by the rules of "SLCR — Tools: Manifest,
-Descriptors, and Invocation". It is a library only: `check` doesn't call
-it yet.
+Descriptors, and Invocation". `check` runs many at once
+(`src/cli/check/schedule.rs`).
 
 - `mod.rs` — `Invocation::new(Target)` resolves everything up front (the
   descriptor, the entry's `with`, the absolute project root and validator
@@ -463,7 +495,7 @@ Two layers, both run by `cargo make test`:
 ## CLI snapshot tests (`tests/cli/`)
 
 `tests/cli/main.rs` is the harness; each subcommand has its own module
-(`init.rs`, `render.rs`, `vet.rs`, `query.rs`, `slice.rs`, `tools.rs`, `version.rs`), and
+(`init.rs`, `render.rs`, `vet.rs`, `check.rs`, `query.rs`, `slice.rs`, `tools.rs`, `version.rs`), and
 `global.rs` covers top-level behavior. Snapshots are in `tests/cli/snapshots/`, named
 `cli__<module>__<name>.snap`, and are committed.
 
@@ -493,9 +525,9 @@ Two layers, both run by `cargo make test`:
   argument and flag of its own, and one for each distinct error path, including
   clap usage errors (exit code 2). Global flags (`--log-level`, its `LOG_LEVEL`
   variable, `--enable-colors`) behave the same for every subcommand, so they're
-  covered once, in `global.rs`; don't repeat them per subcommand. The stub
-  (`check`) has one snapshot, so implementing it shows up as a snapshot
-  change.
+  covered once, in `global.rs`; don't repeat them per subcommand.
+  `check.rs`'s validators run `sh`, a bare name found on PATH, never a
+  path, so they run on any Unix; its Ctrl-C test is Linux-only.
 - **Nondeterminism.** Redact anything that changes between runs with an
   `insta::Settings` filter scoped to the test (see `without_timestamps` in
   `global.rs` and the `[VERSION]` redaction in `version.rs`). Never redact an

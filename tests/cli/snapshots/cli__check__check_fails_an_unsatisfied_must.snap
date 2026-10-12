@@ -1,0 +1,32 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+src/.validators.slcr.toml validator 1 (shop/REQ-002, sh): red (exit 1)
+src/.validators.slcr.toml validator 2 (shop/REQ-004, sh): green
+src/.validators.slcr.toml validator 3 (shop/REQ-005, sh): green
+src/mail/.validators.slcr.toml validator 1 (shop/REQ-006, sh): green
+src/mail/.validators.slcr.toml validator 2 (shop/REQ-007, sh): green
+shop: 5 satisfied, 2 unsatisfied, 0 unknown
+
+----- stderr -----
+  × src/.validators.slcr.toml validator 1 (shop/REQ-002, sh): red (exit 1)
+
+  × shop (SPEC.slcr.yml): 2 violations
+
+Error: 
+  × REQ-001, a MUST requirement, is unsatisfied
+
+Error: 
+  × REQ-002, a MUST requirement, is unsatisfied
+
+Error:   × check failed: 2 violations

@@ -31,6 +31,7 @@ macro_rules! assert_cmd_snapshot {
     }};
 }
 
+mod check;
 mod global;
 mod init;
 mod query;

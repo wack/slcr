@@ -126,31 +126,14 @@ pub(super) fn document(
     outcomes: &[Outcome],
     deny_warnings: bool,
 ) -> String {
-    let validators: Option<Vec<ValidatorFileJson<'_>>> = project.map(|project| {
-        project
-            .validators
-            .iter()
-            .map(ValidatorFileJson::new)
-            .collect()
-    });
-    let project = project.map(ProjectJson::new);
-    let files: Vec<File<'_>> = outcomes
-        .iter()
-        .map(|outcome| File::new(outcome, deny_warnings))
-        .collect();
-    let document = Document {
-        passed: project.as_ref().is_none_or(|project| project.passed)
-            && files.iter().all(|file| file.passed)
-            && validators.iter().flatten().all(|file| file.passed),
-        project,
-        files,
-        validators,
-    };
+    let document = Document::new(project, outcomes, deny_warnings);
     serde_json::to_string_pretty(&document).expect("vetting results serialize to JSON")
 }
 
+/// The JSON document `slcr vet` writes, which `slcr check --format json`
+/// embeds.
 #[derive(Serialize)]
-struct Document<'a> {
+pub(in crate::cli) struct Document<'a> {
     /// Whether the project, if any, and every file passed.
     passed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -159,6 +142,37 @@ struct Document<'a> {
     /// The project's validator files, in project mode only.
     #[serde(skip_serializing_if = "Option::is_none")]
     validators: Option<Vec<ValidatorFileJson<'a>>>,
+}
+
+impl<'a> Document<'a> {
+    /// The document describing `project`, if `vet` vetted one, and
+    /// `outcomes`.
+    pub(in crate::cli) fn new(
+        project: Option<&'a ProjectOutcome>,
+        outcomes: &'a [Outcome],
+        deny_warnings: bool,
+    ) -> Self {
+        let validators: Option<Vec<ValidatorFileJson<'_>>> = project.map(|project| {
+            project
+                .validators
+                .iter()
+                .map(ValidatorFileJson::new)
+                .collect()
+        });
+        let project = project.map(ProjectJson::new);
+        let files: Vec<File<'_>> = outcomes
+            .iter()
+            .map(|outcome| File::new(outcome, deny_warnings))
+            .collect();
+        Self {
+            passed: project.as_ref().is_none_or(|project| project.passed)
+                && files.iter().all(|file| file.passed)
+                && validators.iter().flatten().all(|file| file.passed),
+            project,
+            files,
+            validators,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -360,9 +374,9 @@ enum Severity {
     Warning,
 }
 
-/// Why a file couldn't be loaded.
+/// Why a file couldn't be loaded, or any other error, as JSON.
 #[derive(Serialize)]
-struct ErrorJson {
+pub(in crate::cli) struct ErrorJson {
     message: String,
     /// The errors that caused this one, outermost first.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -374,17 +388,22 @@ struct ErrorJson {
 }
 
 impl ErrorJson {
-    fn new(error: &ErrorReport) -> Self {
-        let diagnostic: &dyn Diagnostic = error.as_ref();
+    pub(in crate::cli) fn new(error: &ErrorReport) -> Self {
+        Self::of(error.as_ref())
+    }
+
+    /// `diagnostic`, with the errors that caused it.
+    pub(in crate::cli) fn of(diagnostic: &dyn Diagnostic) -> Self {
         let labels = diagnostic
             .labels()
             .into_iter()
             .flatten()
             .filter_map(|label| LabelJson::new(diagnostic, &label))
             .collect();
+        let causes = std::iter::successors(diagnostic.source(), |error| error.source());
         Self {
-            message: error.to_string(),
-            causes: error.chain().skip(1).map(ToString::to_string).collect(),
+            message: diagnostic.to_string(),
+            causes: causes.map(ToString::to_string).collect(),
             help: diagnostic.help().map(|help| help.to_string()),
             labels,
         }

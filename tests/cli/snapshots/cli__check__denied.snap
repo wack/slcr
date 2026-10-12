@@ -1,0 +1,32 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--deny-warnings"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+src/.validators.slcr.toml validator 1 (shop/REQ-002, sh): green
+src/.validators.slcr.toml validator 2 (shop/REQ-004, sh): green
+src/.validators.slcr.toml validator 3 (shop/REQ-005, sh): red (exit 2)
+src/mail/.validators.slcr.toml validator 1 (shop/REQ-006, sh): green
+src/mail/.validators.slcr.toml validator 2 (shop/REQ-007, sh): green
+shop: 6 satisfied, 1 unsatisfied, 0 unknown
+
+----- stderr -----
+  × src/.validators.slcr.toml validator 3 (shop/REQ-005, sh): red (exit 2)
+
+  × shop (SPEC.slcr.yml): 1 warning
+
+Warning: 
+  ⚠ REQ-005, a MUST requirement, is unsatisfied, but every requirement it refines is satisfied: REQ-003
+  help: its failure is absorbed: what it refines holds without it
+
+Error:   × check failed: 1 warning
+  help: `--deny-warnings` makes a warning fail the check

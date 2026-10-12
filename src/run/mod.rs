@@ -3,8 +3,7 @@
 //! whose exit code is green or red.
 //!
 //! The rules are those of "SLCR — Tools: Manifest, Descriptors, and
-//! Invocation" in Notion. `slcr check` will run many of these at once; it
-//! isn't wired in yet.
+//! Invocation" in Notion. `slcr check` runs many of these at once.
 
 use std::{
     collections::BTreeMap,

@@ -1,0 +1,32 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: ok
+SPEC.slcr.yml: ok
+src/.validators.slcr.toml: 1 problem
+
+----- stderr -----
+  × src/.validators.slcr.toml: 1 problem
+
+Error: 
+  × validator 2: `shop/REQ-099` names REQ-099, which the specification `shop` (SPEC.slcr.yml) doesn't have
+    ╭─[src/.validators.slcr.toml:9:15]
+  8 │ [[validator]]
+  9 │ requirement = "shop/REQ-099"
+    ·               ──────────────
+ 10 │ tool = "sh"
+    ╰────
+
+Error:   × the project doesn't vet cleanly, so no validator was run
+  ╰─▶ vetting failed for 1 of 3 files
+  help: `slcr vet` reports the same problems; fix them, then check again

@@ -45,9 +45,16 @@ impl Terminal {
     /// Write a diagnostic to stderr, rendered as the error hook renders
     /// errors, followed by a blank line.
     pub fn write_diagnostic(&self, diagnostic: &dyn Diagnostic) -> Result<()> {
+        self.write_diagnostic_with(diagnostic, "")
+    }
+
+    /// Write a diagnostic to stderr as [Terminal::write_diagnostic] does,
+    /// with `details`, lines of text written as given, right under it.
+    pub fn write_diagnostic_with(&self, diagnostic: &dyn Diagnostic, details: &str) -> Result<()> {
         let rendered = render(diagnostic, report_handler(self.stderr.allow_color()))?;
         let term = self.stderr.term();
         term.write_line(rendered.trim_end()).into_diagnostic()?;
+        term.write_str(details).into_diagnostic()?;
         term.write_line("").into_diagnostic()
     }
 
