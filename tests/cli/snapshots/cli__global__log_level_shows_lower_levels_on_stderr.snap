@@ -6,6 +6,9 @@ info:
     - "--log-level"
     - debug
     - render
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
@@ -13,4 +16,4 @@ exit_code: 0
 SPEC.md: rendered todo-api
 
 ----- stderr -----
-[TIMESTAMP] DEBUG rendering a requirements file path=SPEC.slcr.yml output=SPEC.md
+[TIMESTAMP] DEBUG rendering a requirements file path=SPEC.slcr.toml output=SPEC.md

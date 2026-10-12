@@ -14,7 +14,7 @@ const TODO_API_REQ_005_MD: &str = include_str!("../fixtures/todo-api.REQ-005.md"
 /// A workspace holding the canon example at the well-known path.
 fn canon() -> Workspace {
     let workspace = Workspace::new();
-    workspace.file("SPEC.slcr.yml", TODO_API_YAML);
+    workspace.file("SPEC.slcr.toml", TODO_API_TOML);
     workspace
 }
 
@@ -28,7 +28,7 @@ fn slice_reads_the_well_known_file() {
     let workspace = canon();
     assert_cmd_snapshot!(workspace.slcr(&["slice", "REQ-005"]));
     // A slice is written to stdout only.
-    assert_eq!(workspace.files(), ["SPEC.slcr.yml"]);
+    assert_eq!(workspace.files(), ["SPEC.slcr.toml"]);
 }
 
 #[test]

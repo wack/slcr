@@ -1,0 +1,18 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - todo-api.slcr.yml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+todo-api.slcr.yml: created specification todo-api
+SLCR.toml: created project manifest
+
+----- stderr -----

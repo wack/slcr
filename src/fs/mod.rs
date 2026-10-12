@@ -183,6 +183,19 @@ impl FileSystem {
         Ok(())
     }
 
+    /// Fail with [AlreadyExists] if anything, even a dangling symlink, is
+    /// at `path`: for checking, before writing several files, that
+    /// [FileSystem::create_file] will not refuse one of them. Any other
+    /// failure to look is left for the write to report.
+    pub(crate) fn ensure_vacant(&self, path: &Path) -> Result<(), AlreadyExists> {
+        match path.symlink_metadata() {
+            Ok(_) => Err(AlreadyExists {
+                path: path.to_path_buf(),
+            }),
+            Err(_) => Ok(()),
+        }
+    }
+
     /// The bytes of the file at `path`, or `None` if nothing is there.
     pub(crate) fn read_bytes(&self, path: &Path) -> Result<Option<Vec<u8>>, ReadError> {
         match std::fs::read(path) {
@@ -702,6 +715,28 @@ mod tests {
                     "{name}"
                 );
                 assert!(!jail.directory().join(name).exists(), "{name}");
+            }
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn ensure_vacant_refuses_anything_at_the_path() {
+        Jail::expect_with(|jail| {
+            let fs = FileSystem::new().unwrap();
+            assert!(fs.ensure_vacant(Path::new("absent.toml")).is_ok());
+            assert!(fs.ensure_vacant(Path::new("missing/absent.toml")).is_ok());
+            jail.create_file("file.toml", "")?;
+            jail.create_dir("dir.toml")?;
+            #[cfg(unix)]
+            std::os::unix::fs::symlink("nowhere", jail.directory().join("link.toml")).unwrap();
+            #[cfg(unix)]
+            let occupied = ["file.toml", "dir.toml", "link.toml"];
+            #[cfg(not(unix))]
+            let occupied = ["file.toml", "dir.toml"];
+            for name in occupied {
+                let err = fs.ensure_vacant(Path::new(name)).unwrap_err();
+                assert_eq!(err.to_string(), format!("{name} already exists"));
             }
             Ok(())
         });

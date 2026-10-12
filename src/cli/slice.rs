@@ -109,6 +109,7 @@ mod tests {
     use crate::terminal::render_plain;
 
     const TODO_API_YAML: &str = include_str!("../../tests/fixtures/todo-api.spec.yaml");
+    const TODO_API_TOML: &str = include_str!("../../tests/fixtures/todo-api.spec.toml");
 
     /// The arguments `slcr` parses `slice` and then `args` into.
     fn parse(args: &[&str]) -> Result<SliceArgs, clap::Error> {
@@ -156,7 +157,7 @@ mod tests {
     #[test]
     fn slice_reads_the_well_known_file() {
         Jail::expect_with(|jail| {
-            jail.create_file("SPEC.slcr.yml", TODO_API_YAML)?;
+            jail.create_file("SPEC.slcr.toml", TODO_API_TOML)?;
             run(&["REQ-005"]).unwrap();
             Ok(())
         });
@@ -183,17 +184,17 @@ mod tests {
         let cases: [(&dyn Diagnostic, &str); 2] = [
             (
                 &SliceFailed {
-                    path: PathBuf::from("SPEC.slcr.yml"),
+                    path: PathBuf::from("SPEC.slcr.toml"),
                 },
-                "  × could not slice SPEC.slcr.yml, which breaks its invariants\n  \
+                "  × could not slice SPEC.slcr.toml, which breaks its invariants\n  \
                  help: fix the violations reported above, then slice it again\n",
             ),
             (
                 &UnknownRequirement {
                     requirement: RequirementId::new(99),
-                    path: PathBuf::from("SPEC.slcr.yml"),
+                    path: PathBuf::from("SPEC.slcr.toml"),
                 },
-                "  × SPEC.slcr.yml has no requirement REQ-099\n  \
+                "  × SPEC.slcr.toml has no requirement REQ-099\n  \
                  help: `slcr query 'MATCH (r:Requirement) RETURN r, r.title'` lists them\n",
             ),
         ];

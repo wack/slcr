@@ -6,7 +6,7 @@ use std::{
 
 use derive_getters::Getters;
 use miette::{Diagnostic, Result};
-use serde::{Deserialize, Deserializer, de::Error as _};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use thiserror::Error;
 use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
@@ -35,7 +35,7 @@ pub enum ProjectError {
     #[error("could not find {MANIFEST} in the working directory or any parent directory")]
     #[diagnostic(help(
         "create {MANIFEST} at the project root, with `formatVersion = \"1\"` and the \
-         specification files the project consumes, e.g. `specs = [\"SPEC.slcr.yml\"]`"
+         specification files the project consumes, e.g. `specs = [\"SPEC.slcr.toml\"]`"
     ))]
     NotFound,
 
@@ -200,7 +200,7 @@ where
 }
 
 /// A glob relative to the project root, such as `docs/**/*.slcr.toml`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
 pub(crate) struct ProjectGlob(String);
 
@@ -228,6 +228,24 @@ impl ProjectGlob {
 impl Display for ProjectGlob {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+/// The manifest `slcr init` creates for a new project: the format version
+/// and the one specification file it creates, with no tools.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct NewManifest {
+    format_version: FormatVersion,
+    specs: [ProjectGlob; 1],
+}
+
+impl NewManifest {
+    pub(crate) fn new(spec: ProjectGlob) -> Self {
+        Self {
+            format_version: FormatVersion::V1,
+            specs: [spec],
+        }
     }
 }
 
@@ -570,6 +588,21 @@ pin = "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b"
             entry.source().field(),
             ("path", "tools/descriptors/ast-grep.toml")
         );
+    }
+
+    #[test]
+    fn a_new_manifest_reads_back_as_a_manifest() {
+        let spec = ProjectGlob::try_from("specs/api.slcr.toml".to_owned()).unwrap();
+        let written = Format::Toml
+            .serialize(&NewManifest::new(spec.clone()))
+            .unwrap();
+        assert_eq!(
+            written,
+            "formatVersion = \"1\"\nspecs = [\"specs/api.slcr.toml\"]\n"
+        );
+        let manifest = parse(&written).unwrap();
+        assert_eq!(manifest.specs(), &[spec]);
+        assert!(manifest.tools().is_empty());
     }
 
     #[test]
