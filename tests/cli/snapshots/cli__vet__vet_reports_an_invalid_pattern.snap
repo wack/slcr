@@ -1,0 +1,21 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+
+----- stderr -----
+  × `specs` pattern `specs/[a` is not a valid glob: unclosed character class; missing ']'
+  help: `*` and `?` match within one path segment, `**` across segments, `[...]` one character of a class, and `{a,b}` either alternative
+
+Error:   × vetting failed for 1 of 2 files

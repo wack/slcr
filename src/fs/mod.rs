@@ -128,9 +128,17 @@ impl FileSystem {
     /// Open the file and deserialize it with serde, in the format its
     /// extension names.
     pub(crate) fn load_file<F: File>(&self, file: F) -> Result<F::Data> {
+        let path = file.path(self)?;
+        self.load_file_at(file, &path)
+    }
+
+    /// Like [FileSystem::load_file], but read the file from `at`, such as
+    /// its absolute path, while errors name it by its own path, the one
+    /// the user knows it by.
+    pub(crate) fn load_file_at<F: File>(&self, file: F, at: &Path) -> Result<F::Data> {
         let format = format_of(&file)?;
         let path = file.path(self)?;
-        let source = std::fs::read_to_string(&path).map_err(|source| ReadError {
+        let source = std::fs::read_to_string(at).map_err(|source| ReadError {
             path: path.clone(),
             source,
         })?;

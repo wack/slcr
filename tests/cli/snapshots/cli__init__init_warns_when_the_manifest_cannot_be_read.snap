@@ -1,0 +1,21 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "--name"
+    - todo-api
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+SPEC.slcr.toml: created specification todo-api
+SLCR.toml: left the existing project manifest unchanged
+
+----- stderr -----
+  ⚠ could not read SLCR.toml to tell whether its `specs` match SPEC.slcr.toml
+  help: `slcr vet` reports what is wrong with the manifest

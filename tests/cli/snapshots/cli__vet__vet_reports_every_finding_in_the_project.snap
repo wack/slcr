@@ -1,0 +1,36 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--deny-warnings"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: ok
+specs/broken.yaml: 1 violation
+specs/malformed.yaml: could not be loaded
+specs/ok.yaml: ok
+specs/warned.yaml: 1 warning
+
+----- stderr -----
+  × specs/broken.yaml: 1 violation
+
+Error: 
+  × REQ-001 is refined by REQ-002 but has no `refinement`
+  help: set `refinement` to AND, OR, or XOR
+
+  × could not parse specs/malformed.yaml as YAML: unclosed bracket '['
+
+  × specs/warned.yaml: 1 warning
+
+Warning: 
+  ⚠ the body of REQ-003 does not contain its modality keyword, MUST
+
+Error:   × vetting failed for 3 of 5 files
+  help: `--deny-warnings` makes a warning fail the file
