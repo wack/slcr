@@ -19,11 +19,11 @@ use blocks::Blocks;
 use inline::{anchor, escape, escape_html, link};
 
 use crate::slice::{Detail, Members};
-use crate::spec::check;
 use crate::spec::graph::SlcrRequirementsDocument;
 use crate::spec::id::{DependencyId, RequirementId, SectionId, TermId};
 use crate::spec::node::{Refinement, Requirement, Section, SectionChild, Term};
 use crate::spec::text::Title;
+use crate::spec::vet;
 
 mod blocks;
 mod inline;
@@ -108,7 +108,7 @@ impl<'a> Renderer<'a> {
             .chain([(*glossary.id(), glossary.title())])
             .collect();
         let requirements = graph.requirements();
-        let refiners = check::refiners(&requirements);
+        let refiners = vet::refiners(&requirements);
         let requirements = requirements
             .into_iter()
             .map(|requirement| (*requirement.id(), requirement))
@@ -349,7 +349,7 @@ impl<'a> Renderer<'a> {
 
     /// A link to the requirement `id`; its title alone if a slice leaves
     /// it out; or its bare ID if no such requirement exists, which only an
-    /// unchecked document allows.
+    /// unvetted document allows.
     fn requirement_link(&self, id: RequirementId) -> String {
         let included = self.includes(DependencyId::Requirement(id));
         self.requirements.get(&id).map_or_else(
@@ -400,7 +400,7 @@ mod tests {
 
     use super::*;
     use crate::fs::format::Format;
-    use crate::spec::graph::UncheckedDocument;
+    use crate::spec::graph::UnvettedDocument;
     use crate::spec::text::SpecName;
 
     pub(super) const TODO_API_JSON: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
@@ -413,7 +413,7 @@ mod tests {
         serde_json::from_str(TODO_API_JSON).unwrap()
     }
 
-    /// A checked document whose root, SEC-001 "Root", contains `children`,
+    /// A vetted document whose root, SEC-001 "Root", contains `children`,
     /// and whose Glossary, SEC-900, holds `terms`.
     pub(super) fn spec(children: Value, terms: Value) -> SlcrRequirementsDocument {
         serde_json::from_value(spec_value(children, terms)).unwrap()
@@ -1402,7 +1402,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unchecked_document_renders_dangling_references_as_ids() {
+    fn an_unvetted_document_renders_dangling_references_as_ids() {
         let value = spec_value(
             json!([
                 // REQ-002 refines REQ-001, which lacks a `refinement`.
@@ -1418,9 +1418,9 @@ mod tests {
             ]),
             json!([]),
         );
-        let unchecked: UncheckedDocument = serde_json::from_value(value).unwrap();
-        assert!(!unchecked.report().violations().is_empty());
-        let rendered = document(unchecked.document());
+        let unvetted: UnvettedDocument = serde_json::from_value(value).unwrap();
+        assert!(!unvetted.report().violations().is_empty());
+        let rendered = document(unvetted.document());
         assert!(
             rendered.contains(
                 "*Refines:* [Unrefined](#REQ-001), REQ-099\n\

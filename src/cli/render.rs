@@ -82,7 +82,7 @@ fn default_output(input: &Path) -> Result<PathBuf, NoOutputPath> {
 /// Render a specification as Markdown.
 ///
 /// The specification must break none of its invariants; its findings,
-/// warnings included, are reported on stderr as `slcr check` reports them.
+/// warnings included, are reported on stderr as `slcr vet` reports them.
 /// The Markdown replaces the output only if `slcr` rendered what is there,
 /// unless forced, and an output that is already up to date is left as it
 /// is. With `--expect-no-diff`, nothing is written.
@@ -111,13 +111,13 @@ impl Render {
 
         tracing::debug!(path = %path.display(), %output, "rendering a requirements file");
         let fs = FileSystem::new()?;
-        let unchecked = fs.load_file(file.unchecked())?;
-        let report = unchecked.report();
+        let unvetted = fs.load_file(file.unvetted())?;
+        let report = unvetted.report();
         if !report.is_clean() {
             let findings = FileFindings::new(&path, &report, false);
             self.terminal.write_diagnostic(&findings)?;
         }
-        let Ok(document) = unchecked.into_checked() else {
+        let Ok(document) = unvetted.into_vetted() else {
             return Err(RenderFailed { path }.into());
         };
         let markdown = render::document(&document);

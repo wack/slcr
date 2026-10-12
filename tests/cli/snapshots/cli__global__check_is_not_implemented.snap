@@ -3,11 +3,14 @@ source: tests/cli/global.rs
 info:
   program: slcr
   args:
-    - eval
+    - check
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-Error:   × `slcr eval` is not implemented yet
+Error:   × `slcr check` is not implemented yet

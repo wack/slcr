@@ -23,7 +23,7 @@ use crate::spec::graph::FormatVersion;
 /// executable.
 ///
 /// Every descriptor satisfies the descriptor schema and its
-/// `x-checkInvariants` that concern the descriptor alone: its validator
+/// `x-vetInvariants` that concern the descriptor alone: its validator
 /// schema is a valid, self-contained JSON Schema, and every `{with.<field>}`
 /// placeholder names a required scalar field of it. Read one with
 /// [Descriptor::parse].

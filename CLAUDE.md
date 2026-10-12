@@ -50,7 +50,10 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `dispatch(self) -> miette::Result<()>`. To add a command: add a variant to
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
-- `eval` is a stub returning `cli::NotImplemented`.
+- `check` is a stub returning `cli::NotImplemented`. It will run every
+  validator and report whether each requirement is satisfied, unsatisfied, or
+  unknown; it vets the project first, and it is the only command that may
+  fetch a descriptor missing from the store. "Check" means only this.
 - `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
   root `SEC-001`, Glossary `SEC-002`) at `FILE`, by default the well-known
   `SPEC.slcr.yml`. Without `--name`, the spec is named after the file's stem
@@ -58,30 +61,32 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   invalid result is an error, never slugified. `--title` defaults to the name.
   It writes through `FileSystem::create_file`, so it never overwrites anything
   (even a dangling symlink) and never creates a missing directory.
-- `check <FILE>...` loads each requirements file with
-  `RequirementsFile::unchecked()`, writes every finding to stderr as a miette
+- `vet <FILE>...` loads each requirements file with
+  `RequirementsFile::unvetted()`, writes every finding to stderr as a miette
   diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,
-  and fails with `CheckFailed` if any file can't be loaded or breaks an
+  and fails with `VetFailed` if any file can't be loaded or breaks an
   invariant (or has warnings, under `--deny-warnings`). `--format json` writes
-  one JSON document to stdout instead (`src/cli/check/json.rs`); findings
+  one JSON document to stdout instead (`src/cli/vet/json.rs`); findings
   serialize with a kebab-case `code` plus their fields, so renaming a
-  `Violation` or `Warning` variant or field changes that output. Validator-file
-  checks wait on the validator-file schema.
+  `Violation` or `Warning` variant or field changes that output. Like
+  `terraform validate`, `vet` runs nothing and never uses the network.
+  Vetting validator files, the manifest, and pinned descriptors is still to
+  come.
 - `render [FILE]` renders a specification (default `SPEC.slcr.yml`) as
   Markdown with `render::document`, to FILE's base name plus `.md` beside it
   (`SPEC.slcr.yml` → `SPEC.md`), to `--output PATH`, or to stdout with `-o -`.
-  Findings go to stderr as `check` reports them, and a file that breaks an
+  Findings go to stderr as `vet` reports them, and a file that breaks an
   invariant fails with `RenderFailed`. It replaces the output atomically
   (`FileSystem::replace_file`), but only a file that starts with the
   generated-file comment, unless `--force`; an up-to-date output is left
   alone. `--expect-no-diff` writes nothing and fails with `UnexpectedDiff`
   unless the output is already up to date. (The flag avoids the word "check",
-  which is overloaded.)
+  which means running validators.)
 - `query QUERY [FILE]` runs a read-only GQL query (the SLCR query profile of
   `slcr-gql`) against a specification (default `SPEC.slcr.yml`) and writes the
   rows to stdout as an aligned table, or with `--format tsv` / `json`. The
   query is parsed before the file is read; `--param NAME=JSON` binds `$NAME`.
-  Findings go to stderr as `check` reports them, and a file that breaks an
+  Findings go to stderr as `vet` reports them, and a file that breaks an
   invariant fails with `QueryFailed`. Nodes are written as their SLCR IDs and
   edges as `(REQ-004)-[:REFINES]->(REQ-002)` (in JSON, an object with `label`,
   `source`, and `target`). A query that can't run fails with `InvalidQuery`,
@@ -89,7 +94,7 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 - `slice REQUIREMENT [FILE]` writes the slice of one requirement (default file
   `SPEC.slcr.yml`) to stdout as Markdown: `slice::members` finds what it
   includes with GQL, and `render::slice` renders it. Findings go to stderr as
-  `check` reports them; a file that breaks an invariant fails with
+  `vet` reports them; a file that breaks an invariant fails with
   `SliceFailed`, and an ID the file lacks with `UnknownRequirement`. A
   malformed ID is a clap usage error.
 - `tools add SOURCE [--as NAME]` declares a tool in the project manifest,
@@ -119,7 +124,7 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 
 The data model mirrors the specification graph JSON Schema (draft 2020-12) kept
 on the "SLCR Schemas" page in Notion — that page, not this repo, is the source of
-truth for field names, grammar, and the `x-checkInvariants` list.
+truth for field names, grammar, and the `x-vetInvariants` list.
 
 - `graph.rs` — `SlcrRequirementsDocument`: a `root` `Section` containment tree plus a separate
   `glossary` of `Term`s. Cross edges (`refines`, `dependsOn`, `usesTerm`) are ID
@@ -139,12 +144,12 @@ truth for field names, grammar, and the `x-checkInvariants` list.
 - `text.rs` — validated newtypes (`Title`, `Markdown`, `SpecName`) via `TryFrom<String>`.
 - `optional.rs` — canonical form omits empty optional fields; pair these
   deserializers with `#[serde(default)]` so a present field must be non-empty.
-- `check.rs` — invariants the schema can't express. **Deserializing a `SlcrRequirementsDocument`
-  runs `check::invariants` and fails on any `Violation`**; non-fatal findings are
+- `vet.rs` — invariants the schema can't express. **Deserializing a `SlcrRequirementsDocument`
+  runs `vet::invariants` and fails on any `Violation`**; non-fatal findings are
   `Warning`s, exposed separately via `SlcrRequirementsDocument::warnings()`. All violations are
   collected and reported together, in document order. To see the findings
-  instead of failing, read an `UncheckedDocument` (or load
-  `RequirementsFile::unchecked()`), whose `report()` returns a `check::Report`
+  instead of failing, read an `UnvettedDocument` (or load
+  `RequirementsFile::unvetted()`), whose `report()` returns a `vet::Report`
   of every violation and warning.
 - `file.rs` — `RequirementsFile`, a caller-chosen path whose extension selects the
   format.
@@ -210,7 +215,7 @@ and no caching.
   in place (`set_tool`, `repin_tool`, `remove_tool`), whether `tools` is
   written as `[tools.*]` headers or as an inline table.
 - `descriptor.rs` — `Descriptor::parse` checks the schema's grammar through
-  serde, then the `x-checkInvariants` that concern the descriptor alone:
+  serde, then the `x-vetInvariants` that concern the descriptor alone:
   `validator.schema` compiles as a self-contained draft 2020-12 schema of
   `type = "object"`, and every `{with.<field>}` names a required scalar
   property. Argument templates are parsed into `Segment`s up front.
@@ -236,7 +241,7 @@ and no caching.
 runs queries against any `GraphStore`. Its `PROFILE.md` specifies the query
 language and the graph a specification maps to.
 
-- `materialize.rs` — loads a checked `SlcrRequirementsDocument` into a
+- `materialize.rs` — loads a vetted `SlcrRequirementsDocument` into a
   `GraphStoreMut`, following that mapping. `slcr_gql::load_spec` implements
   the same mapping from JSON alone; the tests hold the two to the same graph,
   element for element and **in the same insertion order** (rows without
@@ -274,7 +279,7 @@ Two layers, both run by `cargo make test`:
 ## CLI snapshot tests (`tests/cli/`)
 
 `tests/cli/main.rs` is the harness; each subcommand has its own module
-(`init.rs`, `render.rs`, `check.rs`, `query.rs`, `slice.rs`, `tools.rs`, `version.rs`), and
+(`init.rs`, `render.rs`, `vet.rs`, `query.rs`, `slice.rs`, `tools.rs`, `version.rs`), and
 `global.rs` covers top-level behavior. Snapshots are in `tests/cli/snapshots/`, named
 `cli__<module>__<name>.snap`, and are committed.
 
@@ -304,7 +309,7 @@ Two layers, both run by `cargo make test`:
   clap usage errors (exit code 2). Global flags (`--log-level`, its `LOG_LEVEL`
   variable, `--enable-colors`) behave the same for every subcommand, so they're
   covered once, in `global.rs`; don't repeat them per subcommand. The stub
-  (`eval`) has one snapshot, so implementing it shows up as a snapshot
+  (`check`) has one snapshot, so implementing it shows up as a snapshot
   change.
 - **Nondeterminism.** Redact anything that changes between runs with an
   `insta::Settings` filter scoped to the test (see `without_timestamps` in

@@ -47,7 +47,7 @@ fn parse_title(value: &str) -> Result<Title, InvalidTitle> {
 
 /// Create a specification with its root and Glossary sections.
 ///
-/// The file's extension selects its format, as it does for `slcr check`.
+/// The file's extension selects its format, as it does for `slcr vet`.
 /// The command never overwrites anything: it fails if the file exists, and
 /// it doesn't create a missing directory.
 pub struct Init {
@@ -456,7 +456,7 @@ title = "Glossary"
     }
 
     #[test]
-    fn the_created_file_loads_and_passes_the_strictest_check() {
+    fn the_created_file_loads_and_passes_the_strictest_vetting() {
         Jail::expect_with(|_| {
             let paths = ["new.yaml", "new.yml", "new.json", "new.toml"];
             for path in paths {
@@ -469,15 +469,9 @@ title = "Glossary"
                 assert_eq!(document, expected, "{path}");
                 assert!(document.warnings().is_empty(), "{path}");
             }
-            let argv = [
-                "slcr",
-                "--enable-colors",
-                "never",
-                "check",
-                "--deny-warnings",
-            ]
-            .into_iter()
-            .chain(paths);
+            let argv = ["slcr", "--enable-colors", "never", "vet", "--deny-warnings"]
+                .into_iter()
+                .chain(paths);
             let cli = Cli::parse_from(argv);
             let terminal = Terminal::new(&cli);
             cli.cmd().clone().unwrap().dispatch(terminal).unwrap();

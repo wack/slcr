@@ -1,9 +1,12 @@
 ---
-source: tests/cli/check.rs
+source: tests/cli/vet.rs
 info:
   program: slcr
   args:
-    - check
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 2
@@ -13,6 +16,6 @@ exit_code: 2
 error: the following required arguments were not provided:
   <FILE>...
 
-Usage: slcr check <FILE>...
+Usage: slcr vet <FILE>...
 
 For more information, try '--help'.

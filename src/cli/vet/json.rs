@@ -1,4 +1,4 @@
-//! `slcr check --format json`: one JSON document describing every file and
+//! `slcr vet --format json`: one JSON document describing every file and
 //! finding, for agents and CI to consume.
 //!
 //! ```json
@@ -42,7 +42,7 @@ use miette::{Diagnostic, LabeledSpan, Report as ErrorReport};
 use serde::Serialize;
 
 use super::Outcome;
-use crate::spec::check::Finding;
+use crate::spec::vet::Finding;
 
 /// The JSON document describing `outcomes`.
 pub(super) fn document(outcomes: &[Outcome], deny_warnings: bool) -> String {
@@ -54,7 +54,7 @@ pub(super) fn document(outcomes: &[Outcome], deny_warnings: bool) -> String {
         passed: files.iter().all(|file| file.passed),
         files,
     };
-    serde_json::to_string_pretty(&document).expect("check results serialize to JSON")
+    serde_json::to_string_pretty(&document).expect("vetting results serialize to JSON")
 }
 
 #[derive(Serialize)]
@@ -76,7 +76,7 @@ struct File<'a> {
 impl<'a> File<'a> {
     fn new(outcome: &'a Outcome, deny_warnings: bool) -> Self {
         let result = match &outcome.result {
-            Ok(report) => FileResult::Checked {
+            Ok(report) => FileResult::Vetted {
                 violations: report.violations().len(),
                 warnings: report.warnings().len(),
                 findings: report.findings().map(FindingJson::new).collect(),
@@ -96,7 +96,7 @@ impl<'a> File<'a> {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum FileResult<'a> {
-    Checked {
+    Vetted {
         violations: usize,
         warnings: usize,
         findings: Vec<FindingJson<'a>>,
@@ -221,9 +221,9 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::cli::check::check_file;
+    use crate::cli::vet::vet_file;
     use crate::fs::FileSystem;
-    use crate::spec::graph::UncheckedDocument;
+    use crate::spec::graph::UnvettedDocument;
 
     const TODO_API_JSON: &str = include_str!("../../../tests/fixtures/todo-api.spec.json");
 
@@ -232,7 +232,7 @@ mod tests {
     }
 
     fn outcome(path: &str, value: Value) -> Outcome {
-        let report = serde_json::from_value::<UncheckedDocument>(value)
+        let report = serde_json::from_value::<UnvettedDocument>(value)
             .unwrap()
             .report();
         Outcome {
@@ -347,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_check_passes() {
+    fn vetting_nothing_passes() {
         assert_eq!(parsed(&[], false), json!({ "passed": true, "files": [] }));
     }
 
@@ -361,7 +361,7 @@ mod tests {
             let fs = FileSystem::new().unwrap();
             let outcomes: Vec<Outcome> = ["malformed.json", "missing.yaml", "spec.md"]
                 .into_iter()
-                .map(|name| check_file(&fs, Path::new(name)))
+                .map(|name| vet_file(&fs, Path::new(name)))
                 .collect();
             let document = parsed(&outcomes, false);
             assert_eq!(document["passed"], false);
@@ -411,7 +411,7 @@ mod tests {
             let source = r#"{"$schema": "é", "formatVersion": "1", "spec": 7}"#;
             jail.create_file("bad.json", source)?;
             let fs = FileSystem::new().unwrap();
-            let outcome = check_file(&fs, Path::new("bad.json"));
+            let outcome = vet_file(&fs, Path::new("bad.json"));
             let document = parsed(&[outcome], false);
             let label = &document["files"][0]["error"]["labels"][0];
             assert!(label["line"].as_u64().is_some(), "{document:#}");
