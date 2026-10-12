@@ -28,11 +28,16 @@ serde_json = "1.0"
 slcr-gql = { git = "https://github.com/wack/gql-rust", rev = "e505107aced5501c80ee850701dfeff1c5ef079c" }
 tempfile = "3"
 thiserror = "2.0"
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["io-util", "process", "rt-multi-thread", "time"] }
 toml = { version = "0.8.8", features = ["preserve_order"] }
 toml_edit = "0.22"
 tracing = { version = "0.1.41", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.19", features = ["chrono", "fmt", "env-filter"] }
+
+# Killing a timed-out validator's whole process group through a safe API:
+# the crate forbids `unsafe_code`, and std can only kill the direct child.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.5", default-features = false, features = ["process", "std"] }
 
 [dev-dependencies]
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
