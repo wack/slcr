@@ -4,8 +4,6 @@
 //! `tests/fixtures/todo-api.md`; these tests pin what the command reports
 //! and which files it writes.
 
-use insta_cmd::assert_cmd_snapshot;
-
 use super::{TODO_API_MD, TODO_API_YAML, Workspace, with_violation, with_warning};
 
 /// A workspace holding the canon example at the well-known path.

@@ -1,7 +1,6 @@
 //! `slcr init [FILE] [--name NAME] [--title TITLE]`.
 
 use insta::assert_snapshot;
-use insta_cmd::assert_cmd_snapshot;
 
 use super::Workspace;
 

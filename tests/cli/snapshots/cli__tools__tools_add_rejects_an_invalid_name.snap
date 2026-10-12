@@ -9,7 +9,7 @@ info:
     - "--as"
     - Nextest
   env:
-    SLCR_DATA_DIR: ".data"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 2

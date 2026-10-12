@@ -3,8 +3,6 @@
 //! The query engine's semantics are `slcr-gql`'s to test; these tests pin
 //! what the command reports, how it writes rows, and how it names nodes.
 
-use insta_cmd::assert_cmd_snapshot;
-
 use super::{
     TODO_API_JSON, TODO_API_MD, TODO_API_TOML, TODO_API_YAML, Workspace, with_violation,
     with_warning,

@@ -1,7 +1,6 @@
 //! `slcr tools add SOURCE [--as NAME]`.
 
 use insta::assert_snapshot;
-use insta_cmd::assert_cmd_snapshot;
 
 use super::{DATA_HOME, NEXTEST_DESCRIPTOR, Workspace};
 
@@ -13,7 +12,7 @@ const MANIFEST: &str =
 /// workspace: under the BLAKE3 hash of its bytes.
 fn stored(descriptor: &str) -> String {
     let hex = blake3::hash(descriptor.as_bytes()).to_hex();
-    format!("{DATA_HOME}/descriptors/blake3/{hex}.toml")
+    format!("{DATA_HOME}/slcr/descriptors/blake3/{hex}.toml")
 }
 
 /// A workspace that is a project with no tools, and the cargo-nextest
@@ -175,7 +174,25 @@ fn tools_add_reports_a_descriptor_store_it_cannot_create() {
     let workspace = project();
     // A file where the data directory would be.
     workspace.file(DATA_HOME, "");
-    assert_cmd_snapshot!(workspace.slcr(&["tools", "add", "tools/cargo-nextest.toml"]));
+    let output = workspace
+        .slcr(&["tools", "add", "tools/cargo-nextest.toml"])
+        .output()
+        .unwrap();
+    // Not a snapshot: the error rightly names the store, which is under the
+    // absolute `XDG_DATA_HOME` the workspace sets, so it differs on every
+    // run. It is checked exactly instead.
+    let store = workspace.path(DATA_HOME).join("slcr/descriptors/blake3");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "Error:   × could not create the descriptor store at {}\n  ╰─▶ Not a directory (os \
+             error 20)\n  help: set XDG_DATA_HOME to a directory slcr can write to, to keep its \
+             data there\n\n",
+            store.display()
+        )
+    );
     assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
 }
 

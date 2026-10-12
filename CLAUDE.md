@@ -215,7 +215,9 @@ and no caching.
 - `store.rs` — the content-addressed store at
   `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
   text and returns the pin it filed it under. The data directory is
-  `$SLCR_DATA_DIR`, else the platform's (`$XDG_DATA_HOME/slcr` on Linux).
+  `$XDG_DATA_HOME/slcr` on every platform, as the spec requires (an unset
+  or relative `XDG_DATA_HOME` falls back to the platform's data directory,
+  which on Linux is the XDG default, `~/.local/share/slcr`).
 
 ## Queries (`src/query/`)
 
@@ -271,9 +273,11 @@ Two layers, both run by `cargo make test`:
   every run. `slcr()` removes `LOG_LEVEL`, `CLICOLOR`, `CLICOLOR_FORCE`, and
   `NO_COLOR` so the developer's or CI's environment can't leak in; add to
   `AMBIENT` in `main.rs` if a new variable changes output. It also sets
-  `SLCR_DATA_DIR=.data`, so the descriptor store lands in the workspace, not
-  the real data directory; keep it relative, because insta-cmd records every
-  variable a command sets in the snapshot's header. Don't `env_clear()`:
+  `XDG_DATA_HOME` to the workspace's `.data`, so the descriptor store lands
+  in the workspace, not the real data directory. insta-cmd records every
+  variable a command sets in the snapshot's header, so `main.rs` wraps
+  `assert_cmd_snapshot!` to redact that one (headers only, never output);
+  use the wrapper, not `insta_cmd`'s. Don't `env_clear()`:
   coverage collection relies on inherited variables.
 - **What to snapshot.** `assert_cmd_snapshot!(command)` records the exit code,
   stdout, and stderr. Assert side effects too: `workspace.files()` for what was

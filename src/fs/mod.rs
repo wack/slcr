@@ -22,10 +22,9 @@ pub(crate) mod format;
 /// The name of the application as used on the filesystem for XDG conventions.
 const APPLICATION_NAME: &str = "slcr";
 
-/// The environment variable that overrides [FileSystem::data_dir], the
-/// way `CARGO_HOME` overrides Cargo's: for sandboxes, CI caches, and
-/// tests. A relative path is relative to the working directory.
-pub(crate) const DATA_DIR_VARIABLE: &str = "SLCR_DATA_DIR";
+/// The XDG Base Directory variable that names the base directory for
+/// user-specific data files.
+const XDG_DATA_HOME: &str = "XDG_DATA_HOME";
 
 /// An abstraction over the user's filesystem ensuring mediated
 /// access to the most commonly used files.
@@ -247,14 +246,15 @@ impl FileSystem {
     }
 
     /// The directory for data that persists between runs, such as
-    /// installed descriptors: `$SLCR_DATA_DIR` if it is set, and otherwise
-    /// the platform's data directory, `$XDG_DATA_HOME/slcr` on Linux. It
-    /// may not exist yet.
+    /// installed descriptors: `$XDG_DATA_HOME/slcr`. It may not exist yet.
+    ///
+    /// `$XDG_DATA_HOME` is honored on every platform, as the descriptor
+    /// store's specification requires, even where the platform's own
+    /// convention is another directory (macOS's is `~/Library/Application
+    /// Support`). Where it is unset, the platform's data directory is used,
+    /// which on Linux is the XDG default, `~/.local/share/slcr`.
     pub(crate) fn data_dir(&self) -> PathBuf {
-        data_dir(
-            std::env::var_os(DATA_DIR_VARIABLE),
-            self.xdg_dirs.data_dir(),
-        )
+        data_dir(std::env::var_os(XDG_DATA_HOME), self.xdg_dirs.data_dir())
     }
 
     /// Returns the expected directory for this particular file type.
@@ -262,7 +262,7 @@ impl FileSystem {
         match typ {
             DirectoryType::Cache => Ok(self.xdg_dirs.cache_dir().to_path_buf()),
             DirectoryType::Pwd => std::env::current_dir().into_diagnostic(),
-            DirectoryType::Data => Ok(self.xdg_dirs.data_dir().to_path_buf()),
+            DirectoryType::Data => Ok(self.data_dir()),
         }
     }
 
@@ -289,11 +289,13 @@ impl FileSystem {
     }
 }
 
-/// The data directory: `variable`, the value of [DATA_DIR_VARIABLE], unless
-/// it is unset or empty, and otherwise `platform`.
-fn data_dir(variable: Option<std::ffi::OsString>, platform: &Path) -> PathBuf {
-    match variable {
-        Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+/// The data directory: `slcr` in `xdg_data_home`, the value of
+/// `$XDG_DATA_HOME`, and otherwise `platform`. The XDG Base Directory
+/// Specification says a relative path (including an empty one) is invalid
+/// and must be ignored.
+fn data_dir(xdg_data_home: Option<std::ffi::OsString>, platform: &Path) -> PathBuf {
+    match xdg_data_home.map(PathBuf::from) {
+        Some(base) if base.is_absolute() => base.join(APPLICATION_NAME),
         _ => platform.to_path_buf(),
     }
 }
@@ -921,14 +923,15 @@ mod tests {
     }
 
     #[test]
-    fn the_data_directory_can_be_overridden() {
-        let platform = Path::new("/home/me/.local/share/slcr");
+    fn the_data_directory_is_under_xdg_data_home() {
+        let platform = Path::new("/Users/me/Library/Application Support/slcr");
+        assert_eq!(
+            data_dir(Some("/srv/data".into()), platform),
+            Path::new("/srv/data/slcr")
+        );
+        // Unset, empty, or relative: the platform's directory.
         assert_eq!(data_dir(None, platform), platform);
         assert_eq!(data_dir(Some("".into()), platform), platform);
-        assert_eq!(data_dir(Some(".data".into()), platform), Path::new(".data"));
-        assert_eq!(
-            data_dir(Some("/srv/slcr".into()), platform),
-            Path::new("/srv/slcr")
-        );
+        assert_eq!(data_dir(Some(".data".into()), platform), platform);
     }
 }

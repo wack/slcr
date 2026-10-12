@@ -7,7 +7,7 @@ info:
     - add
     - tools/cargo-nextest.toml
   env:
-    SLCR_DATA_DIR: ".data"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0

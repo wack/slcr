@@ -34,7 +34,7 @@ tracing-subscriber = { version = "0.3.19", features = ["chrono", "fmt", "env-fil
 
 [dev-dependencies]
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
-insta = { version = "1", features = ["filters"] }
+insta = { version = "1", features = ["filters", "redactions"] }
 insta-cmd = "0.7"
 pulldown-cmark = { version = "0.13", default-features = false }
 rcgen = "0.14.10"
