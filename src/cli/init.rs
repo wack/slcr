@@ -87,15 +87,17 @@ impl Init {
         // A project found in a parent directory is left alone too:
         // projects don't nest.
         let manifest = match Project::find_from(&cwd) {
-            Ok(project) => Manifest::Existing(project.shown_manifest().to_path_buf()),
-            Err(ProjectError::NotFound) => Manifest::New(NewManifest::new(listed(&path, &cwd)?)),
+            Ok(project) => ManifestStatus::Existing(project.shown_manifest().to_path_buf()),
+            Err(ProjectError::NotFound) => {
+                ManifestStatus::New(NewManifest::new(listed(&path, &cwd)?))
+            }
             Err(err) => return Err(err.into()),
         };
         tracing::debug!(path = %path.display(), %name, "creating a requirements file");
         let document = SlcrRequirementsDocument::new(name, title);
         let new_manifest = match &manifest {
-            Manifest::New(contents) => Some((NewManifestFile::new(MANIFEST), contents)),
-            Manifest::Existing(_) => None,
+            ManifestStatus::New(contents) => Some((NewManifestFile::new(MANIFEST), contents)),
+            ManifestStatus::Existing(_) => None,
         };
         create(&FileSystem::new()?, &file, &document, new_manifest)?;
         let created = Created {
@@ -109,14 +111,14 @@ impl Init {
 
 /// What `slcr init` does with the project manifest, which it reports as
 /// its status, e.g. `SLCR.toml: created project manifest`.
-enum Manifest {
+enum ManifestStatus {
     /// Create one in the working directory, with these contents.
     New(NewManifest),
     /// Leave alone the one at this path, relative to the working directory.
     Existing(PathBuf),
 }
 
-impl Display for Manifest {
+impl Display for ManifestStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::New(_) => write!(f, "{MANIFEST}: created project manifest"),
@@ -996,11 +998,11 @@ title = "Glossary"
     fn the_status_says_what_became_of_the_manifest() {
         let spec = ProjectGlob::try_from("SPEC.slcr.toml".to_owned()).unwrap();
         assert_eq!(
-            Manifest::New(NewManifest::new(spec)).to_string(),
+            ManifestStatus::New(NewManifest::new(spec)).to_string(),
             "SLCR.toml: created project manifest"
         );
         assert_eq!(
-            Manifest::Existing(PathBuf::from("../SLCR.toml")).to_string(),
+            ManifestStatus::Existing(PathBuf::from("../SLCR.toml")).to_string(),
             "../SLCR.toml: left the existing project manifest unchanged"
         );
     }
