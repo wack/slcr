@@ -241,8 +241,8 @@ reasons gets the greatest.
 
 `satisfaction::evaluate(document, verdicts)` is a pure function from one
 specification and its validators' `Verdicts` (each requirement's
-`Outcome`s: pass, fail, or undecided) to an `Evaluation`, following section
-6 of the low-level design page. It is not wired into `check` yet.
+`Outcome`s: pass or fail) to an `Evaluation`, following section 6 of the
+low-level design page. It is not wired into `check` yet.
 
 - Statuses (`Satisfied`, `Unsatisfied`, `Unknown`) follow strong Kleene
   logic: a result is decided only when every resolution of the unknowns

@@ -35,9 +35,6 @@ use crate::spec::vet;
 pub enum Outcome {
     Pass,
     Fail,
-    /// The validator couldn't decide, so it asserts nothing: the
-    /// requirement can't be satisfied by it, but isn't failed by it either.
-    Undecided,
 }
 
 impl Outcome {
@@ -45,7 +42,6 @@ impl Outcome {
         match self {
             Self::Pass => Status::Satisfied,
             Self::Fail => Status::Unsatisfied,
-            Self::Undecided => Status::Unknown,
         }
     }
 }
@@ -87,8 +83,8 @@ impl FromIterator<(RequirementId, Outcome)> for Verdicts {
 pub enum Status {
     Satisfied,
     Unsatisfied,
-    /// Undecided: some resolution of what no validator has settled would
-    /// satisfy it, and another would not.
+    /// Not yet decided: some resolution of what no validator has settled
+    /// would satisfy it, and another would not.
     Unknown,
 }
 
@@ -455,7 +451,7 @@ fn status(
 mod tests {
     use serde_json::{Value, json};
 
-    use super::Outcome::{Fail, Pass, Undecided};
+    use super::Outcome::{Fail, Pass};
     use super::Status::{Satisfied, Unknown, Unsatisfied};
     use super::*;
 
@@ -609,7 +605,7 @@ mod tests {
     fn own_validators_join_the_refiners_under_and() {
         for (operator, _) in OPERATORS {
             for child in [Satisfied, Unsatisfied, Unknown] {
-                for own in [Pass, Fail, Undecided] {
+                for own in [Pass, Fail] {
                     let mut outcomes = verdicts([(1, own)]);
                     for outcome in outcomes_for(child) {
                         outcomes.record(rid(2), *outcome);
@@ -648,9 +644,6 @@ mod tests {
             (vec![Pass, Pass], Satisfied),
             (vec![Fail], Unsatisfied),
             (vec![Pass, Fail], Unsatisfied),
-            (vec![Undecided, Fail], Unsatisfied),
-            (vec![Pass, Undecided], Unknown),
-            (vec![Undecided], Unknown),
         ] {
             let verdicts = outcomes.iter().map(|o| (rid(1), *o)).collect();
             let evaluation = evaluate(&document, &verdicts);
@@ -686,7 +679,7 @@ mod tests {
             req(2, "MUST", None, &[1]),
             req(3, "MAY", None, &[1]),
         ]);
-        for may in [Pass, Fail, Undecided] {
+        for may in [Pass, Fail] {
             let evaluation = evaluate(&document, &verdicts([(2, Pass), (3, may)]));
             assert_eq!(evaluation.status(rid(1)), Some(Satisfied), "{may:?}");
         }
@@ -1016,7 +1009,6 @@ mod tests {
     fn the_policy_fails_on_violations_and_denied_warnings() {
         for (modality, outcome, passes, passes_denying_warnings) in [
             ("MUST", Pass, true, true),
-            ("MUST", Undecided, true, true),
             ("MUST", Fail, false, false),
             ("MUST NOT", Fail, false, false),
             ("SHOULD", Fail, true, false),
