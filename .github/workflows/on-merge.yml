@@ -14,9 +14,7 @@ permissions:
 
 jobs:
   # Single required-check context for the merge queue. Keep this job's name
-  # ("⚡ PR Ready") identical to the one in on-push.yml. publish-edge is in the
-  # needs list so the merge waits for the rolling edge prerelease to be
-  # published before the candidate fast-forwards onto trunk.
+  # ("⚡ PR Ready") identical to the one in on-push.yml.
   pr-ready:
     if: always()
     name: "⚡ PR Ready"
@@ -26,7 +24,6 @@ jobs:
       - "build"
       - "dist-plan"
       - "dist-build"
-      - "publish-edge"
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: |
@@ -73,9 +70,8 @@ jobs:
   # dist targets before it can land, so trunk never holds a commit that fails to
   # produce a release artifact. The macOS targets are intentionally excluded
   # here to keep (10×-billed) macOS runner spend off every merge — they're built
-  # and published only on a version tag, via release.yml. Consequently the
-  # rolling `edge` prerelease published below carries Linux binaries only; macOS
-  # binaries ship with tagged releases.
+  # and published only on a version tag, via release.yml. The build is a gate
+  # only: its artifacts are discarded, and binaries ship with tagged releases.
   #
   # The matrix is read at runtime from `dist plan` (then filtered to Linux), so
   # it tracks dist-workspace.toml automatically — no hand-maintained target list.
@@ -178,110 +174,8 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
-      - id: build
-        name: Build artifacts
+      - name: Build artifacts
         shell: bash
         run: |
           dist build --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
-          # Collect the artifact paths dist just produced so publish-edge can
-          # reuse them without rebuilding.
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          dist print-upload-files-from-manifest --manifest dist-manifest.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: edge-artifacts-${{ join(matrix.targets, '_') }}
-          path: ${{ steps.build.outputs.paths }}
-          retention-days: 1
-          if-no-files-found: error
-
-  # ───────────────────────────────────────────────────────────────────────────
-  # Publish the validated artifacts to the rolling `edge` prerelease. Because it
-  # depends on format + build + dist-build, it runs LAST in the merge group —
-  # only after every other check is green — so it publishes a candidate that has
-  # already cleared validation and is the commit about to fast-forward onto
-  # trunk. It reuses dist-build's (Linux-only) artifacts (no rebuild), so `edge`
-  # carries Linux binaries; macOS binaries ship with tagged releases. It is in
-  # pr-ready's needs, so the merge waits for it.
-  #
-  # The publish steps only run on merge_group, not workflow_dispatch, so a manual
-  # dispatch (used for inspection) validates without touching the edge release —
-  # but the job still succeeds, keeping pr-ready green.
-  # ───────────────────────────────────────────────────────────────────────────
-  publish-edge:
-    name: Publish edge prerelease
-    needs:
-      - format
-      - build
-      - dist-build
-    runs-on: ubuntu-22.04
-    # The merge queue builds several entries concurrently (a whole stack of
-    # PRs at once), and every merge-group run reaches this job. Its delete +
-    # recreate of the single `edge` release is not safe to run in parallel:
-    # concurrent runs race on the same tag ("a release with the same tag name
-    # already exists" / a 403 uploading to a release another run just deleted),
-    # fail `pr-ready`, and evict the whole stack from the queue. Serialize the
-    # publish step only — the builds above still run in parallel — and never
-    # cancel a run that is mid-publish, or its entry would be evicted too.
-    concurrency:
-      group: edge-release
-      cancel-in-progress: false
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      EDGE_TAG: edge
-    steps:
-      - name: Download built artifacts
-        if: ${{ github.event_name == 'merge_group' }}
-        uses: actions/download-artifact@v8
-        with:
-          pattern: edge-artifacts-*
-          path: edge/
-          merge-multiple: true
-      - name: Generate checksums
-        if: ${{ github.event_name == 'merge_group' }}
-        working-directory: edge
-        run: |
-          shopt -s nullglob
-          files=(*)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No artifacts were downloaded; refusing to publish an empty edge release." >&2
-            exit 1
-          fi
-          sha256sum "${files[@]}" > SHA256SUMS
-          cat SHA256SUMS
-      - name: Update rolling edge prerelease
-        if: ${{ github.event_name == 'merge_group' }}
-        env:
-          # github.sha is the merge-queue candidate that fast-forwards onto trunk
-          # when this run passes — the exact commit we want edge to point at.
-          RELEASE_COMMIT: ${{ github.sha }}
-        run: |
-          # Recreate the rolling prerelease so its assets and target commit are
-          # always the latest trunk candidate. Delete + recreate (rather than
-          # uploading over the top) guarantees stale per-platform assets from a
-          # previous build never linger.
-          gh release delete "$EDGE_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
-          # Retry create/upload so a transient API hiccup doesn't wedge the queue.
-          n=0
-          until [ "$n" -ge 3 ]; do
-            if gh release create "$EDGE_TAG" \
-                 --repo "$GITHUB_REPOSITORY" \
-                 --target "$RELEASE_COMMIT" \
-                 --prerelease \
-                 --title "Edge (latest trunk build)" \
-                 --notes "Rolling pre-release built from the most recent trunk commit (${RELEASE_COMMIT}). Updated automatically on every merge; not a stable release." \
-                 edge/*; then
-              break
-            fi
-            n=$((n + 1))
-            echo "gh release create failed (attempt ${n}); retrying in 10s..." >&2
-            sleep 10
-          done
-          if [ "$n" -ge 3 ]; then
-            echo "Failed to publish edge release after 3 attempts." >&2
-            exit 1
-          fi
