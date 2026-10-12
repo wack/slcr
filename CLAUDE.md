@@ -100,6 +100,14 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   (`toml_edit`, so the rest of the file is untouched). The name defaults to
   the descriptor's `name`; a different tool already declared under it is an
   error, and re-adding an identical entry changes nothing.
+- `tools update NAME` re-fetches the descriptor of the tool declared under
+  NAME from its recorded source, validates and installs it, and re-pins the
+  entry, editing only its `version` and `pin` values in place. A failed
+  fetch or an invalid descriptor changes nothing, and an entry that already
+  pins what its source serves is left alone.
+- `tools remove NAME` deletes the entry, and the `tools` table with it if
+  it was the last. The descriptor stays in the store, which other projects
+  may pin it from.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
   `dispatch()` (see `src/cli/runtime.rs`), as `query` and `slice` do.
 - All user-facing output goes through `Terminal` (`src/terminal/`), which owns
@@ -190,14 +198,17 @@ Manifest, Descriptors, and Invocation" (which win over the older
 low-level design page). The MVP has exit-code results only, no lockfile,
 and no caching.
 
-- `add.rs` — `add`, the whole of `slcr tools add`; `src/cli/tools.rs` only
-  builds its `Environment` (filesystem, `DescriptorStore`, `Fetcher`, working
-  directory) and prints the result. Test new behavior here, with an
-  `Environment` of your own, and keep CLI snapshots for what a user sees.
+- `add.rs`, `update.rs`, `remove.rs` — the whole of `slcr tools add`,
+  `update`, and `remove`; `src/cli/tools.rs` only builds their
+  `Environment` (`mod.rs`: filesystem, `DescriptorStore`, `Fetcher`, working
+  directory) and prints the result. Test new behavior there, with the
+  shared test `Fixture` (`fixture.rs`), and keep CLI snapshots for what a
+  user sees.
 - `manifest.rs` — `Project` (root discovery; a case-only near miss such as
   `slcr.toml` is an error, so macOS and Linux CI agree), `Manifest` (typed,
   `deny_unknown_fields`), and `ManifestFile`, which edits the TOML document
-  in place.
+  in place (`set_tool`, `repin_tool`, `remove_tool`), whether `tools` is
+  written as `[tools.*]` headers or as an inline table.
 - `descriptor.rs` — `Descriptor::parse` checks the schema's grammar through
   serde, then the `x-checkInvariants` that concern the descriptor alone:
   `validator.schema` compiles as a self-contained draft 2020-12 schema of

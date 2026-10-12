@@ -1,4 +1,5 @@
-//! `slcr tools add SOURCE [--as NAME]`.
+//! `slcr tools add SOURCE [--as NAME]`, `slcr tools update NAME`, and
+//! `slcr tools remove NAME`.
 
 use insta::assert_snapshot;
 
@@ -23,6 +24,19 @@ fn project() -> Workspace {
         .file("SLCR.toml", MANIFEST)
         .file("tools/cargo-nextest.toml", NEXTEST_DESCRIPTOR);
     workspace
+}
+
+/// A project that declares cargo-nextest, from the descriptor kept in it.
+fn declared() -> Workspace {
+    let workspace = project();
+    let args = ["tools", "add", "tools/cargo-nextest.toml"];
+    assert!(workspace.slcr(&args).status().unwrap().success());
+    workspace
+}
+
+/// The cargo-nextest descriptor with its version bumped.
+fn newer() -> String {
+    NEXTEST_DESCRIPTOR.replace("version = \"1.0.0\"", "version = \"1.1.0\"")
 }
 
 #[test]
@@ -235,4 +249,143 @@ fn tools_add_rejects_an_invalid_name() {
         "Nextest",
     ];
     assert_cmd_snapshot!(workspace.slcr(&args));
+}
+
+#[test]
+fn tools_update_help() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "update", "--help"]));
+}
+
+#[test]
+fn tools_update_installs_and_pins_a_new_version() {
+    let workspace = declared();
+    workspace.file("tools/cargo-nextest.toml", newer());
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
+    assert_snapshot!("updated_manifest", workspace.read("SLCR.toml"));
+    // The old descriptor stays installed: other projects may pin it.
+    let (old, new) = (stored(NEXTEST_DESCRIPTOR), stored(&newer()));
+    let mut expected = [
+        old.as_str(),
+        new.as_str(),
+        "SLCR.toml",
+        "tools/cargo-nextest.toml",
+    ];
+    expected.sort_unstable();
+    assert_eq!(workspace.files(), expected);
+    assert_eq!(workspace.read(&new), newer());
+}
+
+#[test]
+fn tools_update_repins_an_edited_descriptor() {
+    let workspace = declared();
+    let edited = format!("# Ours.\n{NEXTEST_DESCRIPTOR}");
+    workspace.file("tools/cargo-nextest.toml", &edited);
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
+    let pin = blake3::hash(edited.as_bytes()).to_hex();
+    assert!(
+        workspace
+            .read("SLCR.toml")
+            .contains(&format!("pin = \"blake3:{pin}\""))
+    );
+    assert!(workspace.files().contains(&stored(&edited)));
+}
+
+#[test]
+fn tools_update_leaves_an_up_to_date_tool_alone() {
+    let workspace = declared();
+    let manifest = workspace.read("SLCR.toml");
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+}
+
+#[test]
+fn tools_update_finds_the_project_above_the_working_directory() {
+    let workspace = declared();
+    workspace
+        .file("tools/cargo-nextest.toml", newer())
+        .dir("crates/api");
+    let args = ["tools", "update", "cargo-nextest"];
+    assert_cmd_snapshot!(workspace.slcr_in("crates/api", &args));
+}
+
+#[test]
+fn tools_update_requires_a_declared_tool() {
+    let workspace = declared();
+    let manifest = workspace.read("SLCR.toml");
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "jev"]));
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+}
+
+#[test]
+fn tools_update_requires_a_manifest() {
+    let workspace = Workspace::new();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
+    assert_eq!(workspace.files(), Vec::<String>::new());
+}
+
+#[test]
+fn tools_update_reports_a_missing_descriptor() {
+    let workspace = declared();
+    let manifest = workspace.read("SLCR.toml");
+    std::fs::remove_file(workspace.path("tools/cargo-nextest.toml")).unwrap();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+}
+
+#[test]
+fn tools_update_rejects_a_descriptor_that_breaks_an_invariant() {
+    let workspace = declared();
+    let manifest = workspace.read("SLCR.toml");
+    let undeclared = newer().replace("{with.test}", "{with.name}");
+    workspace.file("tools/cargo-nextest.toml", &undeclared);
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+    assert!(!workspace.files().contains(&stored(&undeclared)));
+}
+
+#[test]
+fn tools_update_rejects_an_invalid_name() {
+    assert_cmd_snapshot!(project().slcr(&["tools", "update", "Nextest"]));
+}
+
+#[test]
+fn tools_remove_help() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "remove", "--help"]));
+}
+
+#[test]
+fn tools_remove_removes_the_entry() {
+    let workspace = declared();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "remove", "cargo-nextest"]));
+    assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
+    // The descriptor stays installed: other projects may pin it.
+    assert!(workspace.files().contains(&stored(NEXTEST_DESCRIPTOR)));
+}
+
+#[test]
+fn tools_remove_finds_the_project_above_the_working_directory() {
+    let workspace = declared();
+    workspace.dir("crates/api");
+    let args = ["tools", "remove", "cargo-nextest"];
+    assert_cmd_snapshot!(workspace.slcr_in("crates/api", &args));
+    assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
+}
+
+#[test]
+fn tools_remove_requires_a_declared_tool() {
+    let workspace = project();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "remove", "cargo-nextest"]));
+    assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
+}
+
+#[test]
+fn tools_remove_requires_a_manifest() {
+    let workspace = Workspace::new();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "remove", "cargo-nextest"]));
+    assert_eq!(workspace.files(), Vec::<String>::new());
+}
+
+#[test]
+fn tools_remove_rejects_an_invalid_name() {
+    assert_cmd_snapshot!(project().slcr(&["tools", "remove", "Nextest"]));
 }

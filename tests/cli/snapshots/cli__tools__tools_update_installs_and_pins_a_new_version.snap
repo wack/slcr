@@ -1,0 +1,18 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - update
+    - cargo-nextest
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+SLCR.toml: updated tool cargo-nextest 1.0.0 -> 1.1.0
+
+----- stderr -----

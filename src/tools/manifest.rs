@@ -8,7 +8,7 @@ use derive_getters::Getters;
 use miette::{Diagnostic, Result};
 use serde::{Deserialize, Deserializer, de::Error as _};
 use thiserror::Error;
-use toml_edit::{DocumentMut, InlineTable, Item, Table, Value};
+use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
 use super::source::{Source, is_project_relative};
 use super::{DescriptorVersion, ToolKey, pin::Pin};
@@ -154,6 +154,19 @@ impl ToolEntry {
     }
 }
 
+/// Replace the value of `field`, a field of `table` that the manifest
+/// schema requires, with `value`, keeping the key and the whitespace and
+/// comments around the value.
+fn replace_value(table: &mut dyn TableLike, field: &str, value: String) {
+    let old = table
+        .get_mut(field)
+        .and_then(Item::as_value_mut)
+        .expect("a required field of a manifest that deserialized has a value");
+    let decor = old.decor().clone();
+    *old = Value::from(value);
+    *old.decor_mut() = decor;
+}
+
 /// An array with at least one element, and no element repeated.
 fn non_empty_set<'de, D>(deserializer: D) -> Result<Vec<ProjectGlob>, D::Error>
 where
@@ -223,8 +236,20 @@ impl Display for ProjectGlob {
 /// formatting, the way `cargo add` edits `Cargo.toml`.
 pub(crate) struct ManifestFile {
     path: PathBuf,
+    /// The manifest's path relative to the working directory.
+    shown: PathBuf,
     manifest: Manifest,
     document: DocumentMut,
+}
+
+/// The error returned when the manifest declares no tool under a name.
+#[derive(Debug, Error, Diagnostic)]
+#[error("{} declares no tool named {key}", .manifest.display())]
+#[diagnostic(help("{help}"))]
+pub struct NotDeclared {
+    manifest: PathBuf,
+    key: ToolKey,
+    help: String,
 }
 
 impl ManifestFile {
@@ -241,6 +266,7 @@ impl ManifestFile {
             .expect("a manifest that deserialized is a TOML document");
         Ok(Self {
             path,
+            shown: shown.to_path_buf(),
             manifest,
             document,
         })
@@ -248,6 +274,23 @@ impl ManifestFile {
 
     pub(crate) fn manifest(&self) -> &Manifest {
         &self.manifest
+    }
+
+    /// The entry declared under `key`.
+    pub(crate) fn tool(&self, key: &ToolKey) -> Result<&ToolEntry, NotDeclared> {
+        self.manifest.tools.get(key).ok_or_else(|| {
+            let declared: Vec<_> = self.manifest.tools.keys().map(ToolKey::as_str).collect();
+            let help = if declared.is_empty() {
+                "it declares no tools; declare one with `slcr tools add <SOURCE>`".to_owned()
+            } else {
+                format!("the tools it declares are: {}", declared.join(", "))
+            };
+            NotDeclared {
+                manifest: self.shown.clone(),
+                key: key.clone(),
+                help,
+            }
+        })
     }
 
     /// Declare `entry` under `key`, replacing any entry already there.
@@ -281,6 +324,57 @@ impl ManifestFile {
             _ => unreachable!("a manifest that deserialized has a `tools` table"),
         }
         self.manifest.tools.insert(key.clone(), entry);
+    }
+
+    /// Re-pin the tool declared under `key` to the descriptor with
+    /// `version` and `pin`, keeping its source. Its entry is edited in
+    /// place, so its position, layout, and comments survive.
+    ///
+    /// # Panics
+    ///
+    /// If the manifest declares no tool under `key`.
+    pub(crate) fn repin_tool(&mut self, key: &ToolKey, version: DescriptorVersion, pin: Pin) {
+        let table = self
+            .tools_table()
+            .and_then(|tools| tools.get_mut(key.as_str()))
+            .and_then(Item::as_table_like_mut)
+            .expect("a declared tool has an entry in the document");
+        replace_value(table, "version", version.to_string());
+        replace_value(table, "pin", pin.to_string());
+        let entry = self
+            .manifest
+            .tools
+            .get_mut(key)
+            .expect("a declared tool has an entry in the manifest");
+        entry.version = version;
+        entry.pin = pin;
+    }
+
+    /// Remove the tool declared under `key`, and return its entry. The
+    /// `tools` table goes too when it is left empty, as the schema
+    /// requires.
+    pub(crate) fn remove_tool(&mut self, key: &ToolKey) -> Result<ToolEntry, NotDeclared> {
+        self.tool(key)?;
+        let tools = self
+            .tools_table()
+            .expect("a manifest that declares a tool has a `tools` table");
+        tools.remove(key.as_str());
+        if tools.is_empty() {
+            self.document.remove("tools");
+        }
+        Ok(self
+            .manifest
+            .tools
+            .remove(key)
+            .expect("a declared tool has an entry in the manifest"))
+    }
+
+    /// The document's `tools` table, whether it is written as `[tools.*]`
+    /// headers, a `[tools]` table, or an inline table.
+    fn tools_table(&mut self) -> Option<&mut dyn TableLike> {
+        self.document
+            .get_mut("tools")
+            .and_then(Item::as_table_like_mut)
     }
 
     /// Write the manifest back, atomically.

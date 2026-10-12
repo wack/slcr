@@ -5,12 +5,16 @@
 //! the SLCR Schemas page in Notion, and the rules around them on the "SLCR
 //! — Tools: Manifest, Descriptors, and Invocation" page.
 
-use std::fmt::{self, Display};
+use std::{
+    fmt::{self, Display},
+    path::Path,
+};
 
 use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::fs::FileSystem;
 use crate::spec::text::is_slug;
 
 /// `slcr tools add`: declaring a descriptor in the manifest.
@@ -21,14 +25,32 @@ pub(crate) mod descriptor;
 pub(crate) mod manifest;
 /// The BLAKE3 pin of a descriptor's bytes.
 pub(crate) mod pin;
+/// `slcr tools remove`: removing a tool from the manifest.
+pub(crate) mod remove;
 /// Where a manifest entry's descriptor comes from, and fetching it.
 pub(crate) mod source;
 /// The content-addressed descriptor store under `$XDG_DATA_HOME`.
 pub(crate) mod store;
+/// `slcr tools update`: re-fetching and re-pinning a declared descriptor.
+pub(crate) mod update;
 
+/// A project with a descriptor in it, for tests of the commands.
+#[cfg(test)]
+mod fixture;
 /// A local HTTPS server for tests of fetching descriptors.
 #[cfg(test)]
 mod https_server;
+
+/// What the `slcr tools` commands read and write outside the project,
+/// passed in so that a caller, such as a test, chooses it.
+pub(crate) struct Environment<'a> {
+    pub(crate) fs: &'a FileSystem,
+    pub(crate) store: &'a store::DescriptorStore,
+    pub(crate) fetcher: &'a source::Fetcher,
+    /// The working directory, as an absolute path: where the project is
+    /// looked for, and what a path source is relative to.
+    pub(crate) cwd: &'a Path,
+}
 
 /// The key a descriptor is declared under in the manifest's `[tools]`
 /// table, such as `cargo-nextest`, which validators use to refer to it.
