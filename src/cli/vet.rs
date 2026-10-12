@@ -4,14 +4,16 @@ use std::{
 };
 
 use clap::{Args, ValueEnum};
-use miette::{Diagnostic, Report as ErrorReport, Result};
+use miette::{Diagnostic, IntoDiagnostic, Report as ErrorReport, Result};
 use thiserror::Error;
 
 use super::findings::{FileFindings, passes, tally};
 use crate::Terminal;
 use crate::fs::FileSystem;
+use crate::project::{IndexedSpec, Problem, SpecIndex, discover};
 use crate::spec::file::RequirementsFile;
 use crate::spec::vet::Report;
+use crate::tools::manifest::{ManifestFile, Project};
 
 mod json;
 
@@ -19,7 +21,9 @@ mod json;
 #[derive(Args, Clone, Debug)]
 pub struct VetArgs {
     /// The requirements files to vet: `.yaml`, `.yml`, `.json`, or `.toml`.
-    #[arg(required = true, value_name = "FILE")]
+    /// Without any, vet the project: SLCR.toml, and every specification
+    /// file its `specs` patterns match.
+    #[arg(value_name = "FILE")]
     files: Vec<PathBuf>,
 
     /// Fail when a file has warnings, too.
@@ -48,6 +52,13 @@ pub enum OutputFormat {
 /// stdout; `--format json` writes one JSON document to stdout instead. The
 /// command fails if any file can't be loaded or breaks an invariant, or,
 /// with `--deny-warnings`, has a warning.
+///
+/// Given no files, it vets the project that holds the working directory:
+/// its manifest, which counts as one more file, and every specification
+/// file the manifest's `specs` patterns match. A problem with the project
+/// as a whole, such as a pattern that matches nothing or two
+/// specifications with the same name, fails the manifest. Either way,
+/// nothing is run and the network is never used.
 pub struct Vet {
     terminal: Terminal,
     args: VetArgs,
@@ -60,26 +71,43 @@ impl Vet {
 
     pub fn dispatch(self) -> Result<()> {
         let fs = FileSystem::new()?;
-        let outcomes: Vec<Outcome> = self
-            .args
-            .files
-            .iter()
-            .map(|path| vet_file(&fs, path))
-            .collect();
+        let (project, outcomes) = if self.args.files.is_empty() {
+            let cwd = std::env::current_dir().into_diagnostic()?;
+            let (project, outcomes) = vet_project(&fs, &cwd)?;
+            (Some(project), outcomes)
+        } else {
+            let outcomes = self
+                .args
+                .files
+                .iter()
+                .map(|path| vet_file(&fs, path))
+                .collect();
+            (None, outcomes)
+        };
         let deny_warnings = self.args.deny_warnings;
         match self.args.format {
-            OutputFormat::Human => self.write_human(&outcomes)?,
+            OutputFormat::Human => self.write_human(project.as_ref(), &outcomes)?,
             OutputFormat::Json => {
-                let document = json::document(&outcomes, deny_warnings);
+                let document = json::document(project.as_ref(), &outcomes, deny_warnings);
                 self.terminal.write_stdout_line(&document)?;
             }
         }
-        verdict(&outcomes, deny_warnings)
+        verdict(project.as_ref(), &outcomes, deny_warnings)
     }
 
-    /// Write each file's findings to stderr, then its status to stdout.
-    fn write_human(&self, outcomes: &[Outcome]) -> Result<()> {
+    /// Write the project's problems, then each file's findings, to
+    /// stderr, then the manifest's status and each file's to stdout.
+    fn write_human(&self, project: Option<&ProjectOutcome>, outcomes: &[Outcome]) -> Result<()> {
         let deny_warnings = self.args.deny_warnings;
+        match project.map(|project| &project.result) {
+            Some(Err(error)) => self.terminal.write_diagnostic(error.as_ref())?,
+            Some(Ok(problems)) => {
+                for problem in problems {
+                    self.terminal.write_diagnostic(problem)?;
+                }
+            }
+            None => {}
+        }
         for outcome in outcomes {
             match &outcome.result {
                 Err(error) => self.terminal.write_diagnostic(error.as_ref())?,
@@ -90,11 +118,95 @@ impl Vet {
                 Ok(_) => {}
             }
         }
+        if let Some(project) = project {
+            self.terminal
+                .write_stdout_line(&project.status().to_string())?;
+        }
         for outcome in outcomes {
             self.terminal
                 .write_stdout_line(&outcome.status().to_string())?;
         }
         Ok(())
+    }
+}
+
+/// Vet the project that holds `cwd`, an absolute path: read its manifest,
+/// discover its specification files and vet each, then check that their
+/// names are unique.
+fn vet_project(fs: &FileSystem, cwd: &Path) -> Result<(ProjectOutcome, Vec<Outcome>)> {
+    let project = Project::find_from(cwd)?;
+    let manifest = project.shown_manifest().to_path_buf();
+    tracing::debug!(manifest = %manifest.display(), "vetting a project");
+    let file = match ManifestFile::load(&project) {
+        Ok(file) => file,
+        Err(error) => {
+            let result = Err(error);
+            return Ok((ProjectOutcome { manifest, result }, Vec::new()));
+        }
+    };
+    let discovery = discover(project.root(), cwd, file.manifest().specs());
+    let mut problems = discovery.problems;
+    let loaded: Vec<_> = discovery
+        .files
+        .into_iter()
+        .map(|file| {
+            tracing::debug!(path = %file.shown().display(), "vetting a requirements file");
+            let document = file.load(fs);
+            (file, document)
+        })
+        .collect();
+    let (_, duplicates) = SpecIndex::new(loaded.iter().filter_map(|(file, document)| {
+        let document = document.as_ref().ok()?;
+        Some(IndexedSpec { file, document })
+    }));
+    problems.extend(duplicates);
+    let outcomes = loaded
+        .into_iter()
+        .map(|(file, document)| Outcome {
+            path: file.shown().to_path_buf(),
+            result: document.map(|document| document.report()),
+        })
+        .collect();
+    let result = Ok(problems);
+    Ok((ProjectOutcome { manifest, result }, outcomes))
+}
+
+/// What vetting the project as a whole found.
+#[derive(Debug)]
+struct ProjectOutcome {
+    /// The manifest, relative to the working directory.
+    manifest: PathBuf,
+    /// Every problem with the project, or why the manifest couldn't be
+    /// loaded.
+    result: Result<Vec<Problem>, ErrorReport>,
+}
+
+impl ProjectOutcome {
+    /// Whether the project passes. Its problems are never warnings.
+    fn passes(&self) -> bool {
+        self.result.as_ref().is_ok_and(Vec::is_empty)
+    }
+
+    fn status(&self) -> ProjectStatus<'_> {
+        ProjectStatus(self)
+    }
+}
+
+/// The manifest's one-line status, e.g. `SLCR.toml: 2 problems`.
+struct ProjectStatus<'a>(&'a ProjectOutcome);
+
+impl Display for ProjectStatus<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let project = self.0;
+        write!(f, "{}: ", project.manifest.display())?;
+        match &project.result {
+            Err(_) => f.write_str("could not be loaded"),
+            Ok(problems) => match problems.len() {
+                0 => f.write_str("ok"),
+                1 => f.write_str("1 problem"),
+                count => write!(f, "{count} problems"),
+            },
+        }
     }
 }
 
@@ -149,12 +261,19 @@ fn vet_file(fs: &FileSystem, path: &Path) -> Outcome {
     }
 }
 
-/// Succeed if every file passes, or fail naming how many didn't.
-fn verdict(outcomes: &[Outcome], deny_warnings: bool) -> Result<()> {
+/// Succeed if the project, when there is one, and every file pass, or fail
+/// naming how many didn't. The project's manifest counts as a file.
+fn verdict(
+    project: Option<&ProjectOutcome>,
+    outcomes: &[Outcome],
+    deny_warnings: bool,
+) -> Result<()> {
+    let project_failed = project.is_some_and(|project| !project.passes());
     let failed = outcomes
         .iter()
         .filter(|outcome| !outcome.passes(deny_warnings))
-        .count();
+        .count()
+        + usize::from(project_failed);
     if failed == 0 {
         return Ok(());
     }
@@ -164,7 +283,7 @@ fn verdict(outcomes: &[Outcome], deny_warnings: bool) -> Result<()> {
         .any(|outcome| !outcome.passes(deny_warnings) && outcome.passes(false));
     Err(VetFailed {
         failed,
-        total: outcomes.len(),
+        total: outcomes.len() + usize::from(project.is_some()),
         warnings_denied,
     }
     .into())
@@ -204,6 +323,7 @@ mod tests {
     use crate::spec::file::UnsupportedFormat;
     use crate::spec::graph::UnvettedDocument;
     use crate::terminal::render_plain;
+    use crate::tools::manifest::ProjectError;
 
     const TODO_API_JSON: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
     const TODO_API_YAML: &str = include_str!("../../tests/fixtures/todo-api.spec.yaml");
@@ -284,8 +404,12 @@ mod tests {
     }
 
     #[test]
-    fn vet_requires_a_file() {
-        assert!(Cli::try_parse_from(["slcr", "vet"]).is_err());
+    fn vet_needs_no_file() {
+        let cli = Cli::parse_from(["slcr", "vet", "--deny-warnings"]);
+        let Some(SlcrCommand::Vet(args)) = cli.cmd() else {
+            panic!("expected `vet`");
+        };
+        assert!(args.files.is_empty());
     }
 
     #[test]
@@ -539,12 +663,12 @@ mod tests {
     fn the_verdict_passes_only_when_every_file_does() {
         let ok = || outcome("ok.json", todo_api());
         let warned = || outcome("warned.json", with_warning());
-        assert!(verdict(&[ok(), warned()], false).is_ok());
-        assert!(verdict(&[], false).is_ok());
+        assert!(verdict(None, &[ok(), warned()], false).is_ok());
+        assert!(verdict(None, &[], false).is_ok());
 
         let failed = |result: Result<()>| vet_failed(result);
         assert_eq!(
-            failed(verdict(&[ok(), warned()], true)),
+            failed(verdict(None, &[ok(), warned()], true)),
             VetFailed {
                 failed: 1,
                 total: 2,
@@ -553,6 +677,7 @@ mod tests {
         );
         assert_eq!(
             failed(verdict(
+                None,
                 &[ok(), unloadable("missing.json"), warned()],
                 false
             )),
@@ -562,6 +687,166 @@ mod tests {
                 warnings_denied: false,
             }
         );
+    }
+
+    fn project(result: Result<Vec<Problem>, ErrorReport>) -> ProjectOutcome {
+        ProjectOutcome {
+            manifest: PathBuf::from("SLCR.toml"),
+            result,
+        }
+    }
+
+    fn no_match(pattern: &str) -> Problem {
+        Problem::NoMatch {
+            pattern: pattern.to_owned(),
+        }
+    }
+
+    #[test]
+    fn the_manifest_counts_as_a_file_in_the_verdict() {
+        let ok = || outcome("ok.json", todo_api());
+        assert!(verdict(Some(&project(Ok(Vec::new()))), &[ok()], true).is_ok());
+        assert_eq!(
+            vet_failed(verdict(
+                Some(&project(Ok(vec![no_match("a"), no_match("b")]))),
+                &[ok(), unloadable("missing.json")],
+                false
+            )),
+            VetFailed {
+                failed: 2,
+                total: 3,
+                warnings_denied: false,
+            }
+        );
+        assert_eq!(
+            vet_failed(verdict(
+                Some(&project(Err(miette::miette!("unparsable")))),
+                &[],
+                false
+            )),
+            VetFailed {
+                failed: 1,
+                total: 1,
+                warnings_denied: false,
+            }
+        );
+    }
+
+    #[test]
+    fn the_manifest_status_counts_its_problems() {
+        let cases = [
+            (project(Ok(Vec::new())), "SLCR.toml: ok"),
+            (project(Ok(vec![no_match("a")])), "SLCR.toml: 1 problem"),
+            (
+                project(Ok(vec![no_match("a"), no_match("b")])),
+                "SLCR.toml: 2 problems",
+            ),
+            (
+                project(Err(miette::miette!("unparsable"))),
+                "SLCR.toml: could not be loaded",
+            ),
+        ];
+        for (project, status) in cases {
+            assert_eq!(project.status().to_string(), status);
+        }
+    }
+
+    /// A project in a temporary directory, holding `files`.
+    fn project_dir(files: &[(&str, &str)]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, contents) in files {
+            let path = dir.path().join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, contents).unwrap();
+        }
+        dir
+    }
+
+    /// The paths `vet_project` reports, run from `dir` in `project`.
+    fn paths(outcomes: &[Outcome]) -> Vec<String> {
+        outcomes
+            .iter()
+            .map(|outcome| outcome.path.display().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn the_project_s_files_are_vetted_and_named_from_the_working_directory() {
+        let billing = TODO_API_YAML.replace("name: todo-api", "name: billing");
+        let dir = project_dir(&[
+            (
+                "SLCR.toml",
+                "formatVersion = \"1\"\nspecs = [\"specs/*\"]\n",
+            ),
+            ("specs/todo.yaml", TODO_API_YAML),
+            ("specs/billing.yaml", &billing),
+            (
+                "specs/broken.json",
+                &json(&with_violation()).replace("todo-api", "broken"),
+            ),
+        ]);
+        let cwd = dir.path().join("specs");
+        let fs = FileSystem::new().unwrap();
+        let (project, outcomes) = vet_project(&fs, &cwd).unwrap();
+        assert_eq!(project.manifest, PathBuf::from("../SLCR.toml"));
+        assert!(project.passes(), "{:?}", project.result);
+        assert_eq!(
+            paths(&outcomes),
+            ["billing.yaml", "broken.json", "todo.yaml"]
+        );
+        let passing: Vec<bool> = outcomes
+            .iter()
+            .map(|outcome| outcome.passes(false))
+            .collect();
+        assert_eq!(passing, [true, false, true]);
+    }
+
+    #[test]
+    fn project_problems_are_collected() {
+        let dir = project_dir(&[
+            (
+                "SLCR.toml",
+                "formatVersion = \"1\"\nspecs = [\"*.yaml\", \"docs/*.yml\"]\n",
+            ),
+            ("a.yaml", TODO_API_YAML),
+            ("b.yaml", TODO_API_YAML),
+            ("c.yaml", "[unclosed\n"),
+        ]);
+        let fs = FileSystem::new().unwrap();
+        let (project, outcomes) = vet_project(&fs, dir.path()).unwrap();
+        let problems: Vec<String> = project
+            .result
+            .unwrap()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(
+            problems,
+            [
+                "`specs` pattern `docs/*.yml` matches no file",
+                "a.yaml and b.yaml both name their specification `todo-api`",
+            ]
+        );
+        assert_eq!(paths(&outcomes), ["a.yaml", "b.yaml", "c.yaml"]);
+        assert!(outcomes[2].result.is_err());
+    }
+
+    #[test]
+    fn an_unloadable_manifest_vets_no_file() {
+        let dir = project_dir(&[("SLCR.toml", "specs = 1\n"), ("a.yaml", TODO_API_YAML)]);
+        let fs = FileSystem::new().unwrap();
+        let (project, outcomes) = vet_project(&fs, dir.path()).unwrap();
+        let error = project.result.unwrap_err();
+        assert!(error.downcast_ref::<ParseError>().is_some(), "{error:?}");
+        assert!(outcomes.is_empty());
+    }
+
+    #[test]
+    fn vetting_a_project_needs_one() {
+        let dir = project_dir(&[]);
+        let fs = FileSystem::new().unwrap();
+        let err = vet_project(&fs, dir.path()).unwrap_err();
+        assert!(err.downcast_ref::<ProjectError>().is_some(), "{err:?}");
     }
 
     #[test]

@@ -13,6 +13,8 @@ use crate::fs::FileSystem;
 use crate::spec::file::RequirementsFile;
 use crate::spec::graph::UnvettedDocument;
 
+pub(crate) use discover::discover;
+pub(crate) use index::{IndexedSpec, SpecIndex};
 pub(crate) use problem::Problem;
 pub(crate) use qualified::QualifiedRequirementId;
 
