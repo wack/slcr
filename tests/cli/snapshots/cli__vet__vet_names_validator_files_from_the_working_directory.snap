@@ -1,0 +1,19 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+../../SLCR.toml: ok
+../../SPEC.slcr.yml: ok
+../.validators.slcr.yml: ok
+items/.validators.slcr.toml: ok
+
+----- stderr -----

@@ -1,7 +1,10 @@
 //! `slcr vet [FILE]... [--deny-warnings] [--format human|json]`: the files
 //! given, or else the project.
 
-use super::{TODO_API_JSON, TODO_API_TOML, TODO_API_YAML, Workspace, with_violation, with_warning};
+use super::{
+    NEXTEST_DESCRIPTOR, TODO_API_JSON, TODO_API_TOML, TODO_API_YAML, Workspace, pin, stored,
+    with_violation, with_warning,
+};
 
 /// A workspace holding one file of each kind `vet` tells apart.
 fn mixed() -> Workspace {
@@ -243,5 +246,242 @@ fn vet_reports_the_project_in_json() {
 fn vet_reports_an_invalid_manifest_in_json() {
     let workspace = Workspace::new();
     workspace.file("SLCR.toml", "formatVersion = \"1\"\n");
+    assert_cmd_snapshot!(workspace.slcr(&["vet", "--format", "json"]));
+}
+
+/// A manifest whose `specs` match the well-known file, and that declares
+/// cargo-nextest at `version`, pinned to `descriptor`.
+fn declaring(version: &str, descriptor: &str) -> String {
+    format!(
+        "{}\n[tools.cargo-nextest]\nversion = \"{version}\"\n\
+         source = {{ path = \"tools/cargo-nextest.toml\" }}\npin = \"{}\"\n",
+        manifest(&["SPEC.slcr.yml"]),
+        pin(descriptor)
+    )
+}
+
+/// A project whose specification is the canon example and which declares
+/// cargo-nextest, with no descriptor installed and no validator file yet.
+fn uninstalled() -> Workspace {
+    let workspace = Workspace::new();
+    workspace
+        .file("SLCR.toml", declaring("1.0.0", NEXTEST_DESCRIPTOR))
+        .file("SPEC.slcr.yml", TODO_API_YAML)
+        .file("tools/cargo-nextest.toml", NEXTEST_DESCRIPTOR);
+    workspace
+}
+
+/// [uninstalled], with cargo-nextest's descriptor installed.
+fn validated() -> Workspace {
+    let workspace = uninstalled();
+    workspace.install(NEXTEST_DESCRIPTOR);
+    workspace
+}
+
+/// Validators that pass, in TOML.
+const VALIDATORS_TOML: &str = r#"formatVersion = "1"
+
+[[validator]]
+requirement = "todo-api/REQ-002"
+tool = "cargo-nextest"
+description = "POST creates an item"
+with = { test = "items::post::creates_item" }
+
+[[validator]]
+requirement = "todo-api/REQ-007"
+criterion = "AC-001"
+tool = "cargo-nextest"
+with = { test = "db::schema::declares_items" }
+"#;
+
+/// Validators that pass, in JSON.
+const VALIDATORS_JSON: &str = r#"{
+  "formatVersion": "1",
+  "validator": [
+    {
+      "requirement": "todo-api/REQ-003",
+      "tool": "cargo-nextest",
+      "with": { "test": "items::get::reads_an_item" }
+    }
+  ]
+}
+"#;
+
+/// Validators that pass, in YAML.
+const VALIDATORS_YAML: &str = r#"formatVersion: "1"
+validator:
+  - requirement: todo-api/REQ-005
+    tool: cargo-nextest
+    with:
+      test: items::controller::routes
+"#;
+
+/// Validators with one of each problem a validator can have, in TOML.
+const BROKEN_VALIDATORS: &str = r#"formatVersion = "1"
+
+[[validator]]
+requirement = "todo-api/REQ-002"
+tool = "cargo-nextest"
+with = { test = "items::post::creates_item" }
+
+[[validator]]
+requirement = "billing/REQ-001"
+tool = "cargo-nextest"
+with = { test = "billing::charges" }
+
+[[validator]]
+requirement = "todo-api/REQ-099"
+tool = "cargo-nextest"
+with = { test = "items::missing" }
+
+[[validator]]
+requirement = "todo-api/REQ-001"
+criterion = "AC-001"
+tool = "cargo-nextest"
+with = { test = "items::endpoint" }
+
+[[validator]]
+requirement = "todo-api/REQ-002"
+tool = "ast-grep"
+with = { rule = "rules/post-handler.yml" }
+
+[[validator]]
+requirement = "todo-api/REQ-003"
+tool = "cargo-nextest"
+with = { test = "", filter = "all" }
+
+[[validator]]
+with = { test = "items::post::creates_item" }
+tool = "cargo-nextest"
+requirement = "todo-api/REQ-002"
+"#;
+
+#[test]
+fn vet_vets_the_project_s_validator_files() {
+    let workspace = validated();
+    workspace
+        .file("src/views/items/.validators.slcr.toml", VALIDATORS_TOML)
+        .file("src/views/.validators.slcr.json", VALIDATORS_JSON)
+        .file("src/.validators.slcr.yml", VALIDATORS_YAML)
+        // Ignored, as specifications would be.
+        .file(".git/HEAD", "ref: refs/heads/trunk\n")
+        .file(".gitignore", "target/\n")
+        .file("target/.validators.slcr.toml", "not even TOML");
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_names_validator_files_from_the_working_directory() {
+    let workspace = validated();
+    workspace
+        .file("src/views/items/.validators.slcr.toml", VALIDATORS_TOML)
+        .file("src/.validators.slcr.yml", VALIDATORS_YAML);
+    assert_cmd_snapshot!(workspace.slcr_in("src/views", &["vet"]));
+}
+
+#[test]
+fn vet_reports_every_problem_in_a_validator_file() {
+    let workspace = validated();
+    workspace.file("src/.validators.slcr.toml", BROKEN_VALIDATORS);
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_reports_validator_problems_in_json() {
+    let workspace = validated();
+    workspace
+        .file("src/.validators.slcr.toml", BROKEN_VALIDATORS)
+        .file("src/views/.validators.slcr.json", VALIDATORS_JSON)
+        .file("src/views/items/.validators.slcr.yml", "validator: []\n");
+    assert_cmd_snapshot!(workspace.slcr(&["vet", "--format", "json"]));
+}
+
+#[test]
+fn vet_labels_validator_problems_in_json_and_yaml() {
+    let workspace = validated();
+    workspace
+        .file(
+            "src/a/.validators.slcr.json",
+            VALIDATORS_JSON.replace("REQ-003", "REQ-099"),
+        )
+        .file(
+            "src/b/.validators.slcr.yaml",
+            VALIDATORS_YAML.replace("cargo-nextest", "jev"),
+        );
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_reports_a_validator_file_that_breaks_its_schema() {
+    let workspace = validated();
+    workspace.file(
+        "src/.validators.slcr.toml",
+        VALIDATORS_TOML.replace("criterion = \"AC-001\"", "criterion = \"AC-1\""),
+    );
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_reports_two_validator_files_in_one_directory() {
+    let workspace = validated();
+    workspace
+        .file("src/.validators.slcr.toml", VALIDATORS_TOML)
+        .file("src/.validators.slcr.yml", VALIDATORS_YAML);
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_reports_a_descriptor_that_is_not_installed() {
+    let workspace = uninstalled();
+    // Without its descriptor, no validator's `with` is checked.
+    workspace.file("src/.validators.slcr.toml", BROKEN_VALIDATORS);
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+    // Nothing was fetched or installed.
+    assert!(!workspace.path(&stored(NEXTEST_DESCRIPTOR)).exists());
+}
+
+#[test]
+fn vet_reports_a_corrupted_descriptor() {
+    let workspace = validated();
+    workspace.file(
+        &stored(NEXTEST_DESCRIPTOR),
+        NEXTEST_DESCRIPTOR.replace("--no-fail-fast", "--fail-fast"),
+    );
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_reports_an_invalid_descriptor() {
+    let invalid = NEXTEST_DESCRIPTOR.replace("{with.test}", "{with.name}");
+    let workspace = Workspace::new();
+    workspace
+        .file("SLCR.toml", declaring("1.0.0", &invalid))
+        .file("SPEC.slcr.yml", TODO_API_YAML)
+        .install(&invalid);
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_reports_a_descriptor_whose_version_is_not_declared() {
+    let workspace = validated();
+    workspace
+        .file("SLCR.toml", declaring("0.9.0", NEXTEST_DESCRIPTOR))
+        .file("src/.validators.slcr.toml", VALIDATORS_TOML);
+    assert_cmd_snapshot!(workspace.slcr(&["vet"]));
+}
+
+#[test]
+fn vet_reports_descriptor_problems_in_json() {
+    let workspace = uninstalled();
+    workspace.file(
+        "SLCR.toml",
+        format!(
+            "{}\n[tools.jev]\nversion = \"2.0.0\"\nsource = {{ path = \"tools/jev.toml\" }}\n\
+             pin = \"{}\"\n",
+            declaring("0.9.0", NEXTEST_DESCRIPTOR),
+            pin("jev")
+        ),
+    );
+    workspace.install(NEXTEST_DESCRIPTOR);
     assert_cmd_snapshot!(workspace.slcr(&["vet", "--format", "json"]));
 }

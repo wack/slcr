@@ -5,11 +5,13 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::spec::text::SpecName;
+use crate::tools::pinned::DescriptorProblem;
 
 /// Something wrong with the project as a whole, rather than inside one
-/// specification: a `specs` pattern that can't be honored, or two
-/// specifications with the same name. Paths are relative to the working
-/// directory.
+/// of its files: a `specs` pattern that can't be honored, two
+/// specifications with the same name, two validator files in one
+/// directory, or a declared tool whose descriptor can't be used. Paths are
+/// relative to the working directory.
 ///
 /// It serializes like a [crate::spec::vet::Violation]: an object whose
 /// `code` names the problem in kebab-case, alongside the variant's fields.
@@ -82,6 +84,28 @@ pub enum Problem {
         #[serde(serialize_with = "display")]
         second: PathBuf,
     },
+
+    #[error(
+        "{} and {} are validator files in the same directory",
+        .first.display(),
+        .second.display()
+    )]
+    #[diagnostic(help(
+        "a directory holds at most one validator file: move one's validators into the other, \
+         and delete it"
+    ))]
+    DuplicateValidatorFile {
+        #[serde(serialize_with = "display")]
+        first: PathBuf,
+        #[serde(serialize_with = "display")]
+        second: PathBuf,
+    },
+
+    /// It serializes with a code of its own.
+    #[serde(untagged)]
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Descriptor(DescriptorProblem),
 }
 
 /// The subject and verb of a message about what `patterns` match:
@@ -101,7 +125,7 @@ fn matched_by(patterns: &[String]) -> String {
 
 /// Serialize a path as it displays, so that a path that isn't UTF-8 can't
 /// fail serialization.
-fn display<S: Serializer>(path: &Path, serializer: S) -> Result<S::Ok, S::Error> {
+pub(crate) fn display<S: Serializer>(path: &Path, serializer: S) -> Result<S::Ok, S::Error> {
     serializer.collect_str(&path.display())
 }
 

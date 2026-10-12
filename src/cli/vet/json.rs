@@ -65,13 +65,59 @@
 //!
 //! A manifest that couldn't be loaded has an `error`, shaped like a file's,
 //! instead of `problems`, and `files` is empty.
+//!
+//! Two validator files in one directory (`duplicate-validator-file`) are a
+//! problem with the project too, as is a declared tool whose pinned
+//! descriptor can't be used: `descriptor-not-installed`,
+//! `descriptor-corrupted`, `descriptor-unreadable`, and
+//! `invalid-descriptor`, each with the `tool` and its `pin`, and
+//! `descriptor-version-mismatch`.
+//!
+//! Project mode also adds a `validators` array, after `files`, describing
+//! every validator file. Each of its problems names its `validator` by its
+//! position in the file's `validator` array, from 1, then has a `code`
+//! (`unknown-spec`, `unknown-requirement`, `unknown-criterion`,
+//! `tool-not-declared`, `invalid-with`, or `duplicate-validator`) and the
+//! fields that go with it, its `message` and any `help`, and `labels` that
+//! locate the validator, as an error's do:
+//!
+//! ```json
+//! {
+//!   "passed": false,
+//!   "project": { "manifest": "SLCR.toml", "passed": true, "problems": [] },
+//!   "files": [],
+//!   "validators": [
+//!     {
+//!       "path": "src/.validators.slcr.toml",
+//!       "passed": false,
+//!       "problems": [
+//!         {
+//!           "validator": 5,
+//!           "code": "tool-not-declared",
+//!           "manifest": "SLCR.toml",
+//!           "key": "ast-grep",
+//!           "declared": ["cargo-nextest"],
+//!           "message": "SLCR.toml declares no tool named ast-grep",
+//!           "help": "the tools it declares are: cargo-nextest",
+//!           "labels": [{ "line": 26, "column": 8, "offset": 533, "length": 10 }]
+//!         }
+//!       ]
+//!     }
+//!   ]
+//! }
+//! ```
+//!
+//! A validator file that couldn't be loaded has an `error` instead of
+//! `problems`. The array is absent when `vet` is given files, and empty
+//! when the manifest couldn't be loaded.
 
 use miette::{Diagnostic, LabeledSpan, Report as ErrorReport};
 use serde::Serialize;
 
-use super::{Outcome, ProjectOutcome};
+use super::{Outcome, ProjectOutcome, ValidatorOutcome};
 use crate::project::Problem;
 use crate::spec::vet::Finding;
+use crate::validators::{Finding as ValidatorFinding, Problem as ValidatorProblem};
 
 /// The JSON document describing `project`, if `vet` vetted one, and
 /// `outcomes`.
@@ -80,6 +126,13 @@ pub(super) fn document(
     outcomes: &[Outcome],
     deny_warnings: bool,
 ) -> String {
+    let validators: Option<Vec<ValidatorFileJson<'_>>> = project.map(|project| {
+        project
+            .validators
+            .iter()
+            .map(ValidatorFileJson::new)
+            .collect()
+    });
     let project = project.map(ProjectJson::new);
     let files: Vec<File<'_>> = outcomes
         .iter()
@@ -87,9 +140,11 @@ pub(super) fn document(
         .collect();
     let document = Document {
         passed: project.as_ref().is_none_or(|project| project.passed)
-            && files.iter().all(|file| file.passed),
+            && files.iter().all(|file| file.passed)
+            && validators.iter().flatten().all(|file| file.passed),
         project,
         files,
+        validators,
     };
     serde_json::to_string_pretty(&document).expect("vetting results serialize to JSON")
 }
@@ -101,6 +156,79 @@ struct Document<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     project: Option<ProjectJson<'a>>,
     files: Vec<File<'a>>,
+    /// The project's validator files, in project mode only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    validators: Option<Vec<ValidatorFileJson<'a>>>,
+}
+
+#[derive(Serialize)]
+struct ValidatorFileJson<'a> {
+    /// The path, relative to the working directory.
+    path: String,
+    passed: bool,
+    #[serde(flatten)]
+    result: ValidatorResult<'a>,
+}
+
+impl<'a> ValidatorFileJson<'a> {
+    fn new(outcome: &'a ValidatorOutcome) -> Self {
+        let result = match &outcome.result {
+            Ok(findings) => ValidatorResult::Vetted {
+                problems: findings.iter().map(ValidatorProblemJson::new).collect(),
+            },
+            Err(error) => ValidatorResult::Unloadable {
+                error: ErrorJson::new(error),
+            },
+        };
+        Self {
+            path: outcome.path.display().to_string(),
+            passed: outcome.passes(),
+            result,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ValidatorResult<'a> {
+    Vetted {
+        problems: Vec<ValidatorProblemJson<'a>>,
+    },
+    Unloadable {
+        error: ErrorJson,
+    },
+}
+
+#[derive(Serialize)]
+struct ValidatorProblemJson<'a> {
+    /// The validator's position in the file, from 1.
+    validator: usize,
+    /// The `code` and the fields that go with it.
+    #[serde(flatten)]
+    problem: &'a ValidatorProblem,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    help: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<LabelJson>,
+}
+
+impl<'a> ValidatorProblemJson<'a> {
+    fn new(finding: &'a ValidatorFinding) -> Self {
+        let labels = finding
+            .labels()
+            .into_iter()
+            .flatten()
+            .filter_map(|label| LabelJson::new(finding, &label))
+            .collect();
+        Self {
+            validator: finding.validator(),
+            problem: finding.problem(),
+            message: finding.problem().to_string(),
+            help: finding.help().map(|help| help.to_string()),
+            labels,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -346,6 +474,7 @@ mod tests {
         ProjectOutcome {
             manifest: PathBuf::from("../SLCR.toml"),
             result,
+            validators: Vec::new(),
         }
     }
 
@@ -473,7 +602,8 @@ mod tests {
                     "violations": 0,
                     "warnings": 0,
                     "findings": []
-                }]
+                }],
+                "validators": []
             })
         );
     }
@@ -503,6 +633,70 @@ mod tests {
     }
 
     #[test]
+    fn validator_problems_name_their_validator_and_locate_it() {
+        let source = "formatVersion = \"1\"\n[[validator]]\n";
+        let source = std::sync::Arc::new(miette::NamedSource::new(
+            "src/.validators.slcr.toml",
+            source.to_owned(),
+        ));
+        let finding = ValidatorFinding::new(
+            2,
+            ValidatorProblem::InvalidWith {
+                tool: crate::tools::ToolKey::try_from("jev".to_owned()).unwrap(),
+                pointer: "/x".to_owned(),
+                reason: "1 is not of type \"string\"".to_owned(),
+            },
+            Some(miette::SourceSpan::from((20, 13))),
+            source,
+        );
+        let mut project = project(Ok(Vec::new()));
+        project.validators = vec![
+            ValidatorOutcome {
+                path: PathBuf::from("src/.validators.slcr.toml"),
+                result: Ok(vec![finding]),
+            },
+            ValidatorOutcome {
+                path: PathBuf::from("src/api/.validators.slcr.json"),
+                result: Err(miette::miette!("unreadable")),
+            },
+        ];
+        let document = parsed_project(&project, &[]);
+        assert_eq!(document["passed"], false);
+        assert_eq!(document["project"]["passed"], true);
+        assert_eq!(
+            document["validators"],
+            json!([
+                {
+                    "path": "src/.validators.slcr.toml",
+                    "passed": false,
+                    "problems": [{
+                        "validator": 2,
+                        "code": "invalid-with",
+                        "tool": "jev",
+                        "pointer": "/x",
+                        "reason": "1 is not of type \"string\"",
+                        "message": "`with` at `/x` does not satisfy the validator schema of jev: \
+                                    1 is not of type \"string\"",
+                        "help": "`slcr tools show jev` prints the schema",
+                        "labels": [{ "line": 2, "column": 1, "offset": 20, "length": 13 }]
+                    }]
+                },
+                {
+                    "path": "src/api/.validators.slcr.json",
+                    "passed": false,
+                    "error": { "message": "unreadable" }
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn validators_are_left_out_without_a_project() {
+        let document = parsed(&[outcome("a.json", todo_api())], false);
+        assert!(document.get("validators").is_none(), "{document:#}");
+    }
+
+    #[test]
     fn an_unloadable_manifest_explains_why() {
         let document = parsed_project(&project(Err(miette::miette!("unreadable"))), &[]);
         assert_eq!(
@@ -514,7 +708,8 @@ mod tests {
                     "passed": false,
                     "error": { "message": "unreadable" }
                 },
-                "files": []
+                "files": [],
+                "validators": []
             })
         );
     }

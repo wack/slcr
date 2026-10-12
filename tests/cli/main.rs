@@ -84,6 +84,18 @@ const DATA_DIR: &str = ".home/Library/Application Support/slcr";
 #[cfg(not(target_os = "macos"))]
 const DATA_DIR: &str = ".data/slcr";
 
+/// Where the descriptor store files a descriptor, relative to the
+/// workspace: under the BLAKE3 hash of its bytes.
+fn stored(descriptor: &str) -> String {
+    let hex = blake3::hash(descriptor.as_bytes()).to_hex();
+    format!("{DATA_DIR}/descriptors/blake3/{hex}.toml")
+}
+
+/// A descriptor's pin, as a manifest records it.
+fn pin(descriptor: &str) -> String {
+    format!("blake3:{}", blake3::hash(descriptor.as_bytes()).to_hex())
+}
+
 /// A scratch directory that a test runs `slcr` in, deleted when dropped.
 ///
 /// Commands are given paths relative to it, so the paths in their output
@@ -120,6 +132,12 @@ impl Workspace {
     fn dir(&self, path: &str) -> &Self {
         std::fs::create_dir_all(self.path(path)).expect("the directory");
         self
+    }
+
+    /// Install `descriptor` in the workspace's descriptor store, as
+    /// `slcr tools add` would.
+    fn install(&self, descriptor: &str) -> &Self {
+        self.file(&stored(descriptor), descriptor)
     }
 
     fn read(&self, path: &str) -> String {

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use miette::{Diagnostic, Result};
 use thiserror::Error;
 
+use super::descriptor::{self, Descriptor, InvalidDescriptor};
 use super::pin::Pin;
 use crate::fs::FileSystem;
 
@@ -30,6 +31,20 @@ pub struct StoreUnavailable {
     dir: PathBuf,
     #[source]
     source: std::io::Error,
+}
+
+/// Why the store can't give back the descriptor a pin names.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Unavailable {
+    /// Nothing is filed under the pin.
+    Missing,
+    /// What is filed under the pin doesn't hash to it.
+    Corrupted,
+    /// What is filed under the pin can't be read, for this reason.
+    Unreadable(String),
+    /// What is filed under the pin hashes to it, but isn't a valid
+    /// descriptor. Errors name it by its abbreviated pin.
+    Invalid(InvalidDescriptor),
 }
 
 impl DescriptorStore {
@@ -65,6 +80,31 @@ impl DescriptorStore {
         Ok(pin)
     }
 
+    /// The descriptor filed under `pin`, once its bytes are checked against
+    /// the pin and it is checked as a descriptor.
+    pub(crate) fn load(&self, fs: &FileSystem, pin: &Pin) -> Result<Descriptor, Unavailable> {
+        let bytes = match fs.read_bytes(&self.path(pin)) {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => return Err(Unavailable::Missing),
+            // The reading error names the file's absolute path; its cause
+            // doesn't.
+            Err(err) => {
+                let reason = std::error::Error::source(&err).map_or_else(
+                    || "the file could not be read".to_owned(),
+                    ToString::to_string,
+                );
+                return Err(Unavailable::Unreadable(reason));
+            }
+        };
+        if !pin.matches(&bytes) {
+            return Err(Unavailable::Corrupted);
+        }
+        let origin = pin.abbreviated();
+        descriptor::text(&origin, &bytes)
+            .and_then(|text| Descriptor::parse(&origin, text))
+            .map_err(Unavailable::Invalid)
+    }
+
     /// Whether the file at `path` holds exactly the bytes `pin` pins.
     fn holds(&self, fs: &FileSystem, path: &Path, pin: &Pin) -> bool {
         matches!(fs.read_bytes(path), Ok(Some(bytes)) if pin.matches(&bytes))
@@ -74,6 +114,9 @@ impl DescriptorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The cargo-nextest example on the Schemas page.
+    const NEXTEST: &str = include_str!("../../tests/fixtures/cargo-nextest.descriptor.toml");
 
     /// A store in a fresh temporary directory, which the store's own
     /// directory is nested inside, as it is in a data directory.
@@ -134,6 +177,61 @@ mod tests {
         let other = store.install(&fs, "name = \"curl\" # ours\n").unwrap();
         assert_ne!(store.path(&one), store.path(&other));
         assert!(store.path(&one).is_file() && store.path(&other).is_file());
+    }
+
+    #[test]
+    fn an_installed_descriptor_loads_by_its_pin() {
+        let (_dir, store) = store();
+        let fs = FileSystem::new().unwrap();
+        let pin = store.install(&fs, NEXTEST).unwrap();
+        let descriptor = store.load(&fs, &pin).unwrap();
+        assert_eq!(descriptor, Descriptor::parse("any", NEXTEST).unwrap());
+    }
+
+    #[test]
+    fn loading_checks_the_bytes_and_the_descriptor() {
+        let (_dir, store) = store();
+        let fs = FileSystem::new().unwrap();
+        let missing = Pin::of(b"missing");
+        assert_eq!(store.load(&fs, &missing), Err(Unavailable::Missing));
+
+        let pin = store.install(&fs, NEXTEST).unwrap();
+        std::fs::write(store.path(&pin), format!("{NEXTEST}\n")).unwrap();
+        assert_eq!(store.load(&fs, &pin), Err(Unavailable::Corrupted));
+
+        let invalid = "name = \"cargo-nextest\"\n";
+        let pin = store.install(&fs, invalid).unwrap();
+        let Err(Unavailable::Invalid(err)) = store.load(&fs, &pin) else {
+            panic!("expected an invalid descriptor");
+        };
+        // Named by its pin, never by its absolute path.
+        assert_eq!(
+            err.to_string(),
+            format!("could not parse {} as TOML", pin.abbreviated())
+        );
+
+        let binary = b"name = \"\xff\"";
+        let pin = Pin::of(binary);
+        std::fs::write(store.path(&pin), binary).unwrap();
+        let Err(Unavailable::Invalid(err)) = store.load(&fs, &pin) else {
+            panic!("expected an invalid descriptor");
+        };
+        assert_eq!(
+            err.to_string(),
+            format!("{} is not UTF-8 text", pin.abbreviated())
+        );
+    }
+
+    #[test]
+    fn an_unreadable_descriptor_names_no_path() {
+        let (_dir, store) = store();
+        let fs = FileSystem::new().unwrap();
+        let pin = Pin::of(b"a directory");
+        std::fs::create_dir_all(store.path(&pin)).unwrap();
+        let Err(Unavailable::Unreadable(reason)) = store.load(&fs, &pin) else {
+            panic!("expected an unreadable descriptor");
+        };
+        assert!(reason.starts_with("Is a directory"), "{reason}");
     }
 
     #[test]

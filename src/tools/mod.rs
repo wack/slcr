@@ -21,12 +21,18 @@ use crate::spec::text::is_slug;
 pub(crate) mod add;
 /// What a descriptor declares, validated against its schema.
 pub(crate) mod descriptor;
+/// `slcr tools list`: the declared tools, and whether each is installed.
+pub(crate) mod list;
 /// `SLCR.toml`: the project manifest, and finding the project root.
 pub(crate) mod manifest;
 /// The BLAKE3 pin of a descriptor's bytes.
 pub(crate) mod pin;
+/// Checking a declared tool's descriptor, as installed, against its pin.
+pub(crate) mod pinned;
 /// `slcr tools remove`: removing a tool from the manifest.
 pub(crate) mod remove;
+/// `slcr tools show`: a declared tool's pinned descriptor.
+pub(crate) mod show;
 /// Where a manifest entry's descriptor comes from, and fetching it.
 pub(crate) mod source;
 /// The content-addressed descriptor store under `$XDG_DATA_HOME`.

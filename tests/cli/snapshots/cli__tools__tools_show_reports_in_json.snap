@@ -1,0 +1,63 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - show
+    - cargo-nextest
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+{
+  "key": "cargo-nextest",
+  "name": "cargo-nextest",
+  "version": "1.0.0",
+  "source": {
+    "path": "tools/cargo-nextest.toml"
+  },
+  "pin": "blake3:3aa337b9c338f5f5e93e6664416047b687e73343e4d92158aab2e6329f1e6e92",
+  "invoke": {
+    "argv": [
+      "cargo",
+      "nextest",
+      "run",
+      "--no-fail-fast",
+      "--no-tests=fail",
+      "-E",
+      "test(={with.test})"
+    ],
+    "cwd": {
+      "nearest": "Cargo.toml"
+    },
+    "env": {},
+    "timeout": null
+  },
+  "results": {
+    "pass": [
+      0
+    ]
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "test": {
+        "description": "Fully qualified test name.",
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "test"
+    ],
+    "type": "object"
+  }
+}
+
+----- stderr -----

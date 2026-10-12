@@ -6,32 +6,28 @@ use std::{
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use ignore::{DirEntry, WalkBuilder};
 
-use super::{Problem, SpecFile, relative_to};
+use super::{Problem, ProjectFile, relative_to};
 use crate::spec::file::RequirementsFile;
 use crate::tools::manifest::ProjectGlob;
+use crate::validators::is_validator_file;
 
-/// The names of validator files, which hold a directory's validators and
-/// are never specifications.
-const VALIDATOR_FILES: [&str; 4] = [
-    ".validators.slcr.toml",
-    ".validators.slcr.json",
-    ".validators.slcr.yaml",
-    ".validators.slcr.yml",
-];
-
-/// What expanding the `specs` patterns found.
+/// What searching the project found.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Discovery {
     /// The specification files, each once, ordered by their path relative
     /// to the project root.
-    pub(crate) files: Vec<SpecFile>,
-    /// Every pattern that couldn't be honored, and every match that isn't
-    /// a specification file.
+    pub(crate) files: Vec<ProjectFile>,
+    /// Every validator file in the project, ordered the same way.
+    pub(crate) validators: Vec<ProjectFile>,
+    /// Every pattern that couldn't be honored, every match that isn't a
+    /// specification file, and every directory with more than one
+    /// validator file.
     pub(crate) problems: Vec<Problem>,
 }
 
 /// Expand `specs`, the manifest's patterns, in the project rooted at
-/// `root`, naming files relative to `cwd`. Both paths are absolute.
+/// `root`, and find its validator files, naming files relative to `cwd`.
+/// Both paths are absolute.
 ///
 /// A pattern is a glob relative to the root, in which `*` and `?` never
 /// match a `/` but do match a leading dot, and `**` matches any number of
@@ -41,43 +37,27 @@ pub(crate) struct Discovery {
 /// the repository's root, `.git/info/exclude`, and git's global excludes.
 /// Outside a git repository, as for git, nothing is ignored.
 ///
+/// A validator file is any file named `.validators.slcr.<ext>` that the
+/// same walk sees, whether or not a pattern matches it.
+///
 /// Every problem is collected: a pattern that isn't a valid glob or
 /// matches nothing, a match that is a validator file or has no
-/// specification format's extension, and a directory that can't be read.
+/// specification format's extension, a directory with two validator
+/// files, and a directory that can't be read.
 pub(crate) fn discover(root: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Discovery {
     let mut problems = Vec::new();
     let (set, patterns) = compile(specs, &mut problems);
 
     // Each matched file, with the indices of the patterns that match it.
     let mut matches: BTreeMap<PathBuf, Vec<usize>> = BTreeMap::new();
-    let walk = WalkBuilder::new(root)
-        .standard_filters(false)
-        .hidden(false)
-        .parents(true)
-        .git_ignore(true)
-        .git_exclude(true)
-        .git_global(true)
-        .require_git(true)
-        .filter_entry(|entry| entry.file_name() != ".git")
-        .build();
-    for entry in walk {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                unsearchable(&err, root, cwd, &mut problems);
-                continue;
-            }
-        };
-        if !is_file(&entry) {
-            continue;
+    let mut validators = Vec::new();
+    for relative in walk(root, cwd, &mut problems) {
+        let matched = set.matches(&relative);
+        if is_validator_file(&relative) {
+            validators.push(ProjectFile::new(root, cwd, relative.clone()));
         }
-        let relative = entry
-            .path()
-            .strip_prefix(root)
-            .expect("the walk stays under its root");
-        let matched = set.matches(relative);
         if !matched.is_empty() {
-            matches.insert(relative.to_path_buf(), matched);
+            matches.insert(relative, matched);
         }
     }
 
@@ -87,7 +67,7 @@ pub(crate) fn discover(root: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Discov
         for &index in &matched {
             matched_any[index] = true;
         }
-        let file = SpecFile::new(root, cwd, relative);
+        let file = ProjectFile::new(root, cwd, relative);
         let matched_by = || matched.iter().map(|&i| patterns[i].to_string()).collect();
         if is_validator_file(file.relative()) {
             problems.push(Problem::MatchesValidatorFile {
@@ -110,7 +90,70 @@ pub(crate) fn discover(root: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Discov
             });
         }
     }
-    Discovery { files, problems }
+    validators.sort();
+    problems.extend(crowded(&validators));
+    Discovery {
+        files,
+        validators,
+        problems,
+    }
+}
+
+/// A directory holds at most one validator file: report each that shares
+/// its directory with an earlier one.
+fn crowded(validators: &[ProjectFile]) -> Vec<Problem> {
+    let mut first_in: BTreeMap<&Path, &ProjectFile> = BTreeMap::new();
+    let mut problems = Vec::new();
+    for file in validators {
+        let directory = file.relative().parent().unwrap_or(Path::new(""));
+        match first_in.get(directory) {
+            Some(first) => problems.push(Problem::DuplicateValidatorFile {
+                first: first.shown().to_path_buf(),
+                second: file.shown().to_path_buf(),
+            }),
+            None => {
+                first_in.insert(directory, file);
+            }
+        }
+    }
+    problems
+}
+
+/// Every file under `root` that the walk sees, as a path relative to it,
+/// in no particular order. A directory that can't be read is a problem.
+///
+/// The walk sees hidden files and directories, other than `.git`, and
+/// skips what git ignores, as [discover] describes.
+fn walk(root: &Path, cwd: &Path, problems: &mut Vec<Problem>) -> Vec<PathBuf> {
+    let walk = WalkBuilder::new(root)
+        .standard_filters(false)
+        .hidden(false)
+        .parents(true)
+        .git_ignore(true)
+        .git_exclude(true)
+        .git_global(true)
+        .require_git(true)
+        .filter_entry(|entry| entry.file_name() != ".git")
+        .build();
+    let mut files = Vec::new();
+    for entry in walk {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                unsearchable(&err, root, cwd, problems);
+                continue;
+            }
+        };
+        if !is_file(&entry) {
+            continue;
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(root)
+            .expect("the walk stays under its root");
+        files.push(relative.to_path_buf());
+    }
+    files
 }
 
 /// Compile every valid pattern into one set, and report each invalid one.
@@ -147,13 +190,6 @@ fn is_file(entry: &DirEntry) -> bool {
     entry.file_type().is_some_and(|file_type| {
         file_type.is_file() || (file_type.is_symlink() && entry.path().is_file())
     })
-}
-
-/// Whether the file at `path` is a validator file, by its name alone.
-fn is_validator_file(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| VALIDATOR_FILES.contains(&name))
 }
 
 /// Report a directory the walk couldn't read, which might have held a
@@ -326,19 +362,77 @@ mod tests {
         assert_eq!(found(&discovery), ["docs/api/api.slcr.toml"]);
     }
 
+    /// The validator files discovered, as written relative to the root.
+    fn validators(discovery: &Discovery) -> Vec<String> {
+        discovery
+            .validators
+            .iter()
+            .map(|file| file.relative().display().to_string())
+            .collect()
+    }
+
     #[test]
-    fn every_validator_file_name_is_recognized() {
-        for name in VALIDATOR_FILES {
-            assert!(is_validator_file(&Path::new("docs").join(name)), "{name}");
-        }
-        for name in [
-            "validators.slcr.toml",
-            ".validators.slcr.md",
-            ".validators.toml",
-            "a.validators.slcr.toml",
-        ] {
-            assert!(!is_validator_file(Path::new(name)), "{name}");
-        }
+    fn validator_files_are_found_whatever_the_patterns_match() {
+        let dir = project(&[
+            "SPEC.slcr.yml",
+            "src/views/items/.validators.slcr.toml",
+            "src/.validators.slcr.yml",
+            ".validators.slcr.json",
+            "src/views/.validators.slcr.yaml",
+            "src/views/validators.slcr.toml",
+            "src/.hidden/.validators.slcr.toml",
+        ]);
+        let discovery = run(&dir, &["SPEC.slcr.yml"]);
+        assert_eq!(discovery.problems, []);
+        assert_eq!(found(&discovery), ["SPEC.slcr.yml"]);
+        assert_eq!(
+            validators(&discovery),
+            [
+                ".validators.slcr.json",
+                "src/.hidden/.validators.slcr.toml",
+                "src/.validators.slcr.yml",
+                "src/views/.validators.slcr.yaml",
+                "src/views/items/.validators.slcr.toml",
+            ]
+        );
+    }
+
+    #[test]
+    fn validator_files_follow_the_same_walk_rules() {
+        let dir = project(&[
+            "SPEC.slcr.yml",
+            ".git/HEAD",
+            ".git/.validators.slcr.toml",
+            ".gitignore=target/\n",
+            "target/.validators.slcr.toml",
+            "src/.validators.slcr.toml",
+        ]);
+        let discovery = run(&dir, &["SPEC.slcr.yml"]);
+        assert_eq!(validators(&discovery), ["src/.validators.slcr.toml"]);
+    }
+
+    #[test]
+    fn a_directory_holds_at_most_one_validator_file() {
+        let dir = project(&[
+            "SPEC.slcr.yml",
+            "src/.validators.slcr.yml",
+            "src/.validators.slcr.toml",
+            "src/.validators.slcr.json",
+            "src/api/.validators.slcr.json",
+        ]);
+        let cwd = dir.path().join("src");
+        let discovery = discover(dir.path(), &cwd, &globs(&["SPEC.slcr.yml"]));
+        // Every one is still vetted.
+        assert_eq!(validators(&discovery).len(), 4);
+        assert_eq!(
+            messages(&discovery),
+            [
+                ".validators.slcr.json and .validators.slcr.toml are validator files in the \
+                 same directory",
+                ".validators.slcr.json and .validators.slcr.yml are validator files in the \
+                 same directory",
+            ]
+        );
     }
 
     #[test]
@@ -432,7 +526,7 @@ mod tests {
         let dir = project(&["SPEC.slcr.yml", "docs/a.yaml", "docs/.validators.slcr.toml"]);
         let cwd = dir.path().join("docs");
         let discovery = discover(dir.path(), &cwd, &globs(&["**"]));
-        let shown: Vec<_> = discovery.files.iter().map(SpecFile::shown).collect();
+        let shown: Vec<_> = discovery.files.iter().map(ProjectFile::shown).collect();
         assert_eq!(shown, [Path::new("../SPEC.slcr.yml"), Path::new("a.yaml")]);
         assert_eq!(
             messages(&discovery),

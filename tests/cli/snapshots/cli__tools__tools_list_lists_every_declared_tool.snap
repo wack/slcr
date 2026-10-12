@@ -1,0 +1,20 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - list
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+name           version  descriptor     source                    pin
+-------------  -------  -------------  ------------------------  -----------------------------------------------------------------------
+ast-grep       0.3.1    not installed  tools/ast-grep.toml       blake3:5bc0b3fd8b555f669bc368ce79f8ffbe4d7c34a78082ddc90c8023dff525ea21
+cargo-nextest  1.0.0    installed      tools/cargo-nextest.toml  blake3:3aa337b9c338f5f5e93e6664416047b687e73343e4d92158aab2e6329f1e6e92
+
+----- stderr -----
