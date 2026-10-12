@@ -5,7 +5,8 @@ use thiserror::Error;
 
 use super::{Problem, QualifiedRequirementId, SpecFile};
 use crate::spec::graph::UnvettedDocument;
-use crate::spec::node::Requirement;
+use crate::spec::id::{CriterionId, RequirementId};
+use crate::spec::node::{AcceptanceCriterion, Requirement};
 use crate::spec::text::SpecName;
 
 /// A loaded specification of the project, and the file it came from.
@@ -17,7 +18,7 @@ pub(crate) struct IndexedSpec<'a> {
 
 impl<'a> IndexedSpec<'a> {
     /// The requirement `id`, wherever it is nested.
-    fn requirement(self, id: &crate::spec::id::RequirementId) -> Option<&'a Requirement> {
+    fn requirement(self, id: &RequirementId) -> Option<&'a Requirement> {
         self.document
             .document()
             .requirements()
@@ -62,6 +63,81 @@ pub enum UnresolvedRequirement {
         /// The specification's file, relative to the working directory.
         path: PathBuf,
     },
+}
+
+/// The error returned when a requirement doesn't contain an acceptance
+/// criterion, as a validator's `criterion` must name one it does.
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error(
+    "`{criterion}` is not an acceptance criterion of `{requirement}` ({})",
+    .path.display()
+)]
+pub struct UnknownCriterion {
+    criterion: CriterionId,
+    requirement: QualifiedRequirementId,
+    /// The specification's file, relative to the working directory.
+    path: PathBuf,
+    /// The requirement that does contain the criterion, if one does.
+    owner: Option<RequirementId>,
+    /// The requirement's own criteria.
+    own: Vec<CriterionId>,
+}
+
+impl Diagnostic for UnknownCriterion {
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        let own = if self.own.is_empty() {
+            format!(
+                "{} has no acceptance criteria",
+                self.requirement.requirement()
+            )
+        } else {
+            let own: Vec<String> = self.own.iter().map(ToString::to_string).collect();
+            format!(
+                "the acceptance criteria of {} are: {}",
+                self.requirement.requirement(),
+                own.join(", ")
+            )
+        };
+        Some(Box::new(match self.owner {
+            Some(owner) => format!("{} belongs to {owner}; {own}", self.criterion),
+            None => own,
+        }))
+    }
+}
+
+impl<'a> Resolved<'a> {
+    /// The acceptance criterion `id` among the requirement's own: those it
+    /// contains, not those of the requirements nested in it.
+    pub(crate) fn criterion(
+        &self,
+        id: &CriterionId,
+    ) -> Result<&'a AcceptanceCriterion, UnknownCriterion> {
+        let own = self.requirement.acceptance_criteria();
+        if let Some(criterion) = own.iter().find(|criterion| criterion.id() == id) {
+            return Ok(criterion);
+        }
+        let document = self.spec.document.document();
+        let owner = document
+            .requirements()
+            .into_iter()
+            .find(|requirement| {
+                requirement
+                    .acceptance_criteria()
+                    .iter()
+                    .any(|criterion| criterion.id() == id)
+            })
+            .map(|requirement| *requirement.id());
+        Err(UnknownCriterion {
+            criterion: *id,
+            requirement: QualifiedRequirementId::new(
+                document.spec().name().clone(),
+                *self.requirement.id(),
+            ),
+            path: self.spec.file.shown().to_path_buf(),
+            owner,
+            own: own.iter().map(|criterion| *criterion.id()).collect(),
+        })
+    }
 }
 
 impl<'a> SpecIndex<'a> {
@@ -255,6 +331,51 @@ mod tests {
             err.to_string(),
             "`todo-api/REQ-099` names REQ-099, which the specification `todo-api` \
              (specs/todo.yaml) doesn't have"
+        );
+    }
+
+    fn criterion(value: &str) -> CriterionId {
+        value.parse().unwrap()
+    }
+
+    #[test]
+    fn a_criterion_resolves_within_its_requirement() {
+        let specs = specs(&[("todo.yaml", "todo-api")]);
+        let (index, _) = index(&specs);
+        let table = index.resolve(&id("todo-api/REQ-007")).unwrap();
+        let resolved = table.criterion(&criterion("AC-001")).unwrap();
+        assert_eq!(resolved.title().as_str(), "Table schema is declared");
+    }
+
+    #[test]
+    fn a_criterion_of_another_requirement_names_its_owner() {
+        let specs = specs(&[("specs/todo.yaml", "todo-api")]);
+        let (index, _) = index(&specs);
+        let endpoint = index.resolve(&id("todo-api/REQ-001")).unwrap();
+        let err = endpoint.criterion(&criterion("AC-001")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "`AC-001` is not an acceptance criterion of `todo-api/REQ-001` (specs/todo.yaml)"
+        );
+        assert_eq!(
+            err.help().unwrap().to_string(),
+            "AC-001 belongs to REQ-007; REQ-001 has no acceptance criteria"
+        );
+    }
+
+    #[test]
+    fn an_unknown_criterion_lists_the_requirements_own() {
+        let specs = specs(&[("todo.yaml", "todo-api")]);
+        let (index, _) = index(&specs);
+        let table = index.resolve(&id("todo-api/REQ-007")).unwrap();
+        let err = table.criterion(&criterion("AC-099")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "`AC-099` is not an acceptance criterion of `todo-api/REQ-007` (todo.yaml)"
+        );
+        assert_eq!(
+            err.help().unwrap().to_string(),
+            "the acceptance criteria of REQ-007 are: AC-001"
         );
     }
 }

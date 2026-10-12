@@ -277,7 +277,10 @@ like `SpecFile::shown`, are relative to the working directory.
   file with a name already taken is a `DuplicateSpecName` problem naming
   both. `resolve` turns a `QualifiedRequirementId` into its specification
   and requirement, or fails with `UnresolvedRequirement` (`UnknownSpec`,
-  whose help lists the names, or `UnknownRequirement`).
+  whose help lists the names, or `UnknownRequirement`). `Resolved::criterion`
+  resolves a validator's `AC-<n>` among the requirement's own acceptance
+  criteria, or fails with `UnknownCriterion`, whose help lists them and names
+  the requirement that does contain it, if one does.
 - `qualified.rs` — `QualifiedRequirementId`, such as `todo-api/REQ-002`: a
   `SpecName`, `/`, and a `RequirementId`, the validator schema's pattern.
   The qualifier is the name, never a path.
