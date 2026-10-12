@@ -56,11 +56,19 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   fetch a descriptor missing from the store. "Check" means only this.
 - `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
   root `SEC-001`, Glossary `SEC-002`) at `FILE`, by default the well-known
-  `SPEC.slcr.yml`. Without `--name`, the spec is named after the file's stem
+  `SPEC.slcr.toml` (`spec::file::DEFAULT_FILE`, also the default FILE of
+  `render`, `query`, and `slice`). Without `--name`, the spec is named after the file's stem
   minus any `.slcr`/`.spec`, or, for `SPEC.slcr.*`, after its directory; an
   invalid result is an error, never slugified. `--title` defaults to the name.
-  It writes through `FileSystem::create_file`, so it never overwrites anything
-  (even a dangling symlink) and never creates a missing directory.
+  Unless `Project::find_from` finds an `SLCR.toml` in the working directory
+  or a parent (which it leaves untouched, and says so), it also creates
+  `SLCR.toml` in the working directory, with `formatVersion` and `specs`
+  listing FILE relative to it; FILE outside the working directory, or with
+  glob metacharacters, is then an error (`InvalidSpecPath`), as is a
+  misnamed manifest. Both files go through `FileSystem::create_file`, so it
+  never overwrites anything (even a dangling symlink) and never creates a
+  missing directory; it creates both or neither, removing the spec if the
+  manifest can't be written.
 - `vet <FILE>...` loads each requirements file with
   `RequirementsFile::unvetted()`, writes every finding to stderr as a miette
   diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,
@@ -72,9 +80,9 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   `terraform validate`, `vet` runs nothing and never uses the network.
   Vetting validator files, the manifest, and pinned descriptors is still to
   come.
-- `render [FILE]` renders a specification (default `SPEC.slcr.yml`) as
+- `render [FILE]` renders a specification (default `SPEC.slcr.toml`) as
   Markdown with `render::document`, to FILE's base name plus `.md` beside it
-  (`SPEC.slcr.yml` → `SPEC.md`), to `--output PATH`, or to stdout with `-o -`.
+  (`SPEC.slcr.toml` → `SPEC.md`), to `--output PATH`, or to stdout with `-o -`.
   Findings go to stderr as `vet` reports them, and a file that breaks an
   invariant fails with `RenderFailed`. It replaces the output atomically
   (`FileSystem::replace_file`), but only a file that starts with the
@@ -83,7 +91,7 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   unless the output is already up to date. (The flag avoids the word "check",
   which means running validators.)
 - `query QUERY [FILE]` runs a read-only GQL query (the SLCR query profile of
-  `slcr-gql`) against a specification (default `SPEC.slcr.yml`) and writes the
+  `slcr-gql`) against a specification (default `SPEC.slcr.toml`) and writes the
   rows to stdout as an aligned table, or with `--format tsv` / `json`. The
   query is parsed before the file is read; `--param NAME=JSON` binds `$NAME`.
   Findings go to stderr as `vet` reports them, and a file that breaks an
@@ -92,7 +100,7 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   `source`, and `target`). A query that can't run fails with `InvalidQuery`,
   which labels syntax errors and features outside the profile in the query.
 - `slice REQUIREMENT [FILE]` writes the slice of one requirement (default file
-  `SPEC.slcr.yml`) to stdout as Markdown: `slice::members` finds what it
+  `SPEC.slcr.toml`) to stdout as Markdown: `slice::members` finds what it
   includes with GQL, and `render::slice` renders it. Findings go to stderr as
   `vet` reports them; a file that breaks an invariant fails with
   `SliceFailed`, and an ID the file lacks with `UnknownRequirement`. A
@@ -211,9 +219,10 @@ and no caching.
   user sees.
 - `manifest.rs` — `Project` (root discovery; a case-only near miss such as
   `slcr.toml` is an error, so macOS and Linux CI agree), `Manifest` (typed,
-  `deny_unknown_fields`), and `ManifestFile`, which edits the TOML document
+  `deny_unknown_fields`), `ManifestFile`, which edits the TOML document
   in place (`set_tool`, `repin_tool`, `remove_tool`), whether `tools` is
-  written as `[tools.*]` headers or as an inline table.
+  written as `[tools.*]` headers or as an inline table, and `NewManifest`,
+  what `slcr init` writes.
 - `descriptor.rs` — `Descriptor::parse` checks the schema's grammar through
   serde, then the `x-vetInvariants` that concern the descriptor alone:
   `validator.schema` compiles as a self-contained draft 2020-12 schema of

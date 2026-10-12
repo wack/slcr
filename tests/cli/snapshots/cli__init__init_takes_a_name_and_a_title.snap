@@ -9,10 +9,14 @@ info:
     - billing
     - "--title"
     - Billing Service
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 specs.yaml: created specification billing
+SLCR.toml: created project manifest
 
 ----- stderr -----

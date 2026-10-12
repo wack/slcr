@@ -1,0 +1,20 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - SLCR.toml
+    - "--name"
+    - todo-api
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × SLCR.toml is named like the project manifest, SLCR.toml
+  help: choose another name for the specification file, e.g. `SPEC.slcr.toml`
