@@ -1,0 +1,20 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "../SPEC.slcr.toml"
+    - "--name"
+    - todo-api
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × ../SPEC.slcr.toml is outside the working directory, where SLCR.toml would be created
+  help: SLCR.toml lists specification files relative to its own directory: create the file inside the working directory, or run `slcr init` from a directory that contains it

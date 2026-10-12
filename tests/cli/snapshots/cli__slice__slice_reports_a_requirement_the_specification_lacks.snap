@@ -5,11 +5,14 @@ info:
   args:
     - slice
     - REQ-099
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-Error:   × SPEC.slcr.yml has no requirement REQ-099
+Error:   × SPEC.slcr.toml has no requirement REQ-099
   help: `slcr query 'MATCH (r:Requirement) RETURN r, r.title'` lists them

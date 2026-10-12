@@ -5,13 +5,16 @@ info:
   args:
     - render
     - "--output"
-    - "./SPEC.slcr.yml"
+    - "./SPEC.slcr.toml"
     - "--force"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-Error:   × ./SPEC.slcr.yml is the requirements file being rendered
+Error:   × ./SPEC.slcr.toml is the requirements file being rendered
   help: choose another file with `--output`

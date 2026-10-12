@@ -2,7 +2,7 @@
 //! `--log-level` and `--enable-colors` flags. These flags act the same
 //! whichever subcommand they're given to, so each is covered once here.
 
-use super::{TODO_API_YAML, Workspace, with_violation};
+use super::{TODO_API_TOML, Workspace, with_violation};
 
 /// Run `body` with log lines' timestamps, which change every run, redacted.
 fn without_timestamps(body: impl FnOnce()) {
@@ -40,7 +40,7 @@ fn check_is_not_implemented() {
 #[test]
 fn log_level_shows_lower_levels_on_stderr() {
     let workspace = Workspace::new();
-    workspace.file("SPEC.slcr.yml", TODO_API_YAML);
+    workspace.file("SPEC.slcr.toml", TODO_API_TOML);
     without_timestamps(|| {
         assert_cmd_snapshot!(workspace.slcr(&["--log-level", "debug", "render"]));
     });
