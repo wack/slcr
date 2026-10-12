@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - install
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+ast-grep: already installed
+cargo-nextest: already installed
+jev: already installed
+
+----- stderr -----

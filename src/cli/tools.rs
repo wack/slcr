@@ -8,6 +8,7 @@ use crate::fs::FileSystem;
 use crate::tools::{
     Environment, InvalidToolKey, ToolKey,
     add::add,
+    install::install,
     list::list,
     remove::remove,
     show::show,
@@ -33,6 +34,10 @@ pub enum ToolsCommand {
     /// Re-fetch a declared tool's descriptor from its source, check it,
     /// re-pin it, and install it
     Update(KeyArgs),
+    /// Install every descriptor SLCR.toml pins that isn't installed yet:
+    /// fetch it from its source and check it against its pin, never
+    /// re-pinning it
+    Install,
     /// Remove a tool from SLCR.toml
     Remove(KeyArgs),
     /// List the tools SLCR.toml declares, and whether each one's descriptor
@@ -111,7 +116,8 @@ fn parse_key(value: &str) -> Result<ToolKey, InvalidToolKey> {
 }
 
 /// Edit and read the tools a project declares. `list` and `show` read
-/// descriptors from the descriptor store only, and never fetch one.
+/// descriptors from the descriptor store only, and never fetch one;
+/// `install` fills the store, and never edits the manifest.
 pub struct Tools {
     terminal: Terminal,
     args: ToolsArgs,
@@ -139,6 +145,16 @@ impl Tools {
             }
             ToolsCommand::Update(KeyArgs { key }) => block_on(update(&env, key))??.to_string(),
             ToolsCommand::Remove(KeyArgs { key }) => remove(&fs, &cwd, key)?.to_string(),
+            ToolsCommand::Install => {
+                // Each tool that failed is a diagnostic; every tool gets a
+                // status line, and any failure fails the command.
+                let installed = block_on(install(&env))??;
+                for error in installed.errors() {
+                    self.terminal.write_diagnostic(error.as_ref())?;
+                }
+                self.terminal.write_stdout_line(&installed.to_string())?;
+                return Ok(installed.verdict()?);
+            }
             ToolsCommand::List(ListArgs { format }) => format.write(&list(&fs, &store, &cwd)?),
             ToolsCommand::Show(ShowArgs { key, format }) => {
                 format.write(&show(&fs, &store, &cwd, key)?)

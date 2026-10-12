@@ -1,0 +1,23 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - install
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+ast-grep: failed
+cargo-nextest: already installed
+jev: installed blake3:2039c8b275a1…
+
+----- stderr -----
+  × tools/ast-grep.toml no longer serves the descriptor tool ast-grep pins
+  help: it serves blake3:283046d67391…, not blake3:990d40beb5a8…: restore the pinned descriptor there, or re-pin the tool to what it serves with `slcr tools update ast-grep`, which changes SLCR.toml
+
+Error:   × installing failed for 1 of 3 tools

@@ -1,9 +1,10 @@
-//! `slcr tools add SOURCE [--as NAME]`, `slcr tools update NAME`, and
-//! `slcr tools remove NAME`.
+//! `slcr tools add SOURCE [--as NAME]`, `slcr tools update NAME`,
+//! `slcr tools install`, `slcr tools remove NAME`, `slcr tools list`, and
+//! `slcr tools show NAME`.
 
 use insta::assert_snapshot;
 
-use super::{DATA_DIR, NEXTEST_DESCRIPTOR, Workspace, stored};
+use super::{DATA_DIR, NEXTEST_DESCRIPTOR, TODO_API_YAML, Workspace, pin, stored};
 
 /// A manifest that declares no tools yet.
 const MANIFEST: &str =
@@ -542,7 +543,7 @@ fn tools_update_installs_a_descriptor_that_vet_reports_missing() {
     let workspace = declared();
     let installed = stored(NEXTEST_DESCRIPTOR);
     std::fs::remove_file(workspace.path(&installed)).unwrap();
-    workspace.file("SPEC.slcr.yml", super::TODO_API_YAML);
+    workspace.file("SPEC.slcr.yml", TODO_API_YAML);
     assert!(!workspace.slcr(&["vet"]).status().unwrap().success());
     assert_cmd_snapshot!(workspace.slcr(&["tools", "update", "cargo-nextest"]));
     assert_eq!(workspace.read(&installed), NEXTEST_DESCRIPTOR);
@@ -654,4 +655,215 @@ fn tools_show_requires_a_manifest() {
 #[test]
 fn tools_show_rejects_an_invalid_name() {
     assert_cmd_snapshot!(project().slcr(&["tools", "show", "Nextest"]));
+}
+
+#[test]
+fn tools_install_help() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "install", "--help"]));
+}
+
+/// A valid descriptor named jev, other than cargo-nextest's.
+fn jev() -> String {
+    NEXTEST_DESCRIPTOR
+        .replace("name = \"cargo-nextest\"", "name = \"jev\"")
+        .replace("version = \"1.0.0\"", "version = \"2.0.0\"")
+}
+
+/// A valid descriptor named ast-grep.
+fn ast_grep() -> String {
+    NEXTEST_DESCRIPTOR
+        .replace("name = \"cargo-nextest\"", "name = \"ast-grep\"")
+        .replace("version = \"1.0.0\"", "version = \"0.3.1\"")
+}
+
+/// A project that declares ast-grep 0.3.1, cargo-nextest 1.0.0, and jev
+/// 2.0.0, each from the descriptor kept in it and pinned to it, with none
+/// of them installed.
+fn uninstalled() -> Workspace {
+    let workspace = project();
+    workspace
+        .file(
+            "SLCR.toml",
+            format!(
+                "{MANIFEST}\n[tools.ast-grep]\nversion = \"0.3.1\"\n\
+                 source = {{ path = \"tools/ast-grep.toml\" }}\npin = \"{}\"\n\n\
+                 [tools.cargo-nextest]\nversion = \"1.0.0\"\n\
+                 source = {{ path = \"tools/cargo-nextest.toml\" }}\npin = \"{}\"\n\n\
+                 [tools.jev]\nversion = \"2.0.0\"\nsource = {{ path = \"tools/jev.toml\" }}\n\
+                 pin = \"{}\"\n",
+                pin(&ast_grep()),
+                pin(NEXTEST_DESCRIPTOR),
+                pin(&jev()),
+            ),
+        )
+        .file("tools/ast-grep.toml", ast_grep())
+        .file("tools/jev.toml", jev());
+    workspace
+}
+
+/// Whether anything is in the workspace's descriptor store.
+fn store_is_empty(workspace: &Workspace) -> bool {
+    !workspace
+        .files()
+        .iter()
+        .any(|file| file.starts_with(DATA_DIR))
+}
+
+#[test]
+fn tools_install_installs_every_missing_descriptor() {
+    let workspace = uninstalled();
+    let manifest = workspace.read("SLCR.toml");
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install"]));
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+    for descriptor in [ast_grep(), NEXTEST_DESCRIPTOR.to_owned(), jev()] {
+        assert_eq!(workspace.read(&stored(&descriptor)), descriptor);
+    }
+}
+
+#[test]
+fn tools_install_leaves_installed_descriptors_alone() {
+    let workspace = uninstalled();
+    let args = ["tools", "install"];
+    assert!(workspace.slcr(&args).status().unwrap().success());
+    // Nothing is fetched again, so the sources can be gone.
+    for source in [
+        "tools/ast-grep.toml",
+        "tools/cargo-nextest.toml",
+        "tools/jev.toml",
+    ] {
+        std::fs::remove_file(workspace.path(source)).unwrap();
+    }
+    assert_cmd_snapshot!(workspace.slcr(&args));
+}
+
+#[test]
+fn tools_install_finds_the_project_above_the_working_directory() {
+    let workspace = declared();
+    std::fs::remove_file(workspace.path(&stored(NEXTEST_DESCRIPTOR))).unwrap();
+    workspace.dir("crates/api");
+    assert_cmd_snapshot!(workspace.slcr_in("crates/api", &["tools", "install"]));
+    assert_eq!(
+        workspace.read(&stored(NEXTEST_DESCRIPTOR)),
+        NEXTEST_DESCRIPTOR
+    );
+}
+
+#[test]
+fn tools_install_replaces_a_corrupted_descriptor() {
+    let workspace = declared();
+    workspace.file(&stored(NEXTEST_DESCRIPTOR), newer());
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install"]));
+    assert_eq!(
+        workspace.read(&stored(NEXTEST_DESCRIPTOR)),
+        NEXTEST_DESCRIPTOR
+    );
+}
+
+#[test]
+fn tools_install_refuses_a_source_that_serves_other_bytes() {
+    let workspace = declared();
+    let manifest = workspace.read("SLCR.toml");
+    std::fs::remove_file(workspace.path(&stored(NEXTEST_DESCRIPTOR))).unwrap();
+    workspace.file("tools/cargo-nextest.toml", newer());
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install"]));
+    // It never re-pins, and it installs nothing.
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+    assert!(store_is_empty(&workspace));
+}
+
+#[test]
+fn tools_install_reports_every_tool() {
+    // ast-grep's source serves other bytes now, cargo-nextest is
+    // installed, and jev is not.
+    let workspace = uninstalled();
+    workspace
+        .file("tools/ast-grep.toml", ast_grep().replace("0.3.1", "0.4.0"))
+        .install(NEXTEST_DESCRIPTOR);
+    let manifest = workspace.read("SLCR.toml");
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install"]));
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+    let mut expected = [
+        stored(NEXTEST_DESCRIPTOR),
+        stored(&jev()),
+        "SLCR.toml".to_owned(),
+        "tools/ast-grep.toml".to_owned(),
+        "tools/cargo-nextest.toml".to_owned(),
+        "tools/jev.toml".to_owned(),
+    ];
+    expected.sort_unstable();
+    assert_eq!(workspace.files(), expected);
+}
+
+#[test]
+fn tools_install_rejects_a_pinned_descriptor_that_breaks_an_invariant() {
+    let workspace = project();
+    let undeclared = NEXTEST_DESCRIPTOR.replace("{with.test}", "{with.name}");
+    workspace
+        .file(
+            "SLCR.toml",
+            declaring("{ path = \"tools/cargo-nextest.toml\" }")
+                .replace(&pin(NEXTEST_DESCRIPTOR), &pin(&undeclared)),
+        )
+        .file("tools/cargo-nextest.toml", &undeclared);
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install"]));
+    assert!(store_is_empty(&workspace));
+}
+
+#[test]
+fn tools_install_rejects_a_version_the_manifest_does_not_declare() {
+    let workspace = project();
+    workspace.file(
+        "SLCR.toml",
+        declaring("{ path = \"tools/cargo-nextest.toml\" }")
+            .replace("version = \"1.0.0\"", "version = \"0.9.0\""),
+    );
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install"]));
+    assert!(store_is_empty(&workspace));
+}
+
+#[test]
+fn tools_install_reports_a_failed_fetch() {
+    let workspace = project();
+    // Nothing listens on port 1.
+    let manifest = declaring("{ url = \"https://127.0.0.1:1/cargo-nextest.toml\" }");
+    workspace.file("SLCR.toml", &manifest);
+    let mut command = workspace.slcr(&["tools", "install"]);
+    for proxy in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
+        command.env_remove(proxy);
+    }
+    assert_cmd_snapshot!(command);
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
+    assert!(store_is_empty(&workspace));
+}
+
+#[test]
+fn tools_install_reports_a_manifest_without_tools() {
+    let workspace = project();
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install"]));
+    assert_eq!(workspace.files(), ["SLCR.toml", "tools/cargo-nextest.toml"]);
+}
+
+#[test]
+fn tools_install_requires_a_manifest() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "install"]));
+}
+
+#[test]
+fn tools_install_takes_no_arguments() {
+    assert_cmd_snapshot!(project().slcr(&["tools", "install", "cargo-nextest"]));
+}
+
+#[test]
+fn tools_install_installs_what_vet_reports_missing() {
+    // A fresh clone: the project declares a tool, and this machine's
+    // descriptor store is empty.
+    let workspace = project();
+    let manifest = declaring("{ path = \"tools/cargo-nextest.toml\" }");
+    workspace
+        .file("SLCR.toml", &manifest)
+        .file("SPEC.slcr.yml", TODO_API_YAML);
+    assert_cmd_snapshot!("fresh_clone_vet", workspace.slcr(&["vet"]));
+    assert_cmd_snapshot!("fresh_clone_install", workspace.slcr(&["tools", "install"]));
+    assert_cmd_snapshot!("fresh_clone_vet_again", workspace.slcr(&["vet"]));
+    assert_eq!(workspace.read("SLCR.toml"), manifest);
 }

@@ -21,6 +21,8 @@ use crate::spec::text::is_slug;
 pub(crate) mod add;
 /// What a descriptor declares, validated against its schema.
 pub(crate) mod descriptor;
+/// `slcr tools install`: installing every pinned descriptor the store lacks.
+pub(crate) mod install;
 /// `slcr tools list`: the declared tools, and whether each is installed.
 pub(crate) mod list;
 /// `SLCR.toml`: the project manifest, and finding the project root.

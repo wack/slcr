@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - install
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+ast-grep: installed blake3:990d40beb5a8…
+cargo-nextest: installed blake3:3aa337b9c338…
+jev: installed blake3:2039c8b275a1…
+
+----- stderr -----
