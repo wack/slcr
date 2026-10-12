@@ -262,9 +262,10 @@ like `SpecFile::shown`, are relative to the working directory.
 - `discover.rs` — `discover` expands each pattern under the project root:
   `globset` with `literal_separator`, so `*` never crosses a `/` but does
   match a leading dot, and an `ignore` walk that sees hidden files (never
-  `.git`) and honors `.gitignore` files inside the project even outside git
-  (`require_git(false)`), but none outside it, nor global or
-  `.git/info/exclude` excludes, so every machine finds the same files. A
+  `.git`) and skips what git ignores: in a git repository, the `.gitignore`
+  files of the project and its parents up to the repository's root,
+  `.git/info/exclude`, and the global excludes; outside one, as for git,
+  nothing (`require_git(true)`). A
   file matched twice counts once; files are ordered by project-relative
   path. A pattern that is invalid or matches nothing, a match that is a
   validator file (`.validators.slcr.*`) or has no specification format's

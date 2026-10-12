@@ -36,11 +36,10 @@ pub(crate) struct Discovery {
 /// A pattern is a glob relative to the root, in which `*` and `?` never
 /// match a `/` but do match a leading dot, and `**` matches any number of
 /// directories. The walk sees hidden files and directories, other than
-/// `.git`, and skips what the project's `.gitignore` files ignore, whether
-/// or not the project is in a git repository. Only `.gitignore` files
-/// inside the project count, not those of its parent directories, git's
-/// global excludes, or `.git/info/exclude`, so the same project matches the
-/// same files on every machine.
+/// `.git`, and skips what git ignores: in a git repository, the
+/// `.gitignore` files of the project and of its parent directories up to
+/// the repository's root, `.git/info/exclude`, and git's global excludes.
+/// Outside a git repository, as for git, nothing is ignored.
 ///
 /// Every problem is collected: a pattern that isn't a valid glob or
 /// matches nothing, a match that is a validator file or has no
@@ -54,8 +53,11 @@ pub(crate) fn discover(root: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Discov
     let walk = WalkBuilder::new(root)
         .standard_filters(false)
         .hidden(false)
+        .parents(true)
         .git_ignore(true)
-        .require_git(false)
+        .git_exclude(true)
+        .git_global(true)
+        .require_git(true)
         .filter_entry(|entry| entry.file_name() != ".git")
         .build();
     for entry in walk {
@@ -370,8 +372,9 @@ mod tests {
     }
 
     #[test]
-    fn gitignore_is_respected_outside_a_git_repository() {
+    fn gitignore_is_respected_in_a_git_repository() {
         let dir = project(&[
+            ".git/HEAD",
             ".gitignore=generated/\n*.draft.yaml\n",
             "a.yaml",
             "b.draft.yaml",
@@ -380,7 +383,6 @@ mod tests {
             "docs/local.yaml",
             "docs/kept.yaml",
         ]);
-        assert!(!dir.path().join(".git").exists());
         let discovery = run(&dir, &["**/*.yaml", "generated/*.yaml"]);
         assert_eq!(found(&discovery), ["a.yaml", "docs/kept.yaml"]);
         assert_eq!(
@@ -390,9 +392,24 @@ mod tests {
     }
 
     #[test]
-    fn gitignore_files_outside_the_project_are_not_read() {
-        let dir = project(&[".gitignore=*.yaml\n", "project/a.yaml"]);
-        let root = dir.path().join("project");
+    fn nothing_is_ignored_outside_a_git_repository() {
+        let dir = project(&[".gitignore=*.draft.yaml\n", "a.yaml", "b.draft.yaml"]);
+        assert_eq!(found(&run(&dir, &["*.yaml"])), ["a.yaml", "b.draft.yaml"]);
+    }
+
+    #[test]
+    fn gitignore_files_apply_from_the_repository_root_down() {
+        let dir = project(&[
+            // Outside the repository, so it doesn't apply.
+            ".gitignore=*.yaml\n",
+            "repo/.git/HEAD",
+            "repo/.git/info/exclude=excluded.yaml\n",
+            "repo/.gitignore=*.draft.yaml\n",
+            "repo/project/a.yaml",
+            "repo/project/b.draft.yaml",
+            "repo/project/excluded.yaml",
+        ]);
+        let root = dir.path().join("repo/project");
         let discovery = discover(&root, &root, &globs(&["*.yaml"]));
         assert_eq!(found(&discovery), ["a.yaml"]);
     }

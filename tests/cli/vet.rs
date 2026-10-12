@@ -111,9 +111,9 @@ fn renamed(yaml: &str, name: &str) -> String {
     yaml.replacen("  name: todo-api\n", &format!("  name: {name}\n"), 1)
 }
 
-/// A project with a specification in each format: one in the well-known
-/// file, one in a hidden directory, which is searched, and one beside a
-/// file that `.gitignore` leaves out.
+/// A project, in a git repository, with a specification in each format:
+/// one in the well-known file, one in a hidden directory, which is
+/// searched, and one beside a file that `.gitignore` leaves out.
 fn project() -> Workspace {
     let billing = TODO_API_JSON.replacen("\"name\": \"todo-api\"", "\"name\": \"billing\"", 1);
     let drafts = TODO_API_TOML.replacen("name = \"todo-api\"", "name = \"drafts\"", 1);
@@ -127,6 +127,7 @@ fn project() -> Workspace {
         .file("SPEC.slcr.yml", TODO_API_YAML)
         .file("docs/api/billing.slcr.json", billing)
         .file("docs/.drafts/drafts.slcr.toml", drafts)
+        .file(".git/HEAD", "ref: refs/heads/trunk\n")
         .file(".gitignore", "generated/\n")
         .file("docs/generated/stale.slcr.json", "not even JSON");
     workspace
