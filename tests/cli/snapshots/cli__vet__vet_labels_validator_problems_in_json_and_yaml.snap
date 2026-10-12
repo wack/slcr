@@ -1,0 +1,43 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: ok
+SPEC.slcr.yml: ok
+src/a/.validators.slcr.json: 1 problem
+src/b/.validators.slcr.yaml: 1 problem
+
+----- stderr -----
+  × src/a/.validators.slcr.json: 1 problem
+
+Error: 
+  × validator 1: `todo-api/REQ-099` names REQ-099, which the specification `todo-api` (SPEC.slcr.yml) doesn't have
+   ╭─[src/a/.validators.slcr.json:5:22]
+ 4 │     {
+ 5 │       "requirement": "todo-api/REQ-099",
+   ·                      ──────────────────
+ 6 │       "tool": "cargo-nextest",
+   ╰────
+
+  × src/b/.validators.slcr.yaml: 1 problem
+
+Error: 
+  × validator 1: SLCR.toml declares no tool named jev
+   ╭─[src/b/.validators.slcr.yaml:4:11]
+ 3 │   - requirement: todo-api/REQ-005
+ 4 │     tool: jev
+   ·           ───
+ 5 │     with:
+   ╰────
+  help: the tools it declares are: cargo-nextest
+
+Error:   × vetting failed for 2 of 4 files

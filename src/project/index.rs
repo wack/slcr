@@ -1,9 +1,11 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use miette::Diagnostic;
+use serde::Serialize;
 use thiserror::Error;
 
-use super::{Problem, QualifiedRequirementId, SpecFile};
+use super::problem::display;
+use super::{Problem, ProjectFile, QualifiedRequirementId};
 use crate::spec::graph::UnvettedDocument;
 use crate::spec::id::{CriterionId, RequirementId};
 use crate::spec::node::{AcceptanceCriterion, Requirement};
@@ -12,7 +14,7 @@ use crate::spec::text::SpecName;
 /// A loaded specification of the project, and the file it came from.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct IndexedSpec<'a> {
-    pub(crate) file: &'a SpecFile,
+    pub(crate) file: &'a ProjectFile,
     pub(crate) document: &'a UnvettedDocument,
 }
 
@@ -42,14 +44,21 @@ pub(crate) struct Resolved<'a> {
 }
 
 /// The ways a qualified ID can fail to resolve.
-#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
+///
+/// It serializes like a [Problem]: an object whose `code` names the
+/// failure in kebab-case, alongside the variant's fields.
+#[derive(Debug, Error, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "code",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub enum UnresolvedRequirement {
     #[error("`{id}` names the specification `{}`, which the project doesn't have", .id.spec())]
-    #[diagnostic(help("{known}"))]
     UnknownSpec {
         id: QualifiedRequirementId,
         /// The specifications the project does have.
-        known: String,
+        known: Vec<SpecName>,
     },
 
     #[error(
@@ -61,13 +70,32 @@ pub enum UnresolvedRequirement {
     UnknownRequirement {
         id: QualifiedRequirementId,
         /// The specification's file, relative to the working directory.
+        #[serde(serialize_with = "display")]
         path: PathBuf,
     },
 }
 
+impl Diagnostic for UnresolvedRequirement {
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        let Self::UnknownSpec { known, .. } = self else {
+            return None;
+        };
+        let names: Vec<&str> = known.iter().map(SpecName::as_str).collect();
+        Some(Box::new(if names.is_empty() {
+            "the project has no specifications".to_owned()
+        } else {
+            format!("the project's specifications are: {}", names.join(", "))
+        }))
+    }
+}
+
 /// The error returned when a requirement doesn't contain an acceptance
 /// criterion, as a validator's `criterion` must name one it does.
-#[derive(Debug, Error, PartialEq, Eq)]
+///
+/// It serializes like an [UnresolvedRequirement], with the `code`
+/// `unknown-criterion`.
+#[derive(Debug, Error, PartialEq, Eq, Serialize)]
+#[serde(tag = "code", rename = "unknown-criterion", rename_all = "camelCase")]
 #[error(
     "`{criterion}` is not an acceptance criterion of `{requirement}` ({})",
     .path.display()
@@ -76,10 +104,13 @@ pub struct UnknownCriterion {
     criterion: CriterionId,
     requirement: QualifiedRequirementId,
     /// The specification's file, relative to the working directory.
+    #[serde(serialize_with = "display")]
     path: PathBuf,
     /// The requirement that does contain the criterion, if one does.
+    #[serde(skip_serializing_if = "Option::is_none")]
     owner: Option<RequirementId>,
     /// The requirement's own criteria.
+    #[serde(rename = "criteria")]
     own: Vec<CriterionId>,
 }
 
@@ -179,15 +210,9 @@ impl<'a> SpecIndex<'a> {
         id: &QualifiedRequirementId,
     ) -> Result<Resolved<'a>, UnresolvedRequirement> {
         let Some(spec) = self.get(id.spec()) else {
-            let names: Vec<&str> = self.names().map(SpecName::as_str).collect();
-            let known = if names.is_empty() {
-                "the project has no specifications".to_owned()
-            } else {
-                format!("the project's specifications are: {}", names.join(", "))
-            };
             return Err(UnresolvedRequirement::UnknownSpec {
                 id: id.clone(),
-                known,
+                known: self.names().cloned().collect(),
             });
         };
         let requirement = spec.requirement(id.requirement()).ok_or_else(|| {
@@ -217,8 +242,8 @@ mod tests {
         serde_json::from_value(value).unwrap()
     }
 
-    fn file(relative: &str) -> SpecFile {
-        SpecFile::new(Path::new("/p"), Path::new("/p"), PathBuf::from(relative))
+    fn file(relative: &str) -> ProjectFile {
+        ProjectFile::new(Path::new("/p"), Path::new("/p"), PathBuf::from(relative))
     }
 
     fn id(value: &str) -> QualifiedRequirementId {
@@ -226,14 +251,14 @@ mod tests {
     }
 
     /// Files and the documents they hold, to index.
-    fn specs(entries: &[(&str, &str)]) -> Vec<(SpecFile, UnvettedDocument)> {
+    fn specs(entries: &[(&str, &str)]) -> Vec<(ProjectFile, UnvettedDocument)> {
         entries
             .iter()
             .map(|(path, name)| (file(path), named(name)))
             .collect()
     }
 
-    fn index(specs: &[(SpecFile, UnvettedDocument)]) -> (SpecIndex<'_>, Vec<Problem>) {
+    fn index(specs: &[(ProjectFile, UnvettedDocument)]) -> (SpecIndex<'_>, Vec<Problem>) {
         SpecIndex::new(
             specs
                 .iter()

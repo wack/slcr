@@ -6,7 +6,7 @@ use std::{
 };
 
 use miette::Diagnostic;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeMap};
 use thiserror::Error;
 
 use crate::fs::{FileSystem, ReadError};
@@ -75,6 +75,17 @@ impl Source {
                 read_descriptor(fs, &file, Path::new(path.as_str()))
             }
         }
+    }
+}
+
+/// A source serializes as it is written in the manifest: `{ "url": ... }`
+/// or `{ "path": ... }`.
+impl Serialize for Source {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let (field, location) = self.field();
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(field, location)?;
+        map.end()
     }
 }
 

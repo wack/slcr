@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - show
+    - ast-grep
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the descriptor tool ast-grep pins is not installed
+  help: `slcr tools update ast-grep` fetches it from its source and installs it, re-pinning the tool if the source serves other bytes now

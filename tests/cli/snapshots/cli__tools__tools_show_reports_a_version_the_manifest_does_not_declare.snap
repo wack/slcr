@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - show
+    - cargo-nextest
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × tool cargo-nextest is declared as version 0.9.0, but the descriptor it pins is version 1.0.0
+  help: a tool's version is copied from its descriptor; `slcr tools update cargo-nextest` corrects it

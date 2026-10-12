@@ -1,0 +1,22 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+src/.validators.slcr.toml: ok
+
+----- stderr -----
+  × tool cargo-nextest is declared as version 0.9.0, but the descriptor it pins is version 1.0.0
+  help: a tool's version is copied from its descriptor; `slcr tools update cargo-nextest` corrects it
+
+Error:   × vetting failed for 1 of 3 files

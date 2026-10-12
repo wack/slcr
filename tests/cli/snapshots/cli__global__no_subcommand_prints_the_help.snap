@@ -20,8 +20,8 @@ Commands:
   query    Query a specification with GQL
   slice    Write the slice for one requirement: the context an agent needs to implement it
   check    Run every validator and report whether the requirements are satisfied (not yet implemented)
-  vet      Report the invariants requirements files break, without running anything
-  tools    Declare the external tools validators run, in the project manifest `SLCR.toml`
+  vet      Report the invariants requirements and validator files break, without running anything
+  tools    Declare and inspect the external tools validators run, in the project manifest `SLCR.toml`
   version  Print the CLI version and exit
   help     Print this message or the help of the given subcommand(s)
 

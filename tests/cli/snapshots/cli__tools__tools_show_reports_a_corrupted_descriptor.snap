@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - show
+    - cargo-nextest
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the installed descriptor of tool cargo-nextest does not hash to its pin
+  help: the descriptor store's copy changed after it was installed; `slcr tools update cargo-nextest` fetches it from its source and installs it again

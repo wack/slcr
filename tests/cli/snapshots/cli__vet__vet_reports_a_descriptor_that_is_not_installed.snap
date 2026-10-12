@@ -1,0 +1,73 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+src/.validators.slcr.toml: 5 problems
+
+----- stderr -----
+  × the descriptor tool cargo-nextest pins is not installed
+  help: `slcr tools update cargo-nextest` fetches it from its source and installs it, re-pinning the tool if the source serves other bytes now
+
+  × src/.validators.slcr.toml: 5 problems
+
+Error: 
+  × validator 2: `billing/REQ-001` names the specification `billing`, which the project doesn't have
+    ╭─[src/.validators.slcr.toml:9:15]
+  8 │ [[validator]]
+  9 │ requirement = "billing/REQ-001"
+    ·               ─────────────────
+ 10 │ tool = "cargo-nextest"
+    ╰────
+  help: the project's specifications are: todo-api
+
+Error: 
+  × validator 3: `todo-api/REQ-099` names REQ-099, which the specification `todo-api` (SPEC.slcr.yml) doesn't have
+    ╭─[src/.validators.slcr.toml:14:15]
+ 13 │ [[validator]]
+ 14 │ requirement = "todo-api/REQ-099"
+    ·               ──────────────────
+ 15 │ tool = "cargo-nextest"
+    ╰────
+
+Error: 
+  × validator 4: `AC-001` is not an acceptance criterion of `todo-api/REQ-001` (SPEC.slcr.yml)
+    ╭─[src/.validators.slcr.toml:20:13]
+ 19 │ requirement = "todo-api/REQ-001"
+ 20 │ criterion = "AC-001"
+    ·             ────────
+ 21 │ tool = "cargo-nextest"
+    ╰────
+  help: AC-001 belongs to REQ-007; REQ-001 has no acceptance criteria
+
+Error: 
+  × validator 5: SLCR.toml declares no tool named ast-grep
+    ╭─[src/.validators.slcr.toml:26:8]
+ 25 │ requirement = "todo-api/REQ-002"
+ 26 │ tool = "ast-grep"
+    ·        ──────────
+ 27 │ with = { rule = "rules/post-handler.yml" }
+    ╰────
+  help: the tools it declares are: cargo-nextest
+
+Error: 
+  × validator 7: it is identical to validator 1
+    ╭─[src/.validators.slcr.toml:34:1]
+ 33 │ 
+ 34 │ [[validator]]
+    · ─────────────
+ 35 │ with = { test = "items::post::creates_item" }
+    ╰────
+  help: remove one of them: identical validators check the same thing twice
+
+Error:   × vetting failed for 2 of 3 files
