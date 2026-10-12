@@ -18,6 +18,8 @@ mod query;
 mod render;
 /// Running one validator and reading its outcome.
 mod run;
+/// Whether each requirement is satisfied, from its validators' verdicts.
+mod satisfaction;
 /// What the agent slice of one requirement includes.
 mod slice;
 /// The specification graph: SLCR's requirements document.

@@ -237,6 +237,32 @@ refines, `Dependency` for the `dependsOn` closure of R and its refinement
 descendants, `Full` for R and those descendants); a node included for several
 reasons gets the greatest.
 
+## Satisfaction (`src/satisfaction.rs`)
+
+`satisfaction::evaluate(document, verdicts)` is a pure function from one
+specification and its validators' `Verdicts` (each requirement's
+`Outcome`s: pass or fail) to an `Evaluation`, following section 6 of the
+low-level design page. It is not wired into `check` yet.
+
+- Statuses (`Satisfied`, `Unsatisfied`, `Unknown`) follow strong Kleene
+  logic: a result is decided only when every resolution of the unknowns
+  agrees (so an XOR whose refiners all fail is Unsatisfied). Only
+  `refines` edges count, never containment, and each requirement is
+  computed once, after its refiners, without recursion.
+- A leaf is the AND of its own outcomes; one with none is Unknown and a
+  coverage gap, not a finding. AND leaves out MAY refiners, and is
+  vacuously Satisfied when every refiner is MAY; `vet` reports that as a
+  `VacuousAnd` warning, and satisfaction doesn't repeat it. OR and XOR
+  count MAY refiners. A requirement's own outcomes join its refiners'
+  result under AND.
+- An unsatisfied requirement's `Finding` is as severe as its modality
+  (MUST/MUST NOT a violation, SHOULD/SHOULD NOT a warning, MAY
+  informational), unless it is `Absorbed`: it refines something and
+  everything it refines is satisfied, so it is a warning (a MAY stays
+  informational). `Evaluation::passes(deny_warnings)` is the policy;
+  unknowns never fail it. Findings serialize with a kebab-case `code`, like
+  `vet::Violation`.
+
 ## Tools (`src/tools/`)
 
 The project manifest and tool descriptors, from the manifest and descriptor
