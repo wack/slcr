@@ -8,7 +8,7 @@ use miette::{Diagnostic, Result};
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
-use super::graph::{SlcrRequirementsDocument, UncheckedDocument};
+use super::graph::{SlcrRequirementsDocument, UnvettedDocument};
 use crate::fs::{File, FileSystem};
 
 /// The well-known requirements file, like `Makefile` or `LICENSE`: where
@@ -40,7 +40,7 @@ pub(crate) fn base_name(path: &Path) -> Option<&str> {
 ///
 /// It loads as `D`: by default a [SlcrRequirementsDocument], which fails to
 /// load if it breaks an invariant, or, through
-/// [RequirementsFile::unchecked], an [UncheckedDocument], which doesn't.
+/// [RequirementsFile::unvetted], an [UnvettedDocument], which doesn't.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RequirementsFile<D = SlcrRequirementsDocument> {
     path: PathBuf,
@@ -75,8 +75,8 @@ impl RequirementsFile {
         }
     }
 
-    /// The same file, loaded without checking its invariants.
-    pub(crate) fn unchecked(self) -> RequirementsFile<UncheckedDocument> {
+    /// The same file, loaded without vetting its invariants.
+    pub(crate) fn unvetted(self) -> RequirementsFile<UnvettedDocument> {
         RequirementsFile {
             path: self.path,
             data: PhantomData,
@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn unchecked_files_load_despite_broken_invariants() {
+    fn unvetted_files_load_despite_broken_invariants() {
         Jail::expect_with(|jail| {
             let broken = [
                 (
@@ -310,7 +310,7 @@ mod tests {
             let fs = FileSystem::new().unwrap();
             for (name, contents) in broken {
                 jail.create_file(name, &contents).unwrap();
-                let file = RequirementsFile::new(name).unwrap().unchecked();
+                let file = RequirementsFile::new(name).unwrap().unvetted();
                 let report = fs.load_file(file).unwrap().report();
                 // REQ-009 and REQ-010 now name a missing node, and nothing
                 // refines REQ-008, so its `refinement` is unexpected.
@@ -321,12 +321,12 @@ mod tests {
     }
 
     #[test]
-    fn unchecked_files_still_enforce_the_grammar() {
+    fn unvetted_files_still_enforce_the_grammar() {
         Jail::expect_with(|jail| {
             let broken = TODO_API_YAML.replacen("id: SEC-001", "id: SEC-1", 1);
             jail.create_file("broken.yaml", &broken).unwrap();
             let fs = FileSystem::new().unwrap();
-            let file = RequirementsFile::new("broken.yaml").unwrap().unchecked();
+            let file = RequirementsFile::new("broken.yaml").unwrap().unvetted();
             assert!(fs.load_file(file).is_err());
             Ok(())
         });

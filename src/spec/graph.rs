@@ -1,11 +1,11 @@
 use derive_getters::Getters;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
-use super::check::{self, Report, Violations, Warning};
 use super::id::SectionId;
 use super::node::{Glossary, Requirement, Section, SectionChild};
 use super::optional;
 use super::text::{SpecName, Title};
+use super::vet::{self, Report, Violations, Warning};
 
 /// The `$id` of the specification graph's JSON Schema, which a new document
 /// names in its `$schema` so that editors can validate it.
@@ -18,7 +18,7 @@ pub const SCHEMA_URL: &str = "https://slcr.io/reference/schemas/spec/v1.schema.j
 /// ID references held on their source node.
 ///
 /// Deserializing a graph enforces the grammar of the specification graph's
-/// JSON Schema and every invariant listed in its `x-checkInvariants`, other
+/// JSON Schema and every invariant listed in its `x-vetInvariants`, other
 /// than those that are only warnings; see [SlcrRequirementsDocument::warnings].
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
 #[serde(remote = "Self", rename_all = "camelCase", deny_unknown_fields)]
@@ -102,7 +102,7 @@ impl SlcrRequirementsDocument {
     /// Advisory findings that don't make the graph invalid, in document
     /// order.
     pub fn warnings(&self) -> Vec<Warning> {
-        check::warnings(self)
+        vet::warnings(self)
     }
 }
 
@@ -114,22 +114,22 @@ impl Serialize for SlcrRequirementsDocument {
 
 impl<'de> Deserialize<'de> for SlcrRequirementsDocument {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        UncheckedDocument::deserialize(deserializer)?
-            .into_checked()
+        UnvettedDocument::deserialize(deserializer)?
+            .into_vetted()
             .map_err(D::Error::custom)
     }
 }
 
 /// A requirements document read for its grammar alone: the invariants its
-/// JSON Schema can't express have not been checked.
+/// JSON Schema can't express have not been vetted.
 ///
-/// [UncheckedDocument::report] lists everything a check finds, while
-/// [UncheckedDocument::into_checked] yields the document only if it breaks
+/// [UnvettedDocument::report] lists everything vetting finds, while
+/// [UnvettedDocument::into_vetted] yields the document only if it breaks
 /// no invariant.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UncheckedDocument(SlcrRequirementsDocument);
+pub struct UnvettedDocument(SlcrRequirementsDocument);
 
-impl UncheckedDocument {
+impl UnvettedDocument {
     /// The document, which may break its invariants.
     pub fn document(&self) -> &SlcrRequirementsDocument {
         &self.0
@@ -137,26 +137,26 @@ impl UncheckedDocument {
 
     /// Every invariant the document breaks, and every warning.
     pub fn report(&self) -> Report {
-        check::report(&self.0)
+        vet::report(&self.0)
     }
 
     /// The document, if it breaks none of its invariants.
-    pub fn into_checked(self) -> Result<SlcrRequirementsDocument, Violations> {
-        check::invariants(&self.0)?;
+    pub fn into_vetted(self) -> Result<SlcrRequirementsDocument, Violations> {
+        vet::invariants(&self.0)?;
         Ok(self.0)
     }
 }
 
-impl Serialize for UncheckedDocument {
+impl Serialize for UnvettedDocument {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         SlcrRequirementsDocument::serialize(&self.0, serializer)
     }
 }
 
-impl<'de> Deserialize<'de> for UncheckedDocument {
+impl<'de> Deserialize<'de> for UnvettedDocument {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         // The inherent function `remote = "Self"` derives, which reads the
-        // grammar without checking invariants.
+        // grammar without vetting invariants.
         SlcrRequirementsDocument::deserialize(deserializer).map(Self)
     }
 }
@@ -181,9 +181,9 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::spec::check::Violation;
     use crate::spec::id::{RequirementId, SectionId};
     use crate::spec::node::Modality;
+    use crate::spec::vet::Violation;
 
     /// The canon `TodoListItem` example from the SLCR Schemas page.
     const TODO_API: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn invariants_are_checked_on_deserialize() {
+    fn invariants_are_vetted_on_deserialize() {
         let mut value = todo_api();
         // REQ-002 and REQ-003 refine REQ-001, so it needs a `refinement`.
         value["root"]["children"][0]["children"][0]
@@ -331,24 +331,24 @@ mod tests {
     }
 
     #[test]
-    fn the_canon_example_checks_clean() {
-        let unchecked: UncheckedDocument = serde_json::from_str(TODO_API).unwrap();
-        assert!(unchecked.report().is_clean());
-        let checked: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
-        assert_eq!(unchecked.into_checked().unwrap(), checked);
+    fn the_canon_example_vets_clean() {
+        let unvetted: UnvettedDocument = serde_json::from_str(TODO_API).unwrap();
+        assert!(unvetted.report().is_clean());
+        let vetted: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
+        assert_eq!(unvetted.into_vetted().unwrap(), vetted);
     }
 
     #[test]
-    fn an_unchecked_document_reads_despite_broken_invariants() {
+    fn an_unvetted_document_reads_despite_broken_invariants() {
         assert!(serde_json::from_value::<SlcrRequirementsDocument>(broken()).is_err());
-        let unchecked: UncheckedDocument = serde_json::from_value(broken()).unwrap();
-        assert_eq!(unchecked.document().spec().name().as_str(), "todo-api");
+        let unvetted: UnvettedDocument = serde_json::from_value(broken()).unwrap();
+        assert_eq!(unvetted.document().spec().name().as_str(), "todo-api");
     }
 
     #[test]
     fn the_report_lists_violations_and_warnings_together() {
-        let unchecked: UncheckedDocument = serde_json::from_value(broken()).unwrap();
-        let report = unchecked.report();
+        let unvetted: UnvettedDocument = serde_json::from_value(broken()).unwrap();
+        let report = unvetted.report();
         assert!(!report.is_clean());
         assert_eq!(
             report.violations(),
@@ -367,23 +367,23 @@ mod tests {
     }
 
     #[test]
-    fn into_checked_returns_every_violation() {
-        let unchecked: UncheckedDocument = serde_json::from_value(broken()).unwrap();
-        let violations = unchecked.clone().into_checked().unwrap_err();
-        assert_eq!(violations.violations(), unchecked.report().violations());
+    fn into_vetted_returns_every_violation() {
+        let unvetted: UnvettedDocument = serde_json::from_value(broken()).unwrap();
+        let violations = unvetted.clone().into_vetted().unwrap_err();
+        assert_eq!(violations.violations(), unvetted.report().violations());
     }
 
     #[test]
-    fn an_unchecked_document_still_enforces_the_grammar() {
+    fn an_unvetted_document_still_enforces_the_grammar() {
         let mut value = todo_api();
         value["root"]["id"] = json!("SEC-1");
-        assert!(serde_json::from_value::<UncheckedDocument>(value).is_err());
+        assert!(serde_json::from_value::<UnvettedDocument>(value).is_err());
     }
 
     #[test]
-    fn an_unchecked_document_serializes_like_its_document() {
-        let unchecked: UncheckedDocument = serde_json::from_value(broken()).unwrap();
-        assert_eq!(serde_json::to_value(&unchecked).unwrap(), broken());
+    fn an_unvetted_document_serializes_like_its_document() {
+        let unvetted: UnvettedDocument = serde_json::from_value(broken()).unwrap();
+        assert_eq!(serde_json::to_value(&unvetted).unwrap(), broken());
     }
 
     fn new_document() -> SlcrRequirementsDocument {
@@ -417,12 +417,12 @@ mod tests {
     }
 
     #[test]
-    fn a_new_document_checks_clean() {
+    fn a_new_document_vets_clean() {
         let graph = new_document();
         assert!(graph.warnings().is_empty());
-        let unchecked = UncheckedDocument(graph.clone());
-        assert!(unchecked.report().is_clean());
-        assert_eq!(unchecked.into_checked().unwrap(), graph);
+        let unvetted = UnvettedDocument(graph.clone());
+        assert!(unvetted.report().is_clean());
+        assert_eq!(unvetted.into_vetted().unwrap(), graph);
     }
 
     #[test]

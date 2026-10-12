@@ -4,8 +4,6 @@
 //! 2020-12) on the SLCR Schemas page in Notion. It is serialized as YAML,
 //! JSON, or TOML, all sharing the same field names and structure.
 
-/// Invariants beyond the schema's grammar, checked on every load.
-pub(crate) mod check;
 /// Loading and saving a graph through [crate::fs::FileSystem].
 pub(crate) mod file;
 /// The top-level document.
@@ -20,3 +18,5 @@ mod optional;
 mod tagged;
 /// Validated strings: titles, Markdown prose, and specification names.
 pub(crate) mod text;
+/// Invariants beyond the schema's grammar, vetted on every load.
+pub(crate) mod vet;

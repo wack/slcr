@@ -1,13 +1,16 @@
 ---
-source: tests/cli/check.rs
+source: tests/cli/vet.rs
 info:
   program: slcr
   args:
-    - check
+    - vet
     - "--format"
     - json
     - "--deny-warnings"
     - warned.yaml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
@@ -34,5 +37,5 @@ exit_code: 1
 }
 
 ----- stderr -----
-Error:   × the check failed for 1 of 1 file
-  help: `--deny-warnings` makes a warning fail the check
+Error:   × vetting failed for 1 of 1 file
+  help: `--deny-warnings` makes a warning fail the file

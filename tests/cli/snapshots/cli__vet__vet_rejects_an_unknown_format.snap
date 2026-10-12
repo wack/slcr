@@ -1,12 +1,15 @@
 ---
-source: tests/cli/check.rs
+source: tests/cli/vet.rs
 info:
   program: slcr
   args:
-    - check
+    - vet
     - "--format"
     - xml
     - a.yaml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 2
