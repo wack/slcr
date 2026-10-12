@@ -16,4 +16,4 @@ exit_code: 1
 
 ----- stderr -----
 Error:   × the descriptor tool ast-grep pins is not installed
-  help: `slcr tools update ast-grep` fetches it from its source and installs it, re-pinning the tool if the source serves other bytes now
+  help: `slcr tools install` fetches it from its source and installs it, once its bytes match the pin
