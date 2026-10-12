@@ -1,0 +1,17 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × ../slcr.toml is not named SLCR.toml
+  help: the manifest's name is case-sensitive: rename it to SLCR.toml

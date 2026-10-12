@@ -5,10 +5,14 @@ info:
   args:
     - init
     - todo-api.spec.json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 todo-api.spec.json: created specification todo-api
+SLCR.toml: created project manifest
 
 ----- stderr -----

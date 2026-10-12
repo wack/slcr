@@ -5,6 +5,9 @@ info:
   args:
     - slice
     - "--help"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
@@ -20,7 +23,7 @@ Arguments:
   [FILE]
           The requirements file to slice: `.yaml`, `.yml`, `.json`, or `.toml`
           
-          [default: SPEC.slcr.yml]
+          [default: SPEC.slcr.toml]
 
 Options:
       --enable-colors <ENABLE_COLORS>

@@ -6,12 +6,15 @@ info:
     - init
     - todo-api.yaml
   env:
+    HOME: "[HOME]"
     LOG_LEVEL: DEBUG
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 todo-api.yaml: created specification todo-api
+SLCR.toml: created project manifest
 
 ----- stderr -----
 [TIMESTAMP] DEBUG creating a requirements file path=todo-api.yaml name=todo-api

@@ -4,11 +4,14 @@ info:
   program: slcr
   args:
     - render
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-Error:   × could not read SPEC.slcr.yml
+Error:   × could not read SPEC.slcr.toml
   ╰─▶ No such file or directory (os error 2)
