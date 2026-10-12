@@ -1,0 +1,22 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - install
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+cargo-nextest: failed
+
+----- stderr -----
+  × tools/cargo-nextest.toml no longer serves the descriptor tool cargo-nextest pins
+  help: it serves blake3:c7cef33c9b26…, not blake3:3aa337b9c338…: restore the pinned descriptor there, or re-pin the tool to what it serves with `slcr tools update cargo-nextest`, which changes
+        SLCR.toml
+
+Error:   × installing failed for 1 of 1 tool

@@ -28,15 +28,15 @@ use crate::fs::FileSystem;
 pub enum DescriptorProblem {
     #[error("the descriptor tool {tool} pins is not installed")]
     #[diagnostic(help(
-        "`slcr tools update {tool}` fetches it from its source and installs it, re-pinning the \
-         tool if the source serves other bytes now"
+        "`slcr tools install` fetches it from its source and installs it, once its bytes match \
+         the pin"
     ))]
     DescriptorNotInstalled { tool: ToolKey, pin: Pin },
 
     #[error("the installed descriptor of tool {tool} does not hash to its pin")]
     #[diagnostic(help(
-        "the descriptor store's copy changed after it was installed; `slcr tools update {tool}` \
-         fetches it from its source and installs it again"
+        "the descriptor store's copy changed after it was installed; `slcr tools install` \
+         fetches it from its source again and replaces it"
     ))]
     DescriptorCorrupted { tool: ToolKey, pin: Pin },
 
@@ -213,8 +213,8 @@ mod tests {
         assert_eq!(
             render_plain(&problems[0]),
             "  × the descriptor tool cargo-nextest pins is not installed\n  help: `slcr tools \
-             update cargo-nextest` fetches it from its source and\n        installs it, \
-             re-pinning the tool if the source serves other bytes now\n"
+             install` fetches it from its source and installs it, once\n        its bytes match \
+             the pin\n"
         );
     }
 
