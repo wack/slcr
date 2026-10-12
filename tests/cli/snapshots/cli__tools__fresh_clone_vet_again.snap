@@ -1,0 +1,17 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+SLCR.toml: ok
+SPEC.slcr.yml: ok
+
+----- stderr -----

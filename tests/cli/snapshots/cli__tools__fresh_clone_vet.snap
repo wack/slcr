@@ -1,0 +1,21 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - vet
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+SLCR.toml: 1 problem
+SPEC.slcr.yml: ok
+
+----- stderr -----
+  × the descriptor tool cargo-nextest pins is not installed
+  help: `slcr tools install` fetches it from its source and installs it, once its bytes match the pin
+
+Error:   × vetting failed for 1 of 2 files
