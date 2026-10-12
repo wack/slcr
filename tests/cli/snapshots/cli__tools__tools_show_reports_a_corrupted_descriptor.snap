@@ -16,4 +16,4 @@ exit_code: 1
 
 ----- stderr -----
 Error:   × the installed descriptor of tool cargo-nextest does not hash to its pin
-  help: the descriptor store's copy changed after it was installed; `slcr tools update cargo-nextest` fetches it from its source and installs it again
+  help: the descriptor store's copy changed after it was installed; `slcr tools install` fetches it from its source again and replaces it

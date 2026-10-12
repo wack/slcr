@@ -52,8 +52,9 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 
 - `check` is a stub returning `cli::NotImplemented`. It will run every
   validator and report whether each requirement is satisfied, unsatisfied, or
-  unknown; it vets the project first, and it is the only command that may
-  fetch a descriptor missing from the store. "Check" means only this.
+  unknown; it vets the project first, and it is the only command besides
+  `tools add`, `update`, and `install` that may fetch a descriptor missing
+  from the store. "Check" means only this.
 - `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
   root `SEC-001`, Glossary `SEC-002`) at `FILE`, by default the well-known
   `SPEC.slcr.toml` (`spec::file::DEFAULT_FILE`, also the default FILE of
@@ -134,6 +135,17 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   entry, editing only its `version` and `pin` values in place. A failed
   fetch or an invalid descriptor changes nothing, and an entry that already
   pins what its source serves is left alone.
+- `tools install` installs every descriptor the manifest's tools pin that
+  the store lacks (missing, corrupted, or unreadable), as `cargo fetch` and
+  `terraform init` prepare a fresh clone or an offline sandbox: it fetches
+  each from its recorded source, checks the bytes hash to the pin, that
+  they are a valid descriptor, and that its version is the entry's, and
+  only then installs it. It never writes the manifest, so a source that
+  serves other bytes now is an error whose help points at `tools update`.
+  One tool failing doesn't stop the rest: each tool gets a status line on
+  stdout (`cargo-nextest: installed blake3:3aa337b9c338…`, `ast-grep:
+  already installed`, `jev: failed`), each failure a diagnostic on stderr,
+  and the command fails with `InstallFailed` if any tool did.
 - `tools remove NAME` deletes the entry, and the `tools` table with it if
   it was the last. The descriptor stays in the store, which other projects
   may pin it from.
@@ -233,8 +245,9 @@ Manifest, Descriptors, and Invocation" (which win over the older
 low-level design page). The MVP has exit-code results only, no lockfile,
 and no caching.
 
-- `add.rs`, `update.rs`, `remove.rs`, `list.rs`, `show.rs` — the whole of
-  `slcr tools add`, `update`, `remove`, `list`, and `show`;
+- `add.rs`, `update.rs`, `install.rs`, `remove.rs`, `list.rs`, `show.rs` —
+  the whole of `slcr tools add`, `update`, `install`, `remove`, `list`, and
+  `show`;
   `src/cli/tools.rs` only builds their
   `Environment` (`mod.rs`: filesystem, `DescriptorStore`, `Fetcher`, working
   directory) and prints the result. Test new behavior there, with the
@@ -262,9 +275,12 @@ and no caching.
   fetching is tested for real: redirects, statuses, the size cap.
 - `pinned.rs` — `load` reads the descriptor a manifest entry pins from the
   store, and `version_problem` compares its version with the entry's; each
-  failure is a `DescriptorProblem`, whose help names `slcr tools update`,
-  which re-installs a descriptor the store lost or corrupted. Nothing here
-  fetches: only `add`, `update`, and (eventually) `check` may.
+  failure is a `DescriptorProblem`, whose help names `slcr tools install`
+  for a descriptor the store lost or corrupted, and `slcr tools update`
+  for one whose pinned bytes are invalid or whose version disagrees with
+  the entry's. Nothing here fetches: only `add`, `update`, `install`, and
+  (eventually) `check` may. `install.rs` reuses `version_problem`, so
+  `tools install` reports a version mismatch as `vet` does.
 - `store.rs` — the content-addressed store at
   `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
   text and returns the pin it filed it under, and `load` returns the

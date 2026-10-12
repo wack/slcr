@@ -1,0 +1,27 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - install
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+cargo-nextest: failed
+
+----- stderr -----
+  × the descriptor tool cargo-nextest pins is not a valid descriptor
+  ╰─▶   × tools/cargo-nextest.toml is not a valid descriptor
+      
+      Error:
+        × `{with.name}` in `invoke.argv` does not name a field of `validator.schema`
+        help: declare `name` in the validator schema's top-level `properties`, and list it in `required`
+      
+  help: no other bytes match the pin; make tools/cargo-nextest.toml serve a valid descriptor, then re-pin the tool to it with `slcr tools update cargo-nextest`
+
+Error:   × installing failed for 1 of 1 tool

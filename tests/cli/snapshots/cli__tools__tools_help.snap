@@ -17,12 +17,13 @@ Declare and inspect the external tools validators run, in the project manifest `
 Usage: slcr tools [OPTIONS] <COMMAND>
 
 Commands:
-  add     Declare a tool in SLCR.toml: fetch its descriptor, check it, pin it, and install it
-  update  Re-fetch a declared tool's descriptor from its source, check it, re-pin it, and install it
-  remove  Remove a tool from SLCR.toml
-  list    List the tools SLCR.toml declares, and whether each one's descriptor is installed
-  show    Print a declared tool's installed descriptor: how it runs, and the schema each validator's `with` must satisfy
-  help    Print this message or the help of the given subcommand(s)
+  add      Declare a tool in SLCR.toml: fetch its descriptor, check it, pin it, and install it
+  update   Re-fetch a declared tool's descriptor from its source, check it, re-pin it, and install it
+  install  Install every descriptor SLCR.toml pins that isn't installed yet: fetch it from its source and check it against its pin, never re-pinning it
+  remove   Remove a tool from SLCR.toml
+  list     List the tools SLCR.toml declares, and whether each one's descriptor is installed
+  show     Print a declared tool's installed descriptor: how it runs, and the schema each validator's `with` must satisfy
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
       --enable-colors <ENABLE_COLORS>
