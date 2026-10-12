@@ -25,6 +25,8 @@ pub(crate) mod descriptor;
 pub(crate) mod manifest;
 /// The BLAKE3 pin of a descriptor's bytes.
 pub(crate) mod pin;
+/// Checking a declared tool's descriptor, as installed, against its pin.
+pub(crate) mod pinned;
 /// `slcr tools remove`: removing a tool from the manifest.
 pub(crate) mod remove;
 /// Where a manifest entry's descriptor comes from, and fetching it.

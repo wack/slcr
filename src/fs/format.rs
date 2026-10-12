@@ -193,6 +193,20 @@ impl Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+/// Errors are equal when they say the same thing about the same source.
+impl PartialEq for ParseError {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+            && self.format == other.format
+            && self.message == other.message
+            && self.span == other.span
+            && self.source_code.name() == other.source_code.name()
+            && self.source_code.inner() == other.source_code.inner()
+    }
+}
+
+impl Eq for ParseError {}
+
 impl Diagnostic for ParseError {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         Some(self.source_code.as_ref())

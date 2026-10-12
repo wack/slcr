@@ -406,7 +406,7 @@ impl EnvName {
 }
 
 /// The error returned when bytes are not a valid descriptor.
-#[derive(Debug, Error, Diagnostic)]
+#[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
 pub enum InvalidDescriptor {
     #[error("{origin} is not UTF-8 text")]
     #[diagnostic(help("a descriptor is a TOML file"))]
