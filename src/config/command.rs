@@ -2,8 +2,8 @@ use clap::Subcommand;
 use miette::Result;
 
 use crate::cli::{
-    Check, Init, InitArgs, Query, QueryArgs, Render, RenderArgs, Slice, SliceArgs, Tools,
-    ToolsArgs, Version, Vet, VetArgs,
+    Check, CheckArgs, Init, InitArgs, Query, QueryArgs, Render, RenderArgs, Slice, SliceArgs,
+    Tools, ToolsArgs, Version, Vet, VetArgs,
 };
 use crate::terminal::Terminal;
 
@@ -19,8 +19,8 @@ pub enum SlcrCommand {
     Query(QueryArgs),
     /// Write the slice for one requirement: the context an agent needs to implement it
     Slice(SliceArgs),
-    /// Run every validator and report whether the requirements are satisfied (not yet implemented)
-    Check,
+    /// Run every validator and report whether the requirements are satisfied
+    Check(CheckArgs),
     /// Report the invariants requirements and validator files break, without running anything
     Vet(VetArgs),
     /// Declare and inspect the external tools validators run, in the project manifest `SLCR.toml`
@@ -37,7 +37,7 @@ impl SlcrCommand {
             Self::Render(args) => Render::new(console, args).dispatch(),
             Self::Query(args) => Query::new(console, args).dispatch(),
             Self::Slice(args) => Slice::new(console, args).dispatch(),
-            Self::Check => Check::new(console).dispatch(),
+            Self::Check(args) => Check::new(console, args).dispatch(),
             Self::Vet(args) => Vet::new(console, args).dispatch(),
             Self::Tools(args) => Tools::new(console, args).dispatch(),
             Self::Version => Version::new(console).dispatch(),
@@ -50,7 +50,7 @@ mod tests {
     use clap::Parser;
 
     use super::SlcrCommand;
-    use crate::{Cli, Terminal};
+    use crate::Cli;
 
     #[test]
     fn version_subcommand_parses() {
@@ -59,9 +59,9 @@ mod tests {
     }
 
     #[test]
-    fn stubbed_subcommands_parse() {
+    fn check_parses_without_arguments() {
         let cli = Cli::parse_from(["slcr", "check"]);
-        assert!(matches!(cli.cmd(), Some(SlcrCommand::Check)));
+        assert!(matches!(cli.cmd(), Some(SlcrCommand::Check(_))));
     }
 
     #[test]
@@ -115,14 +115,6 @@ mod tests {
     fn vet_parses_its_files() {
         let cli = Cli::parse_from(["slcr", "vet", "a.yaml", "b.json"]);
         assert!(matches!(cli.cmd(), Some(SlcrCommand::Vet(_))));
-    }
-
-    #[test]
-    fn stubbed_subcommands_report_that_they_are_not_implemented() {
-        let cli = Cli::parse_from(["slcr", "check"]);
-        let terminal = Terminal::new(&cli);
-        let err = cli.cmd().clone().unwrap().dispatch(terminal).unwrap_err();
-        assert_eq!(err.to_string(), "`slcr check` is not implemented yet");
     }
 
     #[test]

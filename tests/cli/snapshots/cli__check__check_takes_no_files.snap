@@ -1,0 +1,21 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - SPEC.slcr.yml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unexpected argument 'SPEC.slcr.yml' found
+
+Usage: slcr check [OPTIONS]
+
+For more information, try '--help'.

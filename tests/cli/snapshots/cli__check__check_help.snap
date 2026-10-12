@@ -1,0 +1,57 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--help"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Run every validator and report whether the requirements are satisfied
+
+Usage: slcr check [OPTIONS]
+
+Options:
+  -j, --jobs <N>
+          Run at most N validators at once [default: the number of CPUs]. With 1, they run one at a time, in the order they are reported
+
+      --offline
+          Never fetch a descriptor: one the descriptor store lacks fails vetting, as it does `slcr vet`
+
+      --deny-warnings
+          Fail on warnings too: vetting's, unsatisfied SHOULD and SHOULD NOT requirements, and absorbed failures
+
+      --format <FORMAT>
+          How to report what `check` found
+
+          Possible values:
+          - human: Each validator's status and each specification's summary on stdout, and diagnostics on stderr
+          - json:  One JSON document on stdout, with every validator's whole output
+          
+          [default: human]
+
+      --enable-colors <ENABLE_COLORS>
+          Whether to color the output
+
+          Possible values:
+          - always: Always color the output
+          - never:  Never color the output
+          - auto:   Detect whether the terminal is a tty before deciding to color
+          
+          [default: auto]
+
+      --log-level <LOG_LEVEL>
+          Sets the maximum log level. Defaults to INFO. Options are 'trace', 'debug', 'info', 'warn', 'error', and 'off'. 'off' implies no logger will occur. Options are case-insensitive
+          
+          [env: LOG_LEVEL=]
+          [default: info]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+----- stderr -----

@@ -1,0 +1,19 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--deny-warnings"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+src/.validators.slcr.toml validator 1 (shop/REQ-002, sh): green
+src/.validators.slcr.toml validator 2 (shop/REQ-004, sh): green
+shop: 4 satisfied, 0 unsatisfied, 3 unknown (3 coverage gaps)
+
+----- stderr -----

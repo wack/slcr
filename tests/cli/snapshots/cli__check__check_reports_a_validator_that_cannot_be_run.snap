@@ -1,0 +1,33 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+src/.validators.slcr.toml validator 1 (shop/REQ-002, sh): green
+src/.validators.slcr.toml validator 2 (shop/REQ-004, sh): green
+src/.validators.slcr.toml validator 3 (shop/REQ-005, missing): could not be run
+src/mail/.validators.slcr.toml validator 1 (shop/REQ-006, sh): green
+src/mail/.validators.slcr.toml validator 2 (shop/REQ-007, sh): green
+shop: 6 satisfied, 0 unsatisfied, 1 unknown (1 coverage gap)
+
+----- stderr -----
+  × src/.validators.slcr.toml validator 3 (shop/REQ-005, missing) could not be run
+  ╰─▶ `slcr-no-such-program` was not found on PATH
+    ╭─[src/.validators.slcr.toml:13:1]
+ 12 │ 
+ 13 │ [[validator]]
+    · ─────────────
+ 14 │ requirement = "shop/REQ-005"
+    ╰────
+  help: install it, or put its directory on PATH; slcr searches the PATH the tool would see (the descriptor's `env.PATH`, if it sets one), but never an empty or relative entry, nor the current
+        directory
+
+Error:   × check failed: 1 validator could not be run

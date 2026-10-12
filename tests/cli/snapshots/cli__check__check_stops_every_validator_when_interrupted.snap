@@ -1,0 +1,15 @@
+---
+source: tests/cli/check.rs
+expression: shown
+---
+exit_code: Some(1)
+----- stdout -----
+src/.validators.slcr.toml validator 1 (shop/REQ-002, sh): green
+src/.validators.slcr.toml validator 2 (shop/REQ-004, sh): interrupted
+src/.validators.slcr.toml validator 3 (shop/REQ-005, sh): interrupted
+src/mail/.validators.slcr.toml validator 1 (shop/REQ-006, sh): interrupted
+src/mail/.validators.slcr.toml validator 2 (shop/REQ-007, sh): interrupted
+
+----- stderr -----
+Error:   × check was interrupted: 1 of 5 validators finished
+  help: every validator still running was stopped, with what it had started; no requirement was evaluated

@@ -1,0 +1,21 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+../.validators.slcr.toml validator 1 (shop/REQ-002, sh): green
+../.validators.slcr.toml validator 2 (shop/REQ-004, sh): green
+../.validators.slcr.toml validator 3 (shop/REQ-005, sh): green
+.validators.slcr.toml validator 1 (shop/REQ-006, sh): green
+.validators.slcr.toml validator 2 (shop/REQ-007, sh): green
+shop: 7 satisfied, 0 unsatisfied, 0 unknown
+
+----- stderr -----

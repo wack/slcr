@@ -1,0 +1,20 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+sh: failed
+
+----- stderr -----
+  × could not fetch the descriptor tool sh pins
+  ╰─▶   × tools/sh.toml does not exist
+
+Error:   × installing failed for 1 of 1 tool

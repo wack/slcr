@@ -1,0 +1,70 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "interrupted": false,
+  "descriptors": [
+    {
+      "tool": "sh",
+      "status": "already-installed"
+    }
+  ],
+  "vet": {
+    "passed": false,
+    "project": {
+      "manifest": "SLCR.toml",
+      "passed": true,
+      "problems": []
+    },
+    "files": [
+      {
+        "path": "SPEC.slcr.yml",
+        "passed": true,
+        "violations": 0,
+        "warnings": 0,
+        "findings": []
+      }
+    ],
+    "validators": [
+      {
+        "path": "src/.validators.slcr.toml",
+        "passed": false,
+        "problems": [
+          {
+            "validator": 1,
+            "code": "unknown-requirement",
+            "id": "shop/REQ-099",
+            "path": "SPEC.slcr.yml",
+            "message": "`shop/REQ-099` names REQ-099, which the specification `shop` (SPEC.slcr.yml) doesn't have",
+            "labels": [
+              {
+                "line": 4,
+                "column": 15,
+                "offset": 49,
+                "length": 14
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+
+----- stderr -----
+Error:   × the project doesn't vet cleanly, so no validator was run
+  ╰─▶ vetting failed for 1 of 3 files
+  help: `slcr vet` reports the same problems; fix them, then check again

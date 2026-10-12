@@ -33,11 +33,6 @@ fn an_unknown_subcommand_is_rejected() {
 }
 
 #[test]
-fn check_is_not_implemented() {
-    assert_cmd_snapshot!(Workspace::new().slcr(&["check"]));
-}
-
-#[test]
 fn log_level_shows_lower_levels_on_stderr() {
     let workspace = Workspace::new();
     workspace.file("SPEC.slcr.toml", TODO_API_TOML);
