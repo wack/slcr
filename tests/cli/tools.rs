@@ -2,7 +2,7 @@
 
 use insta::assert_snapshot;
 
-use super::{DATA_HOME, NEXTEST_DESCRIPTOR, Workspace};
+use super::{DATA_DIR, NEXTEST_DESCRIPTOR, Workspace};
 
 /// A manifest that declares no tools yet.
 const MANIFEST: &str =
@@ -12,7 +12,7 @@ const MANIFEST: &str =
 /// workspace: under the BLAKE3 hash of its bytes.
 fn stored(descriptor: &str) -> String {
     let hex = blake3::hash(descriptor.as_bytes()).to_hex();
-    format!("{DATA_HOME}/slcr/descriptors/blake3/{hex}.toml")
+    format!("{DATA_DIR}/descriptors/blake3/{hex}.toml")
 }
 
 /// A workspace that is a project with no tools, and the cargo-nextest
@@ -157,7 +157,7 @@ fn tools_add_rejects_an_unparsable_descriptor() {
         !workspace
             .files()
             .iter()
-            .any(|file| file.starts_with(DATA_HOME))
+            .any(|file| file.starts_with(DATA_DIR))
     );
 }
 
@@ -173,23 +173,23 @@ fn tools_add_rejects_a_descriptor_that_is_not_utf8() {
 fn tools_add_reports_a_descriptor_store_it_cannot_create() {
     let workspace = project();
     // A file where the data directory would be.
-    workspace.file(DATA_HOME, "");
+    workspace.file(DATA_DIR, "");
     let output = workspace
         .slcr(&["tools", "add", "tools/cargo-nextest.toml"])
         .output()
         .unwrap();
     // Not a snapshot: the error rightly names the store, which is under the
-    // absolute `XDG_DATA_HOME` the workspace sets, so it differs on every
+    // absolute data directory the workspace sets, so it differs on every
     // run. It is checked exactly instead.
-    let store = workspace.path(DATA_HOME).join("slcr/descriptors/blake3");
+    let store = workspace.path(DATA_DIR).join("descriptors/blake3");
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "");
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
         format!(
             "Error:   × could not create the descriptor store at {}\n  ╰─▶ Not a directory (os \
-             error 20)\n  help: set XDG_DATA_HOME to a directory slcr can write to, to keep its \
-             data there\n\n",
+             error 20)\n  help: slcr installs descriptors in its data directory; make sure it can \
+             create directories there\n\n",
             store.display()
         )
     );

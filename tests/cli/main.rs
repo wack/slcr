@@ -14,18 +14,19 @@ use std::process::Command;
 
 use tempfile::TempDir;
 
-/// `insta_cmd::assert_cmd_snapshot!`, with the workspace's data directory
-/// redacted from the snapshot's header.
+/// `insta_cmd::assert_cmd_snapshot!`, with the variables that place the
+/// workspace's data directory redacted from the snapshot's header.
 ///
 /// insta-cmd records every variable a command sets in the header, and
-/// [Workspace] sets `XDG_DATA_HOME` to an absolute path in a temporary
-/// directory, which differs on every run. Redacting it keeps headers
-/// stable; it never redacts what `slcr` printed. Defined before the
+/// [Workspace] sets `XDG_DATA_HOME` and `HOME` to absolute paths in a
+/// temporary directory, which differ on every run. Redacting them keeps
+/// headers stable; it never redacts what `slcr` printed. Defined before the
 /// modules, so they can all use it.
 macro_rules! assert_cmd_snapshot {
     ($($arg:tt)*) => {{
         let mut settings = insta::Settings::clone_current();
         settings.add_redaction(".env.XDG_DATA_HOME", "[DATA_HOME]");
+        settings.add_redaction(".env.HOME", "[HOME]");
         settings.bind(|| insta_cmd::assert_cmd_snapshot!($($arg)*));
     }};
 }
@@ -68,15 +69,27 @@ fn with_warning() -> String {
     TODO_API_YAML.replace(body, "The endpoint accepts GET")
 }
 
-/// Where in a [Workspace] `slcr` keeps its persistent data, such as the
-/// descriptor store: `XDG_DATA_HOME`, so `slcr` writes to `.data/slcr`.
+/// The workspace's `XDG_DATA_HOME`, which `slcr` reads on Linux.
 const DATA_HOME: &str = ".data";
+
+/// The workspace's `HOME`, which `slcr` reads on macOS, where its data
+/// directory is under `~/Library/Application Support`.
+const HOME: &str = ".home";
+
+/// Where in a [Workspace] `slcr` keeps its persistent data, such as the
+/// descriptor store: its data directory, as the `directories` crate places
+/// it on this platform given the workspace's `XDG_DATA_HOME` and `HOME`.
+#[cfg(target_os = "macos")]
+const DATA_DIR: &str = ".home/Library/Application Support/slcr";
+#[cfg(not(target_os = "macos"))]
+const DATA_DIR: &str = ".data/slcr";
 
 /// A scratch directory that a test runs `slcr` in, deleted when dropped.
 ///
 /// Commands are given paths relative to it, so the paths in their output
-/// are the same on every run. `XDG_DATA_HOME` is inside it too, at
-/// [DATA_HOME], so that no test touches the real data directory.
+/// are the same on every run. `XDG_DATA_HOME` and `HOME` point inside it
+/// too, so `slcr`'s data directory is [DATA_DIR] and no test touches the
+/// real one.
 struct Workspace {
     dir: TempDir,
 }
@@ -150,7 +163,9 @@ impl Workspace {
         }
         // Absolute: the XDG Base Directory Specification says a relative
         // path is ignored.
-        command.env("XDG_DATA_HOME", self.path(DATA_HOME));
+        command
+            .env("XDG_DATA_HOME", self.path(DATA_HOME))
+            .env("HOME", self.path(HOME));
         command
     }
 }

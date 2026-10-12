@@ -6,6 +6,7 @@ info:
     - tools
     - "--help"
   env:
+    HOME: "[HOME]"
     XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true

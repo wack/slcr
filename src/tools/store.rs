@@ -9,8 +9,9 @@ use crate::fs::FileSystem;
 /// The descriptor store: where descriptors are installed on this machine,
 /// filed by their pin at `<data dir>/descriptors/blake3/<hex>.toml`.
 ///
-/// It lives under the data directory, `$XDG_DATA_HOME/slcr`, rather than
-/// the cache, because a cache wipe would destroy descriptors
+/// It lives under the platform's data directory (`$XDG_DATA_HOME/slcr` on
+/// Linux), rather than the cache, because a cache wipe would destroy
+/// descriptors
 /// people wrote locally. Projects that pin the same bytes share one file,
 /// and projects that pin different descriptors for the same tool can't
 /// conflict. Nothing in the store relies on a descriptor's name or
@@ -22,7 +23,9 @@ pub(crate) struct DescriptorStore {
 /// The error returned when the store's directory can't be created.
 #[derive(Debug, Error, Diagnostic)]
 #[error("could not create the descriptor store at {}", .dir.display())]
-#[diagnostic(help("set XDG_DATA_HOME to a directory slcr can write to, to keep its data there"))]
+#[diagnostic(help(
+    "slcr installs descriptors in its data directory; make sure it can create directories there"
+))]
 pub struct StoreUnavailable {
     dir: PathBuf,
     #[source]

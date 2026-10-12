@@ -22,10 +22,6 @@ pub(crate) mod format;
 /// The name of the application as used on the filesystem for XDG conventions.
 const APPLICATION_NAME: &str = "slcr";
 
-/// The XDG Base Directory variable that names the base directory for
-/// user-specific data files.
-const XDG_DATA_HOME: &str = "XDG_DATA_HOME";
-
 /// An abstraction over the user's filesystem ensuring mediated
 /// access to the most commonly used files.
 #[derive(Clone)]
@@ -246,15 +242,13 @@ impl FileSystem {
     }
 
     /// The directory for data that persists between runs, such as
-    /// installed descriptors: `$XDG_DATA_HOME/slcr`. It may not exist yet.
-    ///
-    /// `$XDG_DATA_HOME` is honored on every platform, as the descriptor
-    /// store's specification requires, even where the platform's own
-    /// convention is another directory (macOS's is `~/Library/Application
-    /// Support`). Where it is unset, the platform's data directory is used,
-    /// which on Linux is the XDG default, `~/.local/share/slcr`.
+    /// installed descriptors: the platform's data directory, as the
+    /// `directories` crate determines it. On Linux that is
+    /// `$XDG_DATA_HOME/slcr`, or `~/.local/share/slcr` when `XDG_DATA_HOME`
+    /// is unset; on macOS, `~/Library/Application Support/slcr`. It may not
+    /// exist yet.
     pub(crate) fn data_dir(&self) -> PathBuf {
-        data_dir(std::env::var_os(XDG_DATA_HOME), self.xdg_dirs.data_dir())
+        self.xdg_dirs.data_dir().to_path_buf()
     }
 
     /// Returns the expected directory for this particular file type.
@@ -286,17 +280,6 @@ impl FileSystem {
         std::fs::create_dir_all(path).map_err(on_err)?;
         // Return an owned path to the directory.
         Ok(path.to_path_buf())
-    }
-}
-
-/// The data directory: `slcr` in `xdg_data_home`, the value of
-/// `$XDG_DATA_HOME`, and otherwise `platform`. The XDG Base Directory
-/// Specification says a relative path (including an empty one) is invalid
-/// and must be ignored.
-fn data_dir(xdg_data_home: Option<std::ffi::OsString>, platform: &Path) -> PathBuf {
-    match xdg_data_home.map(PathBuf::from) {
-        Some(base) if base.is_absolute() => base.join(APPLICATION_NAME),
-        _ => platform.to_path_buf(),
     }
 }
 
@@ -920,18 +903,5 @@ mod tests {
         // A file in the working directory has no directory to create.
         assert_eq!(help(error("b.yml", ErrorKind::NotFound)), None);
         assert_eq!(help(error("a/b.yml", ErrorKind::PermissionDenied)), None);
-    }
-
-    #[test]
-    fn the_data_directory_is_under_xdg_data_home() {
-        let platform = Path::new("/Users/me/Library/Application Support/slcr");
-        assert_eq!(
-            data_dir(Some("/srv/data".into()), platform),
-            Path::new("/srv/data/slcr")
-        );
-        // Unset, empty, or relative: the platform's directory.
-        assert_eq!(data_dir(None, platform), platform);
-        assert_eq!(data_dir(Some("".into()), platform), platform);
-        assert_eq!(data_dir(Some(".data".into()), platform), platform);
     }
 }

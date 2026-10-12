@@ -214,10 +214,10 @@ and no caching.
   fetching is tested for real: redirects, statuses, the size cap.
 - `store.rs` — the content-addressed store at
   `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
-  text and returns the pin it filed it under. The data directory is
-  `$XDG_DATA_HOME/slcr` on every platform, as the spec requires (an unset
-  or relative `XDG_DATA_HOME` falls back to the platform's data directory,
-  which on Linux is the XDG default, `~/.local/share/slcr`).
+  text and returns the pin it filed it under. The data directory is the
+  `directories` crate's `ProjectDirs::data_dir()`: `$XDG_DATA_HOME/slcr` on
+  Linux (`~/.local/share/slcr` if unset), `~/Library/Application
+  Support/slcr` on macOS.
 
 ## Queries (`src/query/`)
 
@@ -272,11 +272,12 @@ Two layers, both run by `cargo make test`:
   a subdirectory). Pass paths relative to the workspace so output is the same on
   every run. `slcr()` removes `LOG_LEVEL`, `CLICOLOR`, `CLICOLOR_FORCE`, and
   `NO_COLOR` so the developer's or CI's environment can't leak in; add to
-  `AMBIENT` in `main.rs` if a new variable changes output. It also sets
-  `XDG_DATA_HOME` to the workspace's `.data`, so the descriptor store lands
-  in the workspace, not the real data directory. insta-cmd records every
+  `AMBIENT` in `main.rs` if a new variable changes output. It also points
+  `XDG_DATA_HOME` (read on Linux) and `HOME` (read on macOS) into the
+  workspace, so `slcr`'s data directory, and with it the descriptor store,
+  is the workspace's `DATA_DIR`, never the real one. insta-cmd records every
   variable a command sets in the snapshot's header, so `main.rs` wraps
-  `assert_cmd_snapshot!` to redact that one (headers only, never output);
+  `assert_cmd_snapshot!` to redact those two (headers only, never output);
   use the wrapper, not `insta_cmd`'s. Don't `env_clear()`:
   coverage collection relies on inherited variables.
 - **What to snapshot.** `assert_cmd_snapshot!(command)` records the exit code,
