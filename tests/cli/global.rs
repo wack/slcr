@@ -33,8 +33,8 @@ fn an_unknown_subcommand_is_rejected() {
 }
 
 #[test]
-fn eval_is_not_implemented() {
-    assert_cmd_snapshot!(Workspace::new().slcr(&["eval"]));
+fn check_is_not_implemented() {
+    assert_cmd_snapshot!(Workspace::new().slcr(&["check"]));
 }
 
 #[test]
@@ -66,12 +66,7 @@ fn colors_can_be_forced_on() {
     let workspace = Workspace::new();
     workspace.file("broken.yaml", with_violation());
     with_visible_escapes(|| {
-        assert_cmd_snapshot!(workspace.slcr(&[
-            "check",
-            "broken.yaml",
-            "--enable-colors",
-            "always"
-        ]));
+        assert_cmd_snapshot!(workspace.slcr(&["vet", "broken.yaml", "--enable-colors", "always"]));
     });
 }
 
@@ -79,7 +74,7 @@ fn colors_can_be_forced_on() {
 fn colors_can_be_forced_off_whatever_the_environment_says() {
     let workspace = Workspace::new();
     workspace.file("broken.yaml", with_violation());
-    let mut command = workspace.slcr(&["--enable-colors", "never", "check", "broken.yaml"]);
+    let mut command = workspace.slcr(&["--enable-colors", "never", "vet", "broken.yaml"]);
     command.env("CLICOLOR_FORCE", "1");
     with_visible_escapes(|| {
         assert_cmd_snapshot!(command);

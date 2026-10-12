@@ -193,7 +193,7 @@ mod tests {
         serde_json::from_str(TODO_API_JSON).unwrap()
     }
 
-    /// A checked document whose root, SEC-001, contains `children`, and
+    /// A vetted document whose root, SEC-001, contains `children`, and
     /// whose Glossary, SEC-900, holds `terms`.
     fn spec(children: Json, terms: Json) -> SlcrRequirementsDocument {
         let mut root = json!({ "kind": "section", "id": "SEC-001", "title": "Root" });
