@@ -213,7 +213,7 @@ mod tests {
     use crate::Cli;
     use crate::config::command::SlcrCommand;
 
-    const TODO_API_YAML: &str = include_str!("../../tests/fixtures/todo-api.spec.yaml");
+    const TODO_API_TOML: &str = include_str!("../../tests/fixtures/todo-api.spec.toml");
 
     /// The arguments `slcr` parses `query` and then `args` into.
     fn parse(args: &[&str]) -> Result<QueryArgs, clap::Error> {
@@ -333,7 +333,7 @@ mod tests {
     #[test]
     fn query_reads_the_well_known_file() {
         Jail::expect_with(|jail| {
-            jail.create_file("SPEC.slcr.yml", TODO_API_YAML)?;
+            jail.create_file("SPEC.slcr.toml", TODO_API_TOML)?;
             run(&["MATCH (r:Requirement) RETURN count(*)"]).unwrap();
             Ok(())
         });
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn a_failing_query_reports_the_engine_s_error() {
         Jail::expect_with(|jail| {
-            jail.create_file("SPEC.slcr.yml", TODO_API_YAML)?;
+            jail.create_file("SPEC.slcr.toml", TODO_API_TOML)?;
             let err = run(&["RETURN $missing"]).unwrap_err();
             let err = err.downcast_ref::<InvalidQuery>().unwrap();
             assert!(matches!(err.error(), slcr_gql::Error::Semantic(_)));

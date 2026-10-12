@@ -5,6 +5,9 @@ info:
   args:
     - render
     - "--help"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
@@ -17,11 +20,11 @@ Arguments:
   [FILE]
           The requirements file to render: `.yaml`, `.yml`, `.json`, or `.toml`
           
-          [default: SPEC.slcr.yml]
+          [default: SPEC.slcr.toml]
 
 Options:
   -o, --output <PATH>
-          Where to write the Markdown, or `-` for stdout. Defaults to FILE's name without its extension and any `.slcr` or `.spec`, plus `.md`, beside it: `SPEC.slcr.yml` renders to `SPEC.md`
+          Where to write the Markdown, or `-` for stdout. Defaults to FILE's name without its extension and any `.slcr` or `.spec`, plus `.md`, beside it: `SPEC.slcr.toml` renders to `SPEC.md`
 
       --force
           Replace the output even if it wasn't rendered by `slcr`

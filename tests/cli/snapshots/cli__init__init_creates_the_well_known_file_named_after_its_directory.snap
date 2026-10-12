@@ -4,10 +4,14 @@ info:
   program: slcr
   args:
     - init
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-SPEC.slcr.yml: created specification todo-api
+SPEC.slcr.toml: created specification todo-api
+SLCR.toml: created project manifest
 
 ----- stderr -----

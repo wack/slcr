@@ -5,6 +5,9 @@ info:
   args:
     - init
     - "--help"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0
@@ -17,7 +20,7 @@ Arguments:
   [FILE]
           The requirements file to create: `.yaml`, `.yml`, `.json`, or `.toml`. It must not exist yet
           
-          [default: SPEC.slcr.yml]
+          [default: SPEC.slcr.toml]
 
 Options:
       --name <NAME>

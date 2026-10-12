@@ -4,12 +4,12 @@
 //! `tests/fixtures/todo-api.md`; these tests pin what the command reports
 //! and which files it writes.
 
-use super::{TODO_API_MD, TODO_API_YAML, Workspace, with_violation, with_warning};
+use super::{TODO_API_MD, TODO_API_TOML, TODO_API_YAML, Workspace, with_violation, with_warning};
 
 /// A workspace holding the canon example at the well-known path.
 fn canon() -> Workspace {
     let workspace = Workspace::new();
-    workspace.file("SPEC.slcr.yml", TODO_API_YAML);
+    workspace.file("SPEC.slcr.toml", TODO_API_TOML);
     workspace
 }
 
@@ -22,7 +22,7 @@ fn render_help() {
 fn render_writes_the_markdown_beside_the_well_known_file() {
     let workspace = canon();
     assert_cmd_snapshot!(workspace.slcr(&["render"]));
-    assert_eq!(workspace.files(), ["SPEC.md", "SPEC.slcr.yml"]);
+    assert_eq!(workspace.files(), ["SPEC.md", "SPEC.slcr.toml"]);
     assert_eq!(workspace.read("SPEC.md"), TODO_API_MD);
 }
 
@@ -46,7 +46,7 @@ fn render_writes_to_the_output() {
     let workspace = canon();
     workspace.dir("docs");
     assert_cmd_snapshot!(workspace.slcr(&["render", "--output", "docs/API.md"]));
-    assert_eq!(workspace.files(), ["SPEC.slcr.yml", "docs/API.md"]);
+    assert_eq!(workspace.files(), ["SPEC.slcr.toml", "docs/API.md"]);
     assert_eq!(workspace.read("docs/API.md"), TODO_API_MD);
 }
 
@@ -54,7 +54,7 @@ fn render_writes_to_the_output() {
 fn render_writes_to_stdout() {
     let workspace = canon();
     assert_cmd_snapshot!(workspace.slcr(&["render", "-o", "-"]));
-    assert_eq!(workspace.files(), ["SPEC.slcr.yml"]);
+    assert_eq!(workspace.files(), ["SPEC.slcr.toml"]);
 }
 
 #[test]
@@ -101,9 +101,9 @@ fn render_refuses_a_specification_that_breaks_its_invariants() {
 #[test]
 fn render_never_writes_over_the_requirements_file() {
     let workspace = canon();
-    let args = ["render", "--output", "./SPEC.slcr.yml", "--force"];
+    let args = ["render", "--output", "./SPEC.slcr.toml", "--force"];
     assert_cmd_snapshot!(workspace.slcr(&args));
-    assert_eq!(workspace.read("SPEC.slcr.yml"), TODO_API_YAML);
+    assert_eq!(workspace.read("SPEC.slcr.toml"), TODO_API_TOML);
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn render_needs_an_output_for_a_file_named_only_by_its_suffix() {
 fn render_does_not_create_a_missing_directory() {
     let workspace = canon();
     assert_cmd_snapshot!(workspace.slcr(&["render", "-o", "docs/SPEC.md"]));
-    assert_eq!(workspace.files(), ["SPEC.slcr.yml"]);
+    assert_eq!(workspace.files(), ["SPEC.slcr.toml"]);
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn expect_no_diff_compares_the_output() {
 fn expect_no_diff_fails_on_a_missing_output() {
     let workspace = canon();
     assert_cmd_snapshot!(workspace.slcr(&["render", "--expect-no-diff"]));
-    assert_eq!(workspace.files(), ["SPEC.slcr.yml"]);
+    assert_eq!(workspace.files(), ["SPEC.slcr.toml"]);
 }
 
 #[test]

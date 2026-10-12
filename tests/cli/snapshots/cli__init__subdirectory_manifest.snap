@@ -1,0 +1,6 @@
+---
+source: tests/cli/init.rs
+expression: "workspace.read(\"SLCR.toml\")"
+---
+formatVersion = "1"
+specs = ["specs/api.slcr.toml"]

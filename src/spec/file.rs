@@ -14,7 +14,7 @@ use crate::fs::{File, FileSystem};
 /// The well-known requirements file, like `Makefile` or `LICENSE`: where
 /// `slcr init` creates a specification, and where commands that read one
 /// look by default.
-pub const DEFAULT_FILE: &str = "SPEC.slcr.yml";
+pub const DEFAULT_FILE: &str = "SPEC.slcr.toml";
 
 /// Suffixes that mark a file's stem as a specification's, which
 /// [base_name] drops: `todo-api.spec.yaml` and `todo-api.slcr.yml` both
@@ -23,7 +23,7 @@ const STEM_SUFFIXES: [&str; 2] = [".slcr", ".spec"];
 
 /// The name of a requirements file without its extension and without one
 /// `.slcr` or `.spec` suffix: `todo-api` for `specs/todo-api.spec.yaml`,
-/// and `SPEC` for the well-known `SPEC.slcr.yml`. `None` if the path has
+/// and `SPEC` for the well-known `SPEC.slcr.toml`. `None` if the path has
 /// no file name, or one that isn't UTF-8.
 pub(crate) fn base_name(path: &Path) -> Option<&str> {
     let stem = path.file_stem().and_then(OsStr::to_str)?;

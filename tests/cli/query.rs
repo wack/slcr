@@ -15,7 +15,7 @@ const DEPENDENTS: &str = "MATCH (d:Requirement)-[:REFINES]->{1,}(:Requirement {i
 /// A workspace holding the canon example at the well-known path.
 fn canon() -> Workspace {
     let workspace = Workspace::new();
-    workspace.file("SPEC.slcr.yml", TODO_API_YAML);
+    workspace.file("SPEC.slcr.toml", TODO_API_TOML);
     workspace
 }
 

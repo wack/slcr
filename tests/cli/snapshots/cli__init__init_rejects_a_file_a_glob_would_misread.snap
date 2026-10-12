@@ -1,0 +1,20 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "[draft].slcr.toml"
+    - "--name"
+    - draft
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × [draft].slcr.toml can't be listed in SLCR.toml, which reads `specs` as globs
+  help: choose a path without `*`, `?`, `[`, `]`, `{`, `}`, or `\`
