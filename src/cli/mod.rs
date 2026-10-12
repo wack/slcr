@@ -1,5 +1,4 @@
-pub use check::{Check, CheckArgs};
-pub use eval::Eval;
+pub use check::Check;
 pub use init::{Init, InitArgs};
 pub use not_implemented::NotImplemented;
 pub use query::{Query, QueryArgs};
@@ -8,9 +7,9 @@ pub(crate) use runtime::block_on;
 pub use slice::{Slice, SliceArgs};
 pub use tools::{Tools, ToolsArgs};
 pub use version::Version;
+pub use vet::{Vet, VetArgs};
 
 mod check;
-mod eval;
 mod findings;
 mod init;
 mod not_implemented;
@@ -20,3 +19,4 @@ mod runtime;
 mod slice;
 mod tools;
 mod version;
+mod vet;

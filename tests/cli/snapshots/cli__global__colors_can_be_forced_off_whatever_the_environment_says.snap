@@ -5,10 +5,12 @@ info:
   args:
     - "--enable-colors"
     - never
-    - check
+    - vet
     - broken.yaml
   env:
     CLICOLOR_FORCE: "1"
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
@@ -22,4 +24,4 @@ Error:
   × REQ-001 is refined by REQ-002 but has no `refinement`
   help: set `refinement` to AND, OR, or XOR
 
-Error:   × the check failed for 1 of 1 file
+Error:   × vetting failed for 1 of 1 file

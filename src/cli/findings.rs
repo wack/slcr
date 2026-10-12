@@ -5,7 +5,7 @@ use std::{
 
 use miette::{Diagnostic, Severity};
 
-use crate::spec::check::{Finding, Report};
+use crate::spec::vet::{Finding, Report};
 
 /// Whether a file with `report` passes: it breaks no invariant and, if
 /// warnings are denied, has no warning.
@@ -38,7 +38,7 @@ pub(super) fn tally(report: &Report) -> String {
     }
 }
 
-/// Everything a check found in one file, as one diagnostic whose related
+/// Everything vetting found in one file, as one diagnostic whose related
 /// diagnostics are the findings.
 ///
 /// It is an error if the file breaks an invariant, or has warnings that are
@@ -87,7 +87,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::spec::graph::UncheckedDocument;
+    use crate::spec::graph::UnvettedDocument;
     use crate::terminal::render_plain;
 
     const TODO_API_JSON: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
@@ -120,7 +120,7 @@ mod tests {
     }
 
     fn report(value: Value) -> Report {
-        serde_json::from_value::<UncheckedDocument>(value)
+        serde_json::from_value::<UnvettedDocument>(value)
             .unwrap()
             .report()
     }

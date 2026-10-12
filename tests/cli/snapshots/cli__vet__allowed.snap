@@ -1,10 +1,13 @@
 ---
-source: tests/cli/check.rs
+source: tests/cli/vet.rs
 info:
   program: slcr
   args:
-    - check
+    - vet
     - warned.yaml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
 exit_code: 0

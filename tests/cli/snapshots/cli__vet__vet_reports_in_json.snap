@@ -1,9 +1,9 @@
 ---
-source: tests/cli/check.rs
+source: tests/cli/vet.rs
 info:
   program: slcr
   args:
-    - check
+    - vet
     - "--format"
     - json
     - ok.yaml
@@ -13,6 +13,9 @@ info:
     - invalid.yaml
     - missing.yaml
     - notes.md
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
@@ -103,4 +106,4 @@ exit_code: 1
 }
 
 ----- stderr -----
-Error:   × the check failed for 5 of 7 files
+Error:   × vetting failed for 5 of 7 files
