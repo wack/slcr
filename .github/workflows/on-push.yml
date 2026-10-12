@@ -7,7 +7,7 @@ on:
     # "⚡ PR Ready" required-check name; if on-push ran on a gh-readonly-queue/**
     # branch, its fast PR-time gate (format + clippy) could satisfy the merge
     # queue's required check before on-merge.yml's comprehensive gate (build +
-    # coverage + dist-build + publish-edge) finished — letting a failing commit
+    # coverage + dist-build) finished — letting a failing commit
     # merge. The merge_group event in on-merge.yml is what gates the queue.
     branches:
       - '**'
