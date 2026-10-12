@@ -1,31 +1,18 @@
 use std::{
     fmt::{self, Display},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use miette::{Diagnostic, Result};
 use thiserror::Error;
 
 use super::{
-    DescriptorVersion, ToolKey,
+    DescriptorVersion, Environment, ToolKey,
     descriptor::{self, Descriptor},
     manifest::{ManifestFile, Project, ToolEntry},
     pin::Pin,
-    source::{Fetcher, SourceArg},
-    store::DescriptorStore,
+    source::SourceArg,
 };
-use crate::fs::FileSystem;
-
-/// What [add] reads and writes outside the project, passed in so that a
-/// caller, such as a test, chooses it.
-pub(crate) struct Environment<'a> {
-    pub(crate) fs: &'a FileSystem,
-    pub(crate) store: &'a DescriptorStore,
-    pub(crate) fetcher: &'a Fetcher,
-    /// The working directory, as an absolute path: where the project is
-    /// looked for, and what a path source is relative to.
-    pub(crate) cwd: &'a Path,
-}
 
 /// Fetch the descriptor at `source`, validate it, pin it, install it in the
 /// descriptor store, and declare it in the manifest under `key`, or else
@@ -89,7 +76,7 @@ pub(crate) async fn add(
 #[error("{} already declares a tool named {key}", .manifest.display())]
 #[diagnostic(help(
     "declare this descriptor under another name with `--as <NAME>`, or remove the existing \
-     entry from the manifest first"
+     tool first with `slcr tools remove {key}`"
 ))]
 pub struct AlreadyDeclared {
     manifest: PathBuf,
@@ -136,80 +123,28 @@ impl Display for Added {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::TempDir;
-
     use super::*;
     use crate::cli::block_on;
+    use crate::tools::fixture::{Fixture, MANIFEST, NEXTEST};
     use crate::tools::https_server::{HttpsServer, Reply};
-    use crate::tools::source::SourceError;
-
-    /// The cargo-nextest example on the Schemas page.
-    const NEXTEST: &str = include_str!("../../tests/fixtures/cargo-nextest.descriptor.toml");
-
-    /// A manifest that declares no tools.
-    const MANIFEST: &str = "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n";
-
-    /// A project, with the cargo-nextest descriptor kept in it at
-    /// `tools/cargo-nextest.toml`, and an empty descriptor store beside it.
-    struct Fixture {
-        dir: TempDir,
-        fs: FileSystem,
-        store: DescriptorStore,
-    }
+    use crate::tools::source::{Fetcher, SourceError};
 
     impl Fixture {
-        fn new() -> Self {
-            let dir = tempfile::tempdir().unwrap();
-            let project = dir.path().join("project");
-            std::fs::create_dir_all(project.join("tools")).unwrap();
-            std::fs::write(project.join("SLCR.toml"), MANIFEST).unwrap();
-            std::fs::write(project.join("tools/cargo-nextest.toml"), NEXTEST).unwrap();
-            let store = DescriptorStore::at(dir.path().join("store"));
-            Self {
-                dir,
-                fs: FileSystem::new().unwrap(),
-                store,
-            }
-        }
-
-        fn project(&self) -> PathBuf {
-            self.dir.path().join("project")
-        }
-
-        fn manifest(&self) -> String {
-            std::fs::read_to_string(self.project().join("SLCR.toml")).unwrap()
-        }
-
-        /// Whether the store holds the descriptor `text`.
-        fn installed(&self, text: &str) -> bool {
-            self.store.path(&Pin::of(text.as_bytes())).is_file()
-        }
-
-        /// Whether the store holds anything at all.
-        fn store_is_empty(&self) -> bool {
-            !self.dir.path().join("store").exists()
-        }
-
         /// Run [add] from the project root with `fetcher`.
-        async fn add_with(
+        pub(crate) async fn add_with(
             &self,
             fetcher: &Fetcher,
             source: &str,
             key: Option<&str>,
         ) -> Result<Added> {
             let cwd = self.project();
-            let env = Environment {
-                fs: &self.fs,
-                store: &self.store,
-                fetcher,
-                cwd: &cwd,
-            };
+            let env = self.env(fetcher, &cwd);
             let key = key.map(|key| ToolKey::try_from(key.to_owned()).unwrap());
             add(&env, source.parse().unwrap(), key).await
         }
 
         /// Run [add] on a source that needs no network.
-        fn add(&self, source: &str, key: Option<&str>) -> Result<Added> {
+        pub(crate) fn add(&self, source: &str, key: Option<&str>) -> Result<Added> {
             let fetcher = Fetcher::new();
             block_on(self.add_with(&fetcher, source, key)).unwrap()
         }
@@ -313,7 +248,7 @@ mod tests {
         fixture.add("tools/cargo-nextest.toml", None).unwrap();
         let manifest = fixture.manifest();
         let newer = NEXTEST.replace("version = \"1.0.0\"", "version = \"1.1.0\"");
-        std::fs::write(fixture.project().join("tools/cargo-nextest.toml"), &newer).unwrap();
+        fixture.write("tools/cargo-nextest.toml", &newer);
 
         let err = fixture.add("tools/cargo-nextest.toml", None).unwrap_err();
         assert_eq!(
@@ -334,7 +269,7 @@ mod tests {
                 .into_bytes(),
             b"name = \"\xff\"".to_vec(),
         ] {
-            std::fs::write(fixture.project().join("tools/cargo-nextest.toml"), invalid).unwrap();
+            fixture.write("tools/cargo-nextest.toml", invalid);
             assert!(fixture.add("tools/cargo-nextest.toml", None).is_err());
             assert_eq!(fixture.manifest(), MANIFEST);
             assert!(fixture.store_is_empty());
@@ -347,12 +282,7 @@ mod tests {
         let cwd = fixture.project().join("crates/api");
         std::fs::create_dir_all(&cwd).unwrap();
         let fetcher = Fetcher::new();
-        let env = Environment {
-            fs: &fixture.fs,
-            store: &fixture.store,
-            fetcher: &fetcher,
-            cwd: &cwd,
-        };
+        let env = fixture.env(&fetcher, &cwd);
         let source = "../../tools/cargo-nextest.toml".parse().unwrap();
         let added = block_on(add(&env, source, None)).unwrap().unwrap();
         assert_eq!(

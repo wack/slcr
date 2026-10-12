@@ -7,6 +7,7 @@ info:
     - add
     - tools/cargo-nextest.toml
   env:
+    HOME: "[HOME]"
     XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
@@ -15,4 +16,4 @@ exit_code: 1
 
 ----- stderr -----
 Error:   × SLCR.toml already declares a tool named cargo-nextest
-  help: declare this descriptor under another name with `--as <NAME>`, or remove the existing entry from the manifest first
+  help: declare this descriptor under another name with `--as <NAME>`, or remove the existing tool first with `slcr tools remove cargo-nextest`

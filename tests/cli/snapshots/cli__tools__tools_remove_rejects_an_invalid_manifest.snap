@@ -1,0 +1,25 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - remove
+    - cargo-nextest
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × could not parse SLCR.toml as TOML
+   ╭─[SLCR.toml:7:19]
+ 6 │ version = "1.0.0"
+ 7 │ source = { path = "../cargo-nextest.toml" }
+   ·                   ───────────┬───────────
+   ·                              ╰── "../cargo-nextest.toml" is not a path relative to the project root
+ 8 │ pin = "blake3:3aa337b9c338f5f5e93e6664416047b687e73343e4d92158aab2e6329f1e6e92"
+   ╰────

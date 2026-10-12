@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - update
+    - cargo-nextest
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × tools/cargo-nextest.toml is outside the project
+  help: a descriptor kept in the project must be inside the directory that holds SLCR.toml; copy it there, or publish it at an HTTPS URL

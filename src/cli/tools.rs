@@ -5,10 +5,12 @@ use super::block_on;
 use crate::Terminal;
 use crate::fs::FileSystem;
 use crate::tools::{
-    InvalidToolKey, ToolKey,
-    add::{Environment, add},
+    Environment, InvalidToolKey, ToolKey,
+    add::add,
+    remove::remove,
     source::{Fetcher, SourceArg},
     store::DescriptorStore,
+    update::update,
 };
 
 /// The arguments to `slcr tools`.
@@ -25,6 +27,11 @@ pub enum ToolsCommand {
     /// Declare a tool in SLCR.toml: fetch its descriptor, check it, pin it,
     /// and install it
     Add(AddArgs),
+    /// Re-fetch a declared tool's descriptor from its source, check it,
+    /// re-pin it, and install it
+    Update(KeyArgs),
+    /// Remove a tool from SLCR.toml
+    Remove(KeyArgs),
 }
 
 /// The arguments to `slcr tools add`.
@@ -39,6 +46,14 @@ pub struct AddArgs {
     /// Defaults to the descriptor's own name.
     #[arg(long = "as", value_name = "NAME", value_parser = parse_key)]
     key: Option<ToolKey>,
+}
+
+/// The arguments to `slcr tools update` and `slcr tools remove`.
+#[derive(Args, Clone, Debug)]
+pub struct KeyArgs {
+    /// The name the tool is declared under in SLCR.toml.
+    #[arg(value_name = "NAME", value_parser = parse_key)]
+    key: ToolKey,
 }
 
 fn parse_key(value: &str) -> Result<ToolKey, InvalidToolKey> {
@@ -57,21 +72,23 @@ impl Tools {
     }
 
     pub fn dispatch(self) -> Result<()> {
-        match self.args.command {
+        let fs = FileSystem::new()?;
+        let store = DescriptorStore::new(&fs);
+        let fetcher = Fetcher::new();
+        let cwd = std::env::current_dir().into_diagnostic()?;
+        let env = Environment {
+            fs: &fs,
+            store: &store,
+            fetcher: &fetcher,
+            cwd: &cwd,
+        };
+        let status = match self.args.command {
             ToolsCommand::Add(AddArgs { source, key }) => {
-                let fs = FileSystem::new()?;
-                let store = DescriptorStore::new(&fs);
-                let fetcher = Fetcher::new();
-                let cwd = std::env::current_dir().into_diagnostic()?;
-                let env = Environment {
-                    fs: &fs,
-                    store: &store,
-                    fetcher: &fetcher,
-                    cwd: &cwd,
-                };
-                let added = block_on(add(&env, source, key))??;
-                self.terminal.write_stdout_line(&added.to_string())
+                block_on(add(&env, source, key))??.to_string()
             }
-        }
+            ToolsCommand::Update(KeyArgs { key }) => block_on(update(&env, key))??.to_string(),
+            ToolsCommand::Remove(KeyArgs { key }) => remove(&fs, &cwd, key)?.to_string(),
+        };
+        self.terminal.write_stdout_line(&status)
     }
 }
