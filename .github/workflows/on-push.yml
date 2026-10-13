@@ -35,6 +35,7 @@ jobs:
     needs:
       - "format"
       - "clippy"
+      - "specification"
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: |
@@ -75,3 +76,25 @@ jobs:
         uses: "wack/gh-actions/setup-rust@trunk"
       - name: Clippy
         run: cargo make clippy
+
+  # The repository's own SLCR specification (see "Self-hosting" in
+  # CLAUDE.md). The committed SPEC.md must be exactly what SPEC.slcr.toml
+  # renders to, and `slcr check` must find every requirement satisfied:
+  # its validators run `cargo insta test` under nextest. The second step runs
+  # even if the first fails, so one red check never hides the other.
+  specification:
+    name: Specification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        id: setup
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          extra-tools: cargo-nextest,cargo-insta
+      - name: SPEC.md is up to date
+        run: cargo make render-expect-no-diff
+      - name: Requirements are satisfied
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: cargo make self-check

@@ -77,6 +77,31 @@ args = [
   "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
 ]
 
+# The repository's own specification (see "Self-hosting" in CLAUDE.md).
+# Both tasks run the checked-out `slcr`, never an installed one, so the
+# result is the same in CI, in the pre-commit hook, and locally.
+[tasks.render-expect-no-diff]
+description = "Fail unless SPEC.md is exactly what SPEC.slcr.toml renders to."
+category = "Development"
+workspace = false
+command = "cargo"
+args = ["run", "--locked", "--", "render", "--expect-no-diff"]
+
+# Needs cargo-insta and cargo-nextest, which the validators run.
+[tasks.self-check]
+description = "Run `slcr check` on the repository's own specification."
+category = "Development"
+workspace = false
+command = "cargo"
+args = ["run", "--locked", "--", "check", "--deny-warnings"]
+
+[tasks.install-hooks]
+description = "Have git run the repository's hooks, in .githooks/."
+category = "Development"
+workspace = false
+command = "git"
+args = ["config", "core.hooksPath", ".githooks"]
+
 [tasks.help]
 command = "cargo"
 description = "List help text for the slcr executable"
