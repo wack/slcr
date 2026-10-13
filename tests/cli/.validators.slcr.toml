@@ -1179,3 +1179,47 @@ requirement = "slcr/REQ-064"
 criterion = "AC-174"
 tool = "cargo-insta"
 with = { target = "cli", test = "tools::tools_list_help" }
+
+# slcr tools show
+
+[[validator]]
+requirement = "slcr/REQ-066"
+criterion = "AC-175"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_prints_a_declared_tool_s_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-067"
+criterion = "AC-176"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_reports_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-068"
+criterion = "AC-177"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_requires_a_declared_tool" }
+
+[[validator]]
+requirement = "slcr/REQ-068"
+criterion = "AC-178"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_reports_a_descriptor_that_is_not_installed" }
+
+[[validator]]
+requirement = "slcr/REQ-068"
+criterion = "AC-179"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_reports_a_corrupted_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-068"
+criterion = "AC-180"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_reports_a_version_the_manifest_does_not_declare" }
+
+[[validator]]
+requirement = "slcr/REQ-069"
+criterion = "AC-181"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_help" }

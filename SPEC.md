@@ -904,6 +904,7 @@ All of the following must hold:
 - [tools install](#REQ-052)
 - [tools remove](#REQ-057)
 - [tools list](#REQ-061)
+- [tools show](#REQ-065)
 
 *Terms:* [Project manifest](#TERM-003), [Tool](#TERM-014)
 
@@ -1376,6 +1377,84 @@ With no tools declared, `slcr tools list` says so and suggests `slcr tools add <
 <a id="AC-174"></a>**Describes itself**
 
 `slcr tools list --help` describes `--format` and its values.
+
+<a id="REQ-065"></a>
+#### 1.7.8 tools show
+
+`slcr tools` MUST have a `show` subcommand that prints the descriptor a declared tool pins: how the tool runs, and what each validator's `with` must hold.
+
+*Rationale:* Writing a validator means knowing which fields its tool takes; `show` answers that from the exact descriptor the project pins, not from documentation that may describe another version.
+
+All of the following must hold:
+
+- [Prints the pinned descriptor](#REQ-066)
+- [Shows in JSON](#REQ-067)
+- [Shows only what the project pins](#REQ-068)
+- [tools show usage](#REQ-069)
+
+*Terms:* [Validator](#TERM-006), [Tool descriptor](#TERM-008)
+
+<a id="REQ-066"></a>
+##### 1.7.8.1 Prints the pinned descriptor
+
+`slcr tools show NAME` MUST print the descriptor that the tool declared as NAME pins, as the store holds it: its name, version, source, and pin; its argv, working directory, environment, and timeout; the exit codes that pass; and the JSON Schema every validator's `with` must satisfy.
+
+*Terms:* [Tool descriptor](#TERM-008), [Descriptor store](#TERM-009), [Pin](#TERM-010)
+
+*Acceptance criteria:*
+
+<a id="AC-175"></a>**Prints a declared tool's descriptor**
+
+`slcr tools show cargo-nextest` prints its source, pin, argv with its `{with.test}` placeholder, `cwd: nearest Cargo.toml`, `env: none`, `timeout: none`, `pass: 0`, and its validator schema.
+
+<a id="REQ-067"></a>
+##### 1.7.8.2 Shows in JSON
+
+`slcr tools show NAME --format json` MUST write one JSON document instead, holding the tool's `key`, and the descriptor's `name`, `version`, `source`, `pin`, `invoke`, `results`, and `schema`. `--format human` is the default.
+
+*Acceptance criteria:*
+
+<a id="AC-176"></a>**Shows in JSON**
+
+`slcr tools show cargo-nextest --format json` writes the document, its `invoke` holding the argv as written.
+
+<a id="REQ-068"></a>
+##### 1.7.8.3 Shows only what the project pins
+
+`slcr tools show` MUST fail, changing nothing, for a NAME the manifest doesn't declare, with help listing the tools it does, and, with the problem `slcr vet` reports, for a descriptor the store doesn't hold, holds corrupted, or holds with another version than the declared one. It MUST only read the store, never fetching or installing a descriptor.
+
+*Depends on:* [Vets pinned descriptors](#REQ-018)
+
+*Terms:* [Descriptor store](#TERM-009)
+
+*Acceptance criteria:*
+
+<a id="AC-177"></a>**Requires a declared tool**
+
+`slcr tools show jev` fails, with help listing `ast-grep, cargo-nextest`.
+
+<a id="AC-178"></a>**Reports a descriptor that is not installed**
+
+`slcr tools show ast-grep`, whose descriptor isn't installed, fails with help naming `slcr tools install`, and fetches nothing.
+
+<a id="AC-179"></a>**Reports a corrupted descriptor**
+
+When the store's copy no longer hashes to its pin, `slcr tools show` fails, saying so.
+
+<a id="AC-180"></a>**Reports an undeclared version**
+
+When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, `slcr tools show` fails with help naming `slcr tools update`.
+
+<a id="REQ-069"></a>
+##### 1.7.8.4 tools show usage
+
+`slcr tools show` MUST describe itself, NAME, and `--format` when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-181"></a>**Describes itself**
+
+`slcr tools show --help` describes NAME and `--format`.
 
 <a id="SEC-002"></a>
 ## 2. Glossary

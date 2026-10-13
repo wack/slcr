@@ -1653,6 +1653,94 @@ id = "AC-174"
 title = "Describes itself"
 body = "`slcr tools list --help` describes `--format` and its values."
 
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-065"
+title = "tools show"
+body = "`slcr tools` MUST have a `show` subcommand that prints the descriptor a declared tool pins: how the tool runs, and what each validator's `with` must hold."
+rationale = "Writing a validator means knowing which fields its tool takes; `show` answers that from the exact descriptor the project pins, not from documentation that may describe another version."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-006", "TERM-008"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-066"
+title = "Prints the pinned descriptor"
+body = "`slcr tools show NAME` MUST print the descriptor that the tool declared as NAME pins, as the store holds it: its name, version, source, and pin; its argv, working directory, environment, and timeout; the exit codes that pass; and the JSON Schema every validator's `with` must satisfy."
+modality = "MUST"
+refines = ["REQ-065"]
+usesTerm = ["TERM-008", "TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-175"
+title = "Prints a declared tool's descriptor"
+body = "`slcr tools show cargo-nextest` prints its source, pin, argv with its `{with.test}` placeholder, `cwd: nearest Cargo.toml`, `env: none`, `timeout: none`, `pass: 0`, and its validator schema."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-067"
+title = "Shows in JSON"
+body = "`slcr tools show NAME --format json` MUST write one JSON document instead, holding the tool's `key`, and the descriptor's `name`, `version`, `source`, `pin`, `invoke`, `results`, and `schema`. `--format human` is the default."
+modality = "MUST"
+refines = ["REQ-065"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-176"
+title = "Shows in JSON"
+body = "`slcr tools show cargo-nextest --format json` writes the document, its `invoke` holding the argv as written."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-068"
+title = "Shows only what the project pins"
+body = "`slcr tools show` MUST fail, changing nothing, for a NAME the manifest doesn't declare, with help listing the tools it does, and, with the problem `slcr vet` reports, for a descriptor the store doesn't hold, holds corrupted, or holds with another version than the declared one. It MUST only read the store, never fetching or installing a descriptor."
+modality = "MUST"
+refines = ["REQ-065"]
+dependsOn = ["REQ-018"]
+usesTerm = ["TERM-009"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-177"
+title = "Requires a declared tool"
+body = "`slcr tools show jev` fails, with help listing `ast-grep, cargo-nextest`."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-178"
+title = "Reports a descriptor that is not installed"
+body = "`slcr tools show ast-grep`, whose descriptor isn't installed, fails with help naming `slcr tools install`, and fetches nothing."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-179"
+title = "Reports a corrupted descriptor"
+body = "When the store's copy no longer hashes to its pin, `slcr tools show` fails, saying so."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-180"
+title = "Reports an undeclared version"
+body = "When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, `slcr tools show` fails with help naming `slcr tools update`."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-069"
+title = "tools show usage"
+body = "`slcr tools show` MUST describe itself, NAME, and `--format` when given `--help`."
+modality = "MUST"
+refines = ["REQ-065"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-181"
+title = "Describes itself"
+body = "`slcr tools show --help` describes NAME and `--format`."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
