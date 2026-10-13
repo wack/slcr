@@ -528,6 +528,204 @@ id = "AC-056"
 title = "Rejects an unknown format"
 body = "`slcr vet --format xml` is a usage error listing `human` and `json`."
 
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-020"
+title = "render"
+body = "`slcr` MUST have a `render` subcommand that renders a specification as canonical Markdown, so that people can read it, and review changes to it, wherever they read code."
+rationale = "A rendering committed beside its specification shows up readably on GitHub and in code review, where the YAML, JSON, or TOML of a large graph does not."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-011"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-021"
+title = "Renders canonical Markdown"
+body = "`slcr render [FILE]` MUST render the specification in FILE, by default `SPEC.slcr.toml`, as canonical Markdown, the same specification always rendering to the same bytes. By default it MUST write it beside FILE, named after FILE without its extension and any `.slcr` or `.spec` suffix, plus `.md`, and report `OUTPUT: rendered NAME`."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-002", "TERM-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-057"
+title = "Renders the canon example beside the well-known file"
+body = "`slcr render` beside the canon `todo-api` example in `SPEC.slcr.toml` writes `SPEC.md` holding exactly the golden rendering `tests/fixtures/todo-api.md`, and nothing else."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-058"
+title = "Names the Markdown after the file"
+body = "`slcr render specs/todo-api.spec.yaml` writes `specs/todo-api.md`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-059"
+title = "Needs an output for a file named only by its suffix"
+body = "`slcr render .spec.yaml` fails, since no name is left for the Markdown, and its help suggests `--output`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-022"
+title = "Chooses its output"
+body = "`slcr render --output PATH` (or `-o PATH`) MUST write the Markdown to PATH instead, and `-o -` to stdout. It MUST NOT create a missing directory, and MUST NOT write over the requirements file being rendered, even with `--force`."
+modality = "MUST"
+refines = ["REQ-020"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-060"
+title = "Writes to the output"
+body = "`slcr render --output docs/API.md` writes the rendering to `docs/API.md` and nowhere else."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-061"
+title = "Writes to stdout"
+body = "`slcr render -o -` writes the rendering to stdout and creates no file."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-062"
+title = "Refuses a missing directory"
+body = "`slcr render -o docs/SPEC.md`, when `docs` doesn't exist, fails with help to create it first, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-063"
+title = "Never writes over the requirements file"
+body = "`slcr render --output ./SPEC.slcr.toml --force` fails, saying that this is the file being rendered, and leaves it unchanged."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-023"
+title = "Replaces only its own output"
+body = "`slcr render` MUST replace an existing output only when it starts with the comment that marks a file `slcr` generated, unless `--force` is given, and MUST replace it atomically. An output that already holds the rendering MUST be left untouched and reported `up to date`."
+rationale = "A hand-written `SPEC.md` is someone's work. Leaving an up-to-date file untouched keeps its modification time, so build tools don't rebuild what didn't change."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-064"
+title = "Replaces its own earlier output"
+body = "`slcr render` replaces a stale `SPEC.md` that starts with the generated-file comment with the current rendering."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-065"
+title = "Replaces a hand-written file only by force"
+body = "`slcr render` refuses to replace a hand-written `SPEC.md`, suggesting `--force` or `--output` and leaving it unchanged; `slcr render --force` replaces it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-066"
+title = "Leaves an up-to-date output alone"
+body = "`slcr render` reports `SPEC.md: up to date` when `SPEC.md` already holds the rendering."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-024"
+title = "Reports findings"
+body = "`slcr render` MUST write the specification's findings to stderr as `slcr vet` reports them, render a specification whose findings are only warnings, and refuse one that breaks an invariant, writing nothing."
+modality = "MUST"
+refines = ["REQ-020"]
+dependsOn = ["REQ-012"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-067"
+title = "Renders despite warnings"
+body = "A specification with a warning renders, with the warning on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-068"
+title = "Refuses a broken specification"
+body = "A specification with a violation fails to render, with the violation on stderr and help to fix it, and no Markdown is written."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-025"
+title = "Expects no diff"
+body = "`slcr render --expect-no-diff` MUST write nothing, and fail unless the output already holds exactly what FILE renders to, saying whether the output is missing or the first line on which it differs. It compares a file, so it MUST refuse stdout as the output, and it conflicts with `--force`."
+rationale = "CI and pre-commit hooks use it to keep a committed rendering in step with its specification, as this repository does with `SPEC.md`. The flag avoids the word \"check\", which means running validators."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-069"
+title = "Passes an up-to-date output"
+body = "`slcr render --expect-no-diff` reports `SPEC.md: up to date` and exits with status 0 when it is."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-070"
+title = "Compares the chosen output"
+body = "`slcr render --expect-no-diff --output docs/API.md` compares `docs/API.md`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-071"
+title = "Fails on a missing output"
+body = "`slcr render --expect-no-diff` without `SPEC.md` fails, saying it does not exist, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-072"
+title = "Fails on a stale output"
+body = "`slcr render --expect-no-diff` with a stale `SPEC.md` fails, naming the first line that differs, and leaves the file unchanged."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-073"
+title = "Cannot compare stdout"
+body = "`slcr render --expect-no-diff -o -` fails, with help to name a file instead."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-074"
+title = "Conflicts with force"
+body = "`slcr render --expect-no-diff --force` is a usage error."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-026"
+title = "render usage"
+body = "`slcr render` MUST take at most one FILE, MUST fail on a FILE that can't be read or names no supported format, and MUST describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-075"
+title = "Describes itself"
+body = "`slcr render --help` describes FILE and its default, `--output`, `--force`, and `--expect-no-diff`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-076"
+title = "Takes at most one file"
+body = "`slcr render a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-077"
+title = "Rejects an unsupported format"
+body = "`slcr render SPEC.md` fails, listing the supported extensions."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-078"
+title = "Reports a missing file"
+body = "`slcr render` without `SPEC.slcr.toml` fails, saying it could not read it."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
@@ -594,3 +792,9 @@ kind = "term"
 id = "TERM-010"
 title = "Pin"
 definition = "`blake3:` followed by the 64 lowercase hex digits of a descriptor's BLAKE3 hash. The manifest records each tool's pin, so a validator always runs exactly the descriptor that was declared, wherever it came from."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-011"
+title = "Rendering"
+definition = "The canonical Markdown of a specification: a comment saying that `slcr` generated it, then every Section and Requirement as a numbered heading, in document order, with its body, rationale, refinements, dependencies, terms, and acceptance criteria, and finally the Glossary. Every node is preceded by a hidden anchor named by its ID, and every cross-reference is a link to one, so IDs never appear in the visible text."

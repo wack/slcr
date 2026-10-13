@@ -434,6 +434,170 @@ When the manifest declares version 0.9.0 but the pinned descriptor is 1.0.0, `sl
 
 `slcr vet --format xml` is a usage error listing `human` and `json`.
 
+<a id="REQ-020"></a>
+### 1.4 render
+
+`slcr` MUST have a `render` subcommand that renders a specification as canonical Markdown, so that people can read it, and review changes to it, wherever they read code.
+
+*Rationale:* A rendering committed beside its specification shows up readably on GitHub and in code review, where the YAML, JSON, or TOML of a large graph does not.
+
+All of the following must hold:
+
+- [Renders canonical Markdown](#REQ-021)
+- [Chooses its output](#REQ-022)
+- [Replaces only its own output](#REQ-023)
+- [Reports findings](#REQ-024)
+- [Expects no diff](#REQ-025)
+- [render usage](#REQ-026)
+
+*Terms:* [Rendering](#TERM-011)
+
+<a id="REQ-021"></a>
+#### 1.4.1 Renders canonical Markdown
+
+`slcr render [FILE]` MUST render the specification in FILE, by default `SPEC.slcr.toml`, as canonical Markdown, the same specification always rendering to the same bytes. By default it MUST write it beside FILE, named after FILE without its extension and any `.slcr` or `.spec` suffix, plus `.md`, and report `OUTPUT: rendered NAME`.
+
+*Terms:* [Requirements file](#TERM-002), [Rendering](#TERM-011)
+
+*Acceptance criteria:*
+
+<a id="AC-057"></a>**Renders the canon example beside the well-known file**
+
+`slcr render` beside the canon `todo-api` example in `SPEC.slcr.toml` writes `SPEC.md` holding exactly the golden rendering `tests/fixtures/todo-api.md`, and nothing else.
+
+<a id="AC-058"></a>**Names the Markdown after the file**
+
+`slcr render specs/todo-api.spec.yaml` writes `specs/todo-api.md`.
+
+<a id="AC-059"></a>**Needs an output for a file named only by its suffix**
+
+`slcr render .spec.yaml` fails, since no name is left for the Markdown, and its help suggests `--output`.
+
+<a id="REQ-022"></a>
+#### 1.4.2 Chooses its output
+
+`slcr render --output PATH` (or `-o PATH`) MUST write the Markdown to PATH instead, and `-o -` to stdout. It MUST NOT create a missing directory, and MUST NOT write over the requirements file being rendered, even with `--force`.
+
+*Acceptance criteria:*
+
+<a id="AC-060"></a>**Writes to the output**
+
+`slcr render --output docs/API.md` writes the rendering to `docs/API.md` and nowhere else.
+
+<a id="AC-061"></a>**Writes to stdout**
+
+`slcr render -o -` writes the rendering to stdout and creates no file.
+
+<a id="AC-062"></a>**Refuses a missing directory**
+
+`slcr render -o docs/SPEC.md`, when `docs` doesn't exist, fails with help to create it first, and creates nothing.
+
+<a id="AC-063"></a>**Never writes over the requirements file**
+
+`slcr render --output ./SPEC.slcr.toml --force` fails, saying that this is the file being rendered, and leaves it unchanged.
+
+<a id="REQ-023"></a>
+#### 1.4.3 Replaces only its own output
+
+`slcr render` MUST replace an existing output only when it starts with the comment that marks a file `slcr` generated, unless `--force` is given, and MUST replace it atomically. An output that already holds the rendering MUST be left untouched and reported `up to date`.
+
+*Rationale:* A hand-written `SPEC.md` is someone's work. Leaving an up-to-date file untouched keeps its modification time, so build tools don't rebuild what didn't change.
+
+*Terms:* [Rendering](#TERM-011)
+
+*Acceptance criteria:*
+
+<a id="AC-064"></a>**Replaces its own earlier output**
+
+`slcr render` replaces a stale `SPEC.md` that starts with the generated-file comment with the current rendering.
+
+<a id="AC-065"></a>**Replaces a hand-written file only by force**
+
+`slcr render` refuses to replace a hand-written `SPEC.md`, suggesting `--force` or `--output` and leaving it unchanged; `slcr render --force` replaces it.
+
+<a id="AC-066"></a>**Leaves an up-to-date output alone**
+
+`slcr render` reports `SPEC.md: up to date` when `SPEC.md` already holds the rendering.
+
+<a id="REQ-024"></a>
+#### 1.4.4 Reports findings
+
+`slcr render` MUST write the specification's findings to stderr as `slcr vet` reports them, render a specification whose findings are only warnings, and refuse one that breaks an invariant, writing nothing.
+
+*Depends on:* [Vets requirements files](#REQ-012)
+
+*Terms:* [Finding](#TERM-005)
+
+*Acceptance criteria:*
+
+<a id="AC-067"></a>**Renders despite warnings**
+
+A specification with a warning renders, with the warning on stderr.
+
+<a id="AC-068"></a>**Refuses a broken specification**
+
+A specification with a violation fails to render, with the violation on stderr and help to fix it, and no Markdown is written.
+
+<a id="REQ-025"></a>
+#### 1.4.5 Expects no diff
+
+`slcr render --expect-no-diff` MUST write nothing, and fail unless the output already holds exactly what FILE renders to, saying whether the output is missing or the first line on which it differs. It compares a file, so it MUST refuse stdout as the output, and it conflicts with `--force`.
+
+*Rationale:* CI and pre-commit hooks use it to keep a committed rendering in step with its specification, as this repository does with `SPEC.md`. The flag avoids the word "check", which means running validators.
+
+*Terms:* [Rendering](#TERM-011)
+
+*Acceptance criteria:*
+
+<a id="AC-069"></a>**Passes an up-to-date output**
+
+`slcr render --expect-no-diff` reports `SPEC.md: up to date` and exits with status 0 when it is.
+
+<a id="AC-070"></a>**Compares the chosen output**
+
+`slcr render --expect-no-diff --output docs/API.md` compares `docs/API.md`.
+
+<a id="AC-071"></a>**Fails on a missing output**
+
+`slcr render --expect-no-diff` without `SPEC.md` fails, saying it does not exist, and creates nothing.
+
+<a id="AC-072"></a>**Fails on a stale output**
+
+`slcr render --expect-no-diff` with a stale `SPEC.md` fails, naming the first line that differs, and leaves the file unchanged.
+
+<a id="AC-073"></a>**Cannot compare stdout**
+
+`slcr render --expect-no-diff -o -` fails, with help to name a file instead.
+
+<a id="AC-074"></a>**Conflicts with force**
+
+`slcr render --expect-no-diff --force` is a usage error.
+
+<a id="REQ-026"></a>
+#### 1.4.6 render usage
+
+`slcr render` MUST take at most one FILE, MUST fail on a FILE that can't be read or names no supported format, and MUST describe itself, its arguments, and its options when given `--help`.
+
+*Terms:* [Requirements file](#TERM-002)
+
+*Acceptance criteria:*
+
+<a id="AC-075"></a>**Describes itself**
+
+`slcr render --help` describes FILE and its default, `--output`, `--force`, and `--expect-no-diff`.
+
+<a id="AC-076"></a>**Takes at most one file**
+
+`slcr render a.yaml b.yaml` is a usage error naming `b.yaml`.
+
+<a id="AC-077"></a>**Rejects an unsupported format**
+
+`slcr render SPEC.md` fails, listing the supported extensions.
+
+<a id="AC-078"></a>**Reports a missing file**
+
+`slcr render` without `SPEC.slcr.toml` fails, saying it could not read it.
+
 <a id="SEC-002"></a>
 ## 2. Glossary
 
@@ -468,6 +632,12 @@ The directory tree under a project manifest. A command that works on a project f
 *Also called:* SLCR.toml
 
 The file `SLCR.toml`, whose directory is a project's root. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run.
+
+</dd>
+<dt><a id="TERM-011"></a>Rendering</dt>
+<dd>
+
+The canonical Markdown of a specification: a comment saying that `slcr` generated it, then every Section and Requirement as a numbered heading, in document order, with its body, rationale, refinements, dependencies, terms, and acceptance criteria, and finally the Glossary. Every node is preceded by a hidden anchor named by its ID, and every cross-reference is a link to one, so IDs never appear in the visible text.
 
 </dd>
 <dt><a id="TERM-002"></a>Requirements file</dt>

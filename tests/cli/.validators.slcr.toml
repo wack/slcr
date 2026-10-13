@@ -363,3 +363,137 @@ requirement = "slcr/REQ-019"
 criterion = "AC-056"
 tool = "cargo-insta"
 with = { target = "cli", test = "vet::vet_rejects_an_unknown_format" }
+
+# slcr render
+
+[[validator]]
+requirement = "slcr/REQ-021"
+criterion = "AC-057"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_writes_the_markdown_beside_the_well_known_file" }
+
+[[validator]]
+requirement = "slcr/REQ-021"
+criterion = "AC-058"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_names_the_markdown_after_the_file" }
+
+[[validator]]
+requirement = "slcr/REQ-021"
+criterion = "AC-059"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_needs_an_output_for_a_file_named_only_by_its_suffix" }
+
+[[validator]]
+requirement = "slcr/REQ-022"
+criterion = "AC-060"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_writes_to_the_output" }
+
+[[validator]]
+requirement = "slcr/REQ-022"
+criterion = "AC-061"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_writes_to_stdout" }
+
+[[validator]]
+requirement = "slcr/REQ-022"
+criterion = "AC-062"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_does_not_create_a_missing_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-022"
+criterion = "AC-063"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_never_writes_over_the_requirements_file" }
+
+[[validator]]
+requirement = "slcr/REQ-023"
+criterion = "AC-064"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_replaces_its_own_earlier_output" }
+
+[[validator]]
+requirement = "slcr/REQ-023"
+criterion = "AC-065"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_replaces_a_file_it_did_not_render_only_by_force" }
+
+[[validator]]
+requirement = "slcr/REQ-023"
+criterion = "AC-066"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_leaves_an_up_to_date_output_alone" }
+
+[[validator]]
+requirement = "slcr/REQ-024"
+criterion = "AC-067"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_reports_warnings_and_renders_anyway" }
+
+[[validator]]
+requirement = "slcr/REQ-024"
+criterion = "AC-068"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_refuses_a_specification_that_breaks_its_invariants" }
+
+[[validator]]
+requirement = "slcr/REQ-025"
+criterion = "AC-069"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::expect_no_diff_passes_an_up_to_date_output" }
+
+[[validator]]
+requirement = "slcr/REQ-025"
+criterion = "AC-070"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::expect_no_diff_compares_the_output" }
+
+[[validator]]
+requirement = "slcr/REQ-025"
+criterion = "AC-071"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::expect_no_diff_fails_on_a_missing_output" }
+
+[[validator]]
+requirement = "slcr/REQ-025"
+criterion = "AC-072"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::expect_no_diff_fails_on_a_stale_output" }
+
+[[validator]]
+requirement = "slcr/REQ-025"
+criterion = "AC-073"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::expect_no_diff_cannot_compare_stdout" }
+
+[[validator]]
+requirement = "slcr/REQ-025"
+criterion = "AC-074"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::expect_no_diff_conflicts_with_force" }
+
+[[validator]]
+requirement = "slcr/REQ-026"
+criterion = "AC-075"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_help" }
+
+[[validator]]
+requirement = "slcr/REQ-026"
+criterion = "AC-076"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_takes_only_one_file" }
+
+[[validator]]
+requirement = "slcr/REQ-026"
+criterion = "AC-077"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_rejects_an_unsupported_format" }
+
+[[validator]]
+requirement = "slcr/REQ-026"
+criterion = "AC-078"
+tool = "cargo-insta"
+with = { target = "cli", test = "render::render_reports_a_missing_file" }
