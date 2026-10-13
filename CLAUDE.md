@@ -568,3 +568,15 @@ installed (`cargo install --locked cargo-insta cargo-nextest`).
   are in `tests/cli/.validators.slcr.toml`, each naming its test by its
   path in the `cli` target (`version::version_prints_the_package_version`).
   Renaming a test means updating its validator, or `slcr check` fails.
+- `SPEC.md` is `SPEC.slcr.toml` rendered, and is committed. After changing
+  the spec, or the renderer's output, run `cargo run -- render` and commit
+  `SPEC.md` with it.
+- CI's `Specification` job (in `on-push.yml` and `on-merge.yml`, gating
+  "⚡ PR Ready") runs `cargo make render-expect-no-diff` (`slcr render
+  --expect-no-diff`) and `cargo make self-check` (`slcr check
+  --deny-warnings`), both with the checked-out `slcr`.
+- `.githooks/pre-commit` runs `slcr render --expect-no-diff` on the staged
+  `SPEC.slcr.toml` and `SPEC.md` when a commit changes either, so a
+  re-rendered `SPEC.md` that isn't staged is refused too. Enable it once
+  per clone with `cargo make install-hooks` (`git config core.hooksPath
+  .githooks`).
