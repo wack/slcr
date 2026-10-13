@@ -48,5 +48,194 @@ All of the following must hold:
 
 `slcr version extra` is a usage error: it exits with status 2, names the unexpected argument, and prints the usage.
 
+<a id="REQ-004"></a>
+### 1.2 init
+
+`slcr` MUST have an `init` subcommand that creates a new specification, together with the project manifest that lists it when the working directory belongs to no project yet.
+
+*Rationale:* Starting a specification by hand means knowing the schema's required nodes and the manifest's format before writing a single requirement. `init` writes a valid starting point instead.
+
+All of the following must hold:
+
+- [Creates a specification](#REQ-005)
+- [Names and titles the specification](#REQ-006)
+- [Starts a project](#REQ-007)
+- [Joins an existing project](#REQ-008)
+- [Never overwrites](#REQ-009)
+- [init usage](#REQ-010)
+
+*Terms:* [Specification](#TERM-001), [Project manifest](#TERM-003)
+
+<a id="REQ-005"></a>
+#### 1.2.1 Creates a specification
+
+`slcr init [FILE]` MUST create the requirements file FILE, by default `SPEC.slcr.toml` in the working directory, holding a new specification whose root Section is `SEC-001` and whose empty Glossary is `SEC-002`. It MUST write the format FILE's extension names, and report `FILE: created specification NAME` on stdout.
+
+*Terms:* [Specification](#TERM-001), [Requirements file](#TERM-002)
+
+*Acceptance criteria:*
+
+<a id="AC-004"></a>**Creates the well-known file**
+
+`slcr init` with no FILE, in a directory outside any project, creates `SPEC.slcr.toml` holding a TOML specification with a root Section `SEC-001` and an empty Glossary `SEC-002`, and reports it.
+
+<a id="AC-005"></a>**Writes the format the file names**
+
+`slcr init todo-api.spec.json` writes JSON, and `slcr init todo-api.slcr.yml` writes YAML.
+
+<a id="REQ-006"></a>
+#### 1.2.2 Names and titles the specification
+
+The new specification MUST be named `--name`, or else after FILE's name without its extension and any `.slcr` or `.spec` suffix, or, for `SPEC.slcr.*`, after the name of its directory. Its root Section MUST be titled `--title`, or else after the name. A name that is not a valid specification name (lowercase letters and digits, in dash-separated words) is an error, never silently rewritten.
+
+*Rationale:* A name derived from a file name is a guess. Rewriting a bad guess into a valid name would give the specification a name nobody chose, which validators then have to spell.
+
+*Terms:* [Specification](#TERM-001)
+
+*Acceptance criteria:*
+
+<a id="AC-006"></a>**Names the well-known file after its directory**
+
+`slcr init` in a directory named `todo-api` creates a specification named `todo-api`, whose root Section is titled `todo-api`.
+
+<a id="AC-007"></a>**Takes a name and a title**
+
+`slcr init specs.yaml --name billing --title "Billing Service"` creates a specification named `billing` whose root Section is titled `Billing Service`.
+
+<a id="AC-008"></a>**Never rewrites a derived name**
+
+`slcr init "My Spec.yaml"` fails, creates nothing, and its help says that `My Spec` is not a valid name and suggests `--name`.
+
+<a id="AC-009"></a>**Rejects an invalid name or title**
+
+`--name "Todo API"` and `--title " padded"` are usage errors that say why the value is invalid.
+
+<a id="REQ-007"></a>
+#### 1.2.3 Starts a project
+
+When neither the working directory nor any of its parents holds `SLCR.toml`, `slcr init` MUST also create `SLCR.toml` in the working directory, with `formatVersion` and a `specs` list holding FILE relative to it. Because `specs` holds globs, FILE MUST then be inside the working directory, contain no glob metacharacter, and not be named like the manifest.
+
+*Terms:* [Project manifest](#TERM-003), [Project](#TERM-004)
+
+*Acceptance criteria:*
+
+<a id="AC-010"></a>**Lists the new file**
+
+`slcr init specs/api.slcr.toml` creates `SLCR.toml` whose `specs` is `["specs/api.slcr.toml"]`.
+
+<a id="AC-011"></a>**Rejects a file outside the working directory**
+
+`slcr init ../SPEC.slcr.toml` outside any project fails, explains that `SLCR.toml` lists files relative to its own directory, and creates nothing.
+
+<a id="AC-012"></a>**Rejects a path a glob would misread**
+
+`slcr init "[draft].slcr.toml"` fails, names the characters to avoid, and creates nothing.
+
+<a id="AC-013"></a>**Rejects a file named like the manifest**
+
+`slcr init SLCR.toml` fails, suggests a name such as `SPEC.slcr.toml`, and creates nothing.
+
+<a id="REQ-008"></a>
+#### 1.2.4 Joins an existing project
+
+When the working directory or a parent holds `SLCR.toml`, `slcr init` MUST leave it unchanged and say so, and MUST warn when its `specs` don't match the new file, when the new file is outside that project, or when the manifest can't be read to tell. A manifest whose name differs from `SLCR.toml` only in case MUST be an error.
+
+*Rationale:* Editing a hand-written manifest could reorder or drop its comments, so `init` only points out what to add. Rejecting a case-only near miss keeps case-insensitive filesystems, such as macOS's, from finding a project that Linux would not.
+
+*Terms:* [Project manifest](#TERM-003), [Project](#TERM-004)
+
+*Acceptance criteria:*
+
+<a id="AC-014"></a>**Leaves the manifest unchanged**
+
+With `SLCR.toml` in the working directory, `slcr init` creates only the specification, reports that it left the manifest unchanged, and the manifest's bytes are unchanged.
+
+<a id="AC-015"></a>**Finds the manifest in a parent directory**
+
+Run in `services/billing` below a directory holding `SLCR.toml`, `slcr init` creates `services/billing/SPEC.slcr.toml` named `billing` and reports the manifest as `../../SLCR.toml`.
+
+<a id="AC-016"></a>**Warns about a file the manifest doesn't list**
+
+When the manifest's `specs` don't match the new file, `slcr init` succeeds with a warning whose help gives the entry to add to `specs`.
+
+<a id="AC-017"></a>**Warns about a file outside the project**
+
+`slcr init ../todo-api.slcr.toml` inside a project succeeds with a warning that the file is outside the project, whose `specs` can't list it.
+
+<a id="AC-018"></a>**Warns about an unreadable manifest**
+
+When `SLCR.toml` isn't valid TOML, `slcr init` still creates the specification, warns that it could not tell whether `specs` match it, and points at `slcr vet`.
+
+<a id="AC-019"></a>**Rejects a misnamed manifest**
+
+Below a directory holding `slcr.toml`, `slcr init` fails, says that the manifest's name is case-sensitive, and creates nothing.
+
+<a id="REQ-009"></a>
+#### 1.2.5 Never overwrites
+
+`slcr init` MUST NOT overwrite an existing file, not even a dangling symlink, and MUST NOT create a missing directory. It creates the specification and the manifest together or not at all.
+
+*Rationale:* `init` runs where files may already exist; losing one to a typo is worse than retyping the command.
+
+*Acceptance criteria:*
+
+<a id="AC-020"></a>**Refuses an existing file**
+
+`slcr init todo-api.yaml`, when `todo-api.yaml` exists, fails, says that it already exists, and leaves it and the directory unchanged.
+
+<a id="AC-021"></a>**Refuses a missing directory**
+
+`slcr init specs/todo-api.yaml`, when `specs` doesn't exist, fails with help to create the directory first, and creates nothing.
+
+<a id="REQ-010"></a>
+#### 1.2.6 init usage
+
+`slcr init` MUST take at most one FILE, MUST reject a FILE whose extension names no supported format, and MUST describe itself, its arguments, and its options when given `--help`.
+
+*Terms:* [Requirements file](#TERM-002)
+
+*Acceptance criteria:*
+
+<a id="AC-022"></a>**Describes itself**
+
+`slcr init --help` describes FILE and its default, `--name`, and `--title`.
+
+<a id="AC-023"></a>**Takes at most one file**
+
+`slcr init a.yaml b.yaml` is a usage error naming `b.yaml`.
+
+<a id="AC-024"></a>**Rejects an unsupported format**
+
+`slcr init SPEC.md` fails, lists the supported extensions, and creates nothing.
+
 <a id="SEC-002"></a>
 ## 2. Glossary
+
+<dl>
+<dt><a id="TERM-004"></a>Project</dt>
+<dd>
+
+The directory tree under a project manifest. A command that works on a project finds it by walking up from the working directory to the nearest `SLCR.toml`, and names files relative to the working directory.
+
+</dd>
+<dt><a id="TERM-003"></a>Project manifest</dt>
+<dd>
+
+*Also called:* SLCR.toml
+
+The file `SLCR.toml`, whose directory is a project's root. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run.
+
+</dd>
+<dt><a id="TERM-002"></a>Requirements file</dt>
+<dd>
+
+A file that holds one specification, in the format its extension names: YAML (`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`). The well-known one, which commands read when given no FILE, is `SPEC.slcr.toml`.
+
+</dd>
+<dt><a id="TERM-001"></a>Specification</dt>
+<dd>
+
+An SLCR requirements document: a named tree of Sections and Requirements, the acceptance criteria of those Requirements, the cross edges between them (`refines`, `dependsOn`, and `usesTerm`), and a Glossary of Terms. Its name, such as `todo-api`, qualifies its requirements' IDs elsewhere, as in `todo-api/REQ-002`.
+
+</dd>
+</dl>

@@ -59,7 +59,224 @@ id = "AC-003"
 title = "Rejects an argument"
 body = "`slcr version extra` is a usage error: it exits with status 2, names the unexpected argument, and prints the usage."
 
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-004"
+title = "init"
+body = "`slcr` MUST have an `init` subcommand that creates a new specification, together with the project manifest that lists it when the working directory belongs to no project yet."
+rationale = "Starting a specification by hand means knowing the schema's required nodes and the manifest's format before writing a single requirement. `init` writes a valid starting point instead."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-001", "TERM-003"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-005"
+title = "Creates a specification"
+body = "`slcr init [FILE]` MUST create the requirements file FILE, by default `SPEC.slcr.toml` in the working directory, holding a new specification whose root Section is `SEC-001` and whose empty Glossary is `SEC-002`. It MUST write the format FILE's extension names, and report `FILE: created specification NAME` on stdout."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-001", "TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-004"
+title = "Creates the well-known file"
+body = "`slcr init` with no FILE, in a directory outside any project, creates `SPEC.slcr.toml` holding a TOML specification with a root Section `SEC-001` and an empty Glossary `SEC-002`, and reports it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-005"
+title = "Writes the format the file names"
+body = "`slcr init todo-api.spec.json` writes JSON, and `slcr init todo-api.slcr.yml` writes YAML."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-006"
+title = "Names and titles the specification"
+body = "The new specification MUST be named `--name`, or else after FILE's name without its extension and any `.slcr` or `.spec` suffix, or, for `SPEC.slcr.*`, after the name of its directory. Its root Section MUST be titled `--title`, or else after the name. A name that is not a valid specification name (lowercase letters and digits, in dash-separated words) is an error, never silently rewritten."
+rationale = "A name derived from a file name is a guess. Rewriting a bad guess into a valid name would give the specification a name nobody chose, which validators then have to spell."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-001"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-006"
+title = "Names the well-known file after its directory"
+body = "`slcr init` in a directory named `todo-api` creates a specification named `todo-api`, whose root Section is titled `todo-api`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-007"
+title = "Takes a name and a title"
+body = "`slcr init specs.yaml --name billing --title \"Billing Service\"` creates a specification named `billing` whose root Section is titled `Billing Service`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-008"
+title = "Never rewrites a derived name"
+body = "`slcr init \"My Spec.yaml\"` fails, creates nothing, and its help says that `My Spec` is not a valid name and suggests `--name`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-009"
+title = "Rejects an invalid name or title"
+body = "`--name \"Todo API\"` and `--title \" padded\"` are usage errors that say why the value is invalid."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-007"
+title = "Starts a project"
+body = "When neither the working directory nor any of its parents holds `SLCR.toml`, `slcr init` MUST also create `SLCR.toml` in the working directory, with `formatVersion` and a `specs` list holding FILE relative to it. Because `specs` holds globs, FILE MUST then be inside the working directory, contain no glob metacharacter, and not be named like the manifest."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-010"
+title = "Lists the new file"
+body = "`slcr init specs/api.slcr.toml` creates `SLCR.toml` whose `specs` is `[\"specs/api.slcr.toml\"]`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-011"
+title = "Rejects a file outside the working directory"
+body = "`slcr init ../SPEC.slcr.toml` outside any project fails, explains that `SLCR.toml` lists files relative to its own directory, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-012"
+title = "Rejects a path a glob would misread"
+body = "`slcr init \"[draft].slcr.toml\"` fails, names the characters to avoid, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-013"
+title = "Rejects a file named like the manifest"
+body = "`slcr init SLCR.toml` fails, suggests a name such as `SPEC.slcr.toml`, and creates nothing."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-008"
+title = "Joins an existing project"
+body = "When the working directory or a parent holds `SLCR.toml`, `slcr init` MUST leave it unchanged and say so, and MUST warn when its `specs` don't match the new file, when the new file is outside that project, or when the manifest can't be read to tell. A manifest whose name differs from `SLCR.toml` only in case MUST be an error."
+rationale = "Editing a hand-written manifest could reorder or drop its comments, so `init` only points out what to add. Rejecting a case-only near miss keeps case-insensitive filesystems, such as macOS's, from finding a project that Linux would not."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-014"
+title = "Leaves the manifest unchanged"
+body = "With `SLCR.toml` in the working directory, `slcr init` creates only the specification, reports that it left the manifest unchanged, and the manifest's bytes are unchanged."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-015"
+title = "Finds the manifest in a parent directory"
+body = "Run in `services/billing` below a directory holding `SLCR.toml`, `slcr init` creates `services/billing/SPEC.slcr.toml` named `billing` and reports the manifest as `../../SLCR.toml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-016"
+title = "Warns about a file the manifest doesn't list"
+body = "When the manifest's `specs` don't match the new file, `slcr init` succeeds with a warning whose help gives the entry to add to `specs`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-017"
+title = "Warns about a file outside the project"
+body = "`slcr init ../todo-api.slcr.toml` inside a project succeeds with a warning that the file is outside the project, whose `specs` can't list it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-018"
+title = "Warns about an unreadable manifest"
+body = "When `SLCR.toml` isn't valid TOML, `slcr init` still creates the specification, warns that it could not tell whether `specs` match it, and points at `slcr vet`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-019"
+title = "Rejects a misnamed manifest"
+body = "Below a directory holding `slcr.toml`, `slcr init` fails, says that the manifest's name is case-sensitive, and creates nothing."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-009"
+title = "Never overwrites"
+body = "`slcr init` MUST NOT overwrite an existing file, not even a dangling symlink, and MUST NOT create a missing directory. It creates the specification and the manifest together or not at all."
+rationale = "`init` runs where files may already exist; losing one to a typo is worse than retyping the command."
+modality = "MUST NOT"
+refines = ["REQ-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-020"
+title = "Refuses an existing file"
+body = "`slcr init todo-api.yaml`, when `todo-api.yaml` exists, fails, says that it already exists, and leaves it and the directory unchanged."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-021"
+title = "Refuses a missing directory"
+body = "`slcr init specs/todo-api.yaml`, when `specs` doesn't exist, fails with help to create the directory first, and creates nothing."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-010"
+title = "init usage"
+body = "`slcr init` MUST take at most one FILE, MUST reject a FILE whose extension names no supported format, and MUST describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-022"
+title = "Describes itself"
+body = "`slcr init --help` describes FILE and its default, `--name`, and `--title`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-023"
+title = "Takes at most one file"
+body = "`slcr init a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-024"
+title = "Rejects an unsupported format"
+body = "`slcr init SPEC.md` fails, lists the supported extensions, and creates nothing."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
 title = "Glossary"
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-001"
+title = "Specification"
+definition = "An SLCR requirements document: a named tree of Sections and Requirements, the acceptance criteria of those Requirements, the cross edges between them (`refines`, `dependsOn`, and `usesTerm`), and a Glossary of Terms. Its name, such as `todo-api`, qualifies its requirements' IDs elsewhere, as in `todo-api/REQ-002`."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-002"
+title = "Requirements file"
+definition = "A file that holds one specification, in the format its extension names: YAML (`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`). The well-known one, which commands read when given no FILE, is `SPEC.slcr.toml`."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-003"
+title = "Project manifest"
+aliases = ["SLCR.toml"]
+definition = "The file `SLCR.toml`, whose directory is a project's root. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-004"
+title = "Project"
+definition = "The directory tree under a project manifest. A command that works on a project finds it by walking up from the working directory to the nearest `SLCR.toml`, and names files relative to the working directory."

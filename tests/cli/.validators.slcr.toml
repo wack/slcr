@@ -23,3 +23,137 @@ requirement = "slcr/REQ-003"
 criterion = "AC-003"
 tool = "cargo-insta"
 with = { target = "cli", test = "version::version_takes_no_arguments" }
+
+# slcr init
+
+[[validator]]
+requirement = "slcr/REQ-005"
+criterion = "AC-004"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_creates_the_well_known_file_named_after_its_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-005"
+criterion = "AC-005"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_writes_the_format_its_file_names" }
+
+[[validator]]
+requirement = "slcr/REQ-006"
+criterion = "AC-006"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_creates_the_well_known_file_named_after_its_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-006"
+criterion = "AC-007"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_takes_a_name_and_a_title" }
+
+[[validator]]
+requirement = "slcr/REQ-006"
+criterion = "AC-008"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_a_file_that_suggests_no_valid_name" }
+
+[[validator]]
+requirement = "slcr/REQ-006"
+criterion = "AC-009"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_an_invalid_name" }
+
+[[validator]]
+requirement = "slcr/REQ-006"
+criterion = "AC-009"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_an_invalid_title" }
+
+[[validator]]
+requirement = "slcr/REQ-007"
+criterion = "AC-010"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_lists_a_file_in_a_subdirectory_in_the_new_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-007"
+criterion = "AC-011"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_a_file_outside_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-007"
+criterion = "AC-012"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_a_file_a_glob_would_misread" }
+
+[[validator]]
+requirement = "slcr/REQ-007"
+criterion = "AC-013"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_a_file_named_like_the_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-008"
+criterion = "AC-014"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_leaves_an_existing_manifest_unchanged" }
+
+[[validator]]
+requirement = "slcr/REQ-008"
+criterion = "AC-015"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_uses_the_manifest_of_a_parent_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-008"
+criterion = "AC-016"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_warns_when_the_manifest_does_not_list_the_new_file" }
+
+[[validator]]
+requirement = "slcr/REQ-008"
+criterion = "AC-017"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_warns_when_the_new_file_is_outside_the_project" }
+
+[[validator]]
+requirement = "slcr/REQ-008"
+criterion = "AC-018"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_warns_when_the_manifest_cannot_be_read" }
+
+[[validator]]
+requirement = "slcr/REQ-008"
+criterion = "AC-019"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_a_misnamed_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-009"
+criterion = "AC-020"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_never_overwrites_a_file" }
+
+[[validator]]
+requirement = "slcr/REQ-009"
+criterion = "AC-021"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_does_not_create_a_missing_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-010"
+criterion = "AC-022"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_help" }
+
+[[validator]]
+requirement = "slcr/REQ-010"
+criterion = "AC-023"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_takes_only_one_file" }
+
+[[validator]]
+requirement = "slcr/REQ-010"
+criterion = "AC-024"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_rejects_an_unsupported_format" }
