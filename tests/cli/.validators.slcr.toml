@@ -1,0 +1,8 @@
+formatVersion = "1"
+
+[[validator]]
+requirement = "slcr/REQ-001"
+criterion = "AC-001"
+tool = "cargo-insta"
+description = "`slcr version` prints `v` and the package version, and its snapshot matches."
+with = { target = "cli", test = "version::version_prints_the_package_version" }

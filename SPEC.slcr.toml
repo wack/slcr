@@ -1,0 +1,36 @@
+"$schema" = "https://slcr.io/reference/schemas/spec/v1.schema.json"
+formatVersion = "1"
+
+[spec]
+name = "slcr"
+
+[root]
+kind = "section"
+id = "SEC-001"
+title = "SLCR CLI"
+body = "The requirements of `slcr`, the reference command-line implementation of SLCR specifications, written as an SLCR specification and checked by `slcr check`."
+
+[[root.children]]
+kind = "section"
+id = "SEC-003"
+title = "Commands"
+body = "The subcommands `slcr` offers, and what each does."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-001"
+title = "Version subcommand"
+body = "`slcr` MUST have a `version` subcommand that prints the version of the running CLI and exits successfully."
+rationale = "Users and bug reports need to know which release of `slcr` produced an output."
+modality = "MUST"
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-001"
+title = "Prints the package version"
+body = "`slcr version`, given no arguments, exits with status 0 and writes exactly `v`, the package version from `Cargo.toml`, and a newline to stdout."
+
+[glossary]
+kind = "section"
+id = "SEC-002"
+title = "Glossary"

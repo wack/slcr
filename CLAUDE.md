@@ -550,3 +550,21 @@ Two layers, both run by `cargo make test`:
 - In CI, insta sees the `CI` variable: it never writes snapshots, and any
   mismatch or missing snapshot fails the run. A snapshot must be committed
   before CI can pass.
+
+# Self-hosting
+
+The repository is itself an SLCR project: `SPEC.slcr.toml` (spec `slcr`,
+created with `slcr init`) holds the CLI's own requirements, and `SLCR.toml`
+lists it and declares the tools its validators use. `slcr check` from the
+repository root runs them, and needs `cargo-insta` and `cargo-nextest`
+installed (`cargo install --locked cargo-insta cargo-nextest`).
+
+- `tools/cargo-insta.toml` — a descriptor that runs one test of an
+  integration test target with `cargo insta test --check` under nextest:
+  green when the test passes and its snapshots match. It never writes a
+  snapshot, and a test name that matches nothing is red. After editing it,
+  re-pin it with `slcr tools update cargo-insta`.
+- Validator files sit beside the tests they run: the CLI snapshot suite's
+  are in `tests/cli/.validators.slcr.toml`, each naming its test by its
+  path in the `cli` target (`version::version_prints_the_package_version`).
+  Renaming a test means updating its validator, or `slcr check` fails.
