@@ -9,8 +9,8 @@ To add it to your repository, run this from the repository root:
 
 ```bash
 mkdir -p .claude/skills
-curl -fsSL https://github.com/wack/slcr/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=2 -C .claude/skills slcr-main/skills/slcr
+curl -fsSL https://github.com/wack/slcr/archive/refs/heads/trunk.tar.gz \
+  | tar -xz --strip-components=2 -C .claude/skills slcr-trunk/skills/slcr
 ```
 
 Then commit `.claude/skills/slcr/`. Claude Code loads it automatically, and
