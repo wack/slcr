@@ -1672,8 +1672,66 @@ When vetting fails, `slcr check --format json` writes vet's report and no run, a
 
 `slcr check --help` describes `--jobs` and its default, `--offline`, `--deny-warnings`, and `--format`.
 
+<a id="SEC-004"></a>
+## 2. Global behavior
+
+What `slcr` does whichever subcommand runs: its top-level help, and the options every subcommand accepts, before or after the subcommand's name.
+
+<a id="REQ-081"></a>
+### 2.1 Lists its subcommands
+
+`slcr` with no subcommand MUST print its help, listing every subcommand with a one-line summary, and succeed. An unknown subcommand MUST be a usage error.
+
+*Acceptance criteria:*
+
+<a id="AC-206"></a>**Prints the help without a subcommand**
+
+`slcr` alone lists `init`, `render`, `query`, `slice`, `check`, `vet`, `tools`, and `version`, and exits with status 0.
+
+<a id="AC-207"></a>**Rejects an unknown subcommand**
+
+`slcr frobnicate` is a usage error naming the unrecognized subcommand.
+
+<a id="REQ-082"></a>
+### 2.2 Sets the log level
+
+`--log-level LEVEL`, or else the `LOG_LEVEL` environment variable, MUST set the most detailed level of the log lines `slcr` writes to stderr: `off`, `error`, `warn`, `info` (the default), `debug`, or `trace`, in any case. Log lines MUST never be written to stdout, so they can't corrupt output meant for other programs. An unknown level is a usage error.
+
+*Acceptance criteria:*
+
+<a id="AC-208"></a>**Shows lower levels on stderr**
+
+`slcr --log-level debug render` writes a timestamped `DEBUG` line about rendering to stderr, while stdout holds only the render's status.
+
+<a id="AC-209"></a>**Reads the level from the environment**
+
+`slcr init todo-api.yaml` with `LOG_LEVEL=DEBUG` writes a `DEBUG` line to stderr.
+
+<a id="AC-210"></a>**Rejects an unknown level**
+
+`slcr --log-level loud version` is a usage error listing the levels.
+
+<a id="REQ-083"></a>
+### 2.3 Colors on request
+
+`--enable-colors always`, `never`, or `auto` MUST decide whether `slcr` colors its output; `auto`, the default, colors it only on a terminal. `never` MUST win over the environment, `CLICOLOR_FORCE` included. An unknown preference is a usage error.
+
+*Acceptance criteria:*
+
+<a id="AC-211"></a>**Forces colors on**
+
+`slcr vet broken.yaml --enable-colors always`, though not on a terminal, colors its diagnostics with ANSI escapes.
+
+<a id="AC-212"></a>**Forces colors off whatever the environment says**
+
+`slcr --enable-colors never vet broken.yaml` with `CLICOLOR_FORCE=1` writes no ANSI escape.
+
+<a id="AC-213"></a>**Rejects an unknown preference**
+
+`slcr --enable-colors sometimes version` is a usage error listing `always`, `never`, and `auto`.
+
 <a id="SEC-002"></a>
-## 2. Glossary
+## 3. Glossary
 
 <dl>
 <dt><a id="TERM-017"></a>Absorbed failure</dt>

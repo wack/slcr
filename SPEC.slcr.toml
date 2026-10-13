@@ -1989,6 +1989,81 @@ id = "AC-205"
 title = "Describes itself"
 body = "`slcr check --help` describes `--jobs` and its default, `--offline`, `--deny-warnings`, and `--format`."
 
+[[root.children]]
+kind = "section"
+id = "SEC-004"
+title = "Global behavior"
+body = "What `slcr` does whichever subcommand runs: its top-level help, and the options every subcommand accepts, before or after the subcommand's name."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-081"
+title = "Lists its subcommands"
+body = "`slcr` with no subcommand MUST print its help, listing every subcommand with a one-line summary, and succeed. An unknown subcommand MUST be a usage error."
+modality = "MUST"
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-206"
+title = "Prints the help without a subcommand"
+body = "`slcr` alone lists `init`, `render`, `query`, `slice`, `check`, `vet`, `tools`, and `version`, and exits with status 0."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-207"
+title = "Rejects an unknown subcommand"
+body = "`slcr frobnicate` is a usage error naming the unrecognized subcommand."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-082"
+title = "Sets the log level"
+body = "`--log-level LEVEL`, or else the `LOG_LEVEL` environment variable, MUST set the most detailed level of the log lines `slcr` writes to stderr: `off`, `error`, `warn`, `info` (the default), `debug`, or `trace`, in any case. Log lines MUST never be written to stdout, so they can't corrupt output meant for other programs. An unknown level is a usage error."
+modality = "MUST"
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-208"
+title = "Shows lower levels on stderr"
+body = "`slcr --log-level debug render` writes a timestamped `DEBUG` line about rendering to stderr, while stdout holds only the render's status."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-209"
+title = "Reads the level from the environment"
+body = "`slcr init todo-api.yaml` with `LOG_LEVEL=DEBUG` writes a `DEBUG` line to stderr."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-210"
+title = "Rejects an unknown level"
+body = "`slcr --log-level loud version` is a usage error listing the levels."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-083"
+title = "Colors on request"
+body = "`--enable-colors always`, `never`, or `auto` MUST decide whether `slcr` colors its output; `auto`, the default, colors it only on a terminal. `never` MUST win over the environment, `CLICOLOR_FORCE` included. An unknown preference is a usage error."
+modality = "MUST"
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-211"
+title = "Forces colors on"
+body = "`slcr vet broken.yaml --enable-colors always`, though not on a terminal, colors its diagnostics with ANSI escapes."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-212"
+title = "Forces colors off whatever the environment says"
+body = "`slcr --enable-colors never vet broken.yaml` with `CLICOLOR_FORCE=1` writes no ANSI escape."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-213"
+title = "Rejects an unknown preference"
+body = "`slcr --enable-colors sometimes version` is a usage error listing `always`, `never`, and `auto`."
+
 [glossary]
 kind = "section"
 id = "SEC-002"

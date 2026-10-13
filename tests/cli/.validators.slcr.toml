@@ -1369,3 +1369,53 @@ requirement = "slcr/REQ-080"
 criterion = "AC-205"
 tool = "cargo-insta"
 with = { target = "cli", test = "check::check_help" }
+
+# Global behavior
+
+[[validator]]
+requirement = "slcr/REQ-081"
+criterion = "AC-206"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::no_subcommand_prints_the_help" }
+
+[[validator]]
+requirement = "slcr/REQ-081"
+criterion = "AC-207"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::an_unknown_subcommand_is_rejected" }
+
+[[validator]]
+requirement = "slcr/REQ-082"
+criterion = "AC-208"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::log_level_shows_lower_levels_on_stderr" }
+
+[[validator]]
+requirement = "slcr/REQ-082"
+criterion = "AC-209"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::log_level_can_come_from_the_environment" }
+
+[[validator]]
+requirement = "slcr/REQ-082"
+criterion = "AC-210"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::an_unknown_log_level_is_rejected" }
+
+[[validator]]
+requirement = "slcr/REQ-083"
+criterion = "AC-211"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::colors_can_be_forced_on" }
+
+[[validator]]
+requirement = "slcr/REQ-083"
+criterion = "AC-212"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::colors_can_be_forced_off_whatever_the_environment_says" }
+
+[[validator]]
+requirement = "slcr/REQ-083"
+criterion = "AC-213"
+tool = "cargo-insta"
+with = { target = "cli", test = "global::an_unknown_color_preference_is_rejected" }
