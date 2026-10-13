@@ -747,3 +747,131 @@ requirement = "slcr/REQ-038"
 criterion = "AC-119"
 tool = "cargo-insta"
 with = { target = "cli", test = "slice::slice_rejects_an_unsupported_format" }
+
+# slcr tools
+
+[[validator]]
+requirement = "slcr/REQ-039"
+criterion = "AC-120"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_help" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-121"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_finds_the_project_above_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-121"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_update_finds_the_project_above_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-121"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_finds_the_project_above_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-121"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_finds_the_project_above_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-122"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_requires_a_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-122"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_update_requires_a_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-122"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_requires_a_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-122"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_requires_a_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-122"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_list_requires_a_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-122"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_requires_a_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-123"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_rejects_a_misnamed_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-123"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_update_rejects_a_misnamed_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-123"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_rejects_a_misnamed_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-124"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_rejects_an_invalid_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-124"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_update_rejects_an_invalid_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-040"
+criterion = "AC-124"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_rejects_an_invalid_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-041"
+criterion = "AC-125"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_rejects_an_invalid_name" }
+
+[[validator]]
+requirement = "slcr/REQ-041"
+criterion = "AC-125"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_update_rejects_an_invalid_name" }
+
+[[validator]]
+requirement = "slcr/REQ-041"
+criterion = "AC-125"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_rejects_an_invalid_name" }
+
+[[validator]]
+requirement = "slcr/REQ-041"
+criterion = "AC-125"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_show_rejects_an_invalid_name" }

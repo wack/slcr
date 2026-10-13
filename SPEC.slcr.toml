@@ -1083,6 +1083,71 @@ id = "AC-119"
 title = "Rejects an unsupported format"
 body = "`slcr slice REQ-001 SPEC.md` fails, listing the supported extensions."
 
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-039"
+title = "tools"
+body = "`slcr` MUST have a `tools` subcommand that manages the tools a project's validators run, through its manifest: declaring, updating, installing, removing, listing, and showing them."
+rationale = "A validator names a tool, not a command line. Declaring each tool once in the manifest, pinned to the exact descriptor that says how to run it, keeps every validator file short, and makes the commands that run on a machine reviewable in the manifest's history."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-003", "TERM-014"]
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-120"
+title = "Lists its subcommands"
+body = "`slcr tools --help` describes `add`, `update`, `install`, `remove`, `list`, and `show`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-040"
+title = "Works on the project's manifest"
+body = "Every `slcr tools` subcommand MUST find the project as `slcr vet` does, by walking up from the working directory to the nearest `SLCR.toml`, and name the manifest relative to the working directory. Outside a project it MUST fail with help on creating a manifest. A manifest whose name differs from `SLCR.toml` only in case, and one that breaks the manifest schema, MUST be errors that change nothing."
+modality = "MUST"
+refines = ["REQ-039"]
+dependsOn = ["REQ-015"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-121"
+title = "Finds the project above the working directory"
+body = "Run in `crates/api`, `slcr tools add`, `update`, `remove`, and `install` work on the manifest two directories up, which they name `../../SLCR.toml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-122"
+title = "Requires a manifest"
+body = "Outside any project, every `slcr tools` subcommand fails, with help showing a minimal manifest, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-123"
+title = "Rejects a misnamed manifest"
+body = "Beside `slcr.toml`, `slcr tools add`, `update`, and `remove` fail, saying that the manifest's name is case-sensitive."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-124"
+title = "Refuses an invalid manifest"
+body = "When `SLCR.toml` breaks its schema, such as with a `specs` pattern or a `path` source that leaves the project, `slcr tools add`, `update`, and `remove` fail, labeling the problem, and leave it unchanged."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-041"
+title = "Names tools"
+body = "A tool's name, the key of its entry in the manifest's `tools`, by which validators refer to it, MUST be lowercase letters and digits in dash-separated words, such as `cargo-insta`. Any other name given to a `slcr tools` subcommand MUST be a usage error."
+modality = "MUST"
+refines = ["REQ-039"]
+usesTerm = ["TERM-014"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-125"
+title = "Rejects an invalid name"
+body = "`Nextest`, given to `slcr tools add --as`, `update`, `remove`, or `show`, is a usage error saying that it is not a valid tool name."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
@@ -1167,3 +1232,9 @@ kind = "term"
 id = "TERM-013"
 title = "Slice"
 definition = "The part of a specification that one requirement needs, rendered like the whole document: the requirement's ancestors (bodies only), the requirement and its refinement descendants in full, what it refines, the requirements it and its descendants depend on, and the terms all of them use. A node included for several reasons is shown in the most detail any of them calls for."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-014"
+title = "Tool"
+definition = "An external program that validators run, such as `cargo insta`. A project declares it in its manifest's `tools`, under a name, with the version and the source (`{ path }` in the project, or `{ url }` over HTTPS) of its descriptor, and that descriptor's pin."

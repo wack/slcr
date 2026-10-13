@@ -888,6 +888,66 @@ REQUIREMENT MUST be a requirement ID spelled canonically, such as `REQ-005`; any
 
 `slcr slice REQ-001 SPEC.md` fails, listing the supported extensions.
 
+<a id="REQ-039"></a>
+### 1.7 tools
+
+`slcr` MUST have a `tools` subcommand that manages the tools a project's validators run, through its manifest: declaring, updating, installing, removing, listing, and showing them.
+
+*Rationale:* A validator names a tool, not a command line. Declaring each tool once in the manifest, pinned to the exact descriptor that says how to run it, keeps every validator file short, and makes the commands that run on a machine reviewable in the manifest's history.
+
+All of the following must hold:
+
+- [Works on the project's manifest](#REQ-040)
+- [Names tools](#REQ-041)
+
+*Terms:* [Project manifest](#TERM-003), [Tool](#TERM-014)
+
+*Acceptance criteria:*
+
+<a id="AC-120"></a>**Lists its subcommands**
+
+`slcr tools --help` describes `add`, `update`, `install`, `remove`, `list`, and `show`.
+
+<a id="REQ-040"></a>
+#### 1.7.1 Works on the project's manifest
+
+Every `slcr tools` subcommand MUST find the project as `slcr vet` does, by walking up from the working directory to the nearest `SLCR.toml`, and name the manifest relative to the working directory. Outside a project it MUST fail with help on creating a manifest. A manifest whose name differs from `SLCR.toml` only in case, and one that breaks the manifest schema, MUST be errors that change nothing.
+
+*Depends on:* [Vets the project](#REQ-015)
+
+*Terms:* [Project manifest](#TERM-003), [Project](#TERM-004)
+
+*Acceptance criteria:*
+
+<a id="AC-121"></a>**Finds the project above the working directory**
+
+Run in `crates/api`, `slcr tools add`, `update`, `remove`, and `install` work on the manifest two directories up, which they name `../../SLCR.toml`.
+
+<a id="AC-122"></a>**Requires a manifest**
+
+Outside any project, every `slcr tools` subcommand fails, with help showing a minimal manifest, and creates nothing.
+
+<a id="AC-123"></a>**Rejects a misnamed manifest**
+
+Beside `slcr.toml`, `slcr tools add`, `update`, and `remove` fail, saying that the manifest's name is case-sensitive.
+
+<a id="AC-124"></a>**Refuses an invalid manifest**
+
+When `SLCR.toml` breaks its schema, such as with a `specs` pattern or a `path` source that leaves the project, `slcr tools add`, `update`, and `remove` fail, labeling the problem, and leave it unchanged.
+
+<a id="REQ-041"></a>
+#### 1.7.2 Names tools
+
+A tool's name, the key of its entry in the manifest's `tools`, by which validators refer to it, MUST be lowercase letters and digits in dash-separated words, such as `cargo-insta`. Any other name given to a `slcr tools` subcommand MUST be a usage error.
+
+*Terms:* [Tool](#TERM-014)
+
+*Acceptance criteria:*
+
+<a id="AC-125"></a>**Rejects an invalid name**
+
+`Nextest`, given to `slcr tools add --as`, `update`, `remove`, or `show`, is a usage error saying that it is not a valid tool name.
+
 <a id="SEC-002"></a>
 ## 2. Glossary
 
@@ -952,6 +1012,12 @@ The part of a specification that one requirement needs, rendered like the whole 
 <dd>
 
 An SLCR requirements document: a named tree of Sections and Requirements, the acceptance criteria of those Requirements, the cross edges between them (`refines`, `dependsOn`, and `usesTerm`), and a Glossary of Terms. Its name, such as `todo-api`, qualifies its requirements' IDs elsewhere, as in `todo-api/REQ-002`.
+
+</dd>
+<dt><a id="TERM-014"></a>Tool</dt>
+<dd>
+
+An external program that validators run, such as `cargo insta`. A project declares it in its manifest's `tools`, under a name, with the version and the source (`{ path }` in the project, or `{ url }` over HTTPS) of its descriptor, and that descriptor's pin.
 
 </dd>
 <dt><a id="TERM-008"></a>Tool descriptor</dt>
