@@ -157,3 +157,209 @@ requirement = "slcr/REQ-010"
 criterion = "AC-024"
 tool = "cargo-insta"
 with = { target = "cli", test = "init::init_rejects_an_unsupported_format" }
+
+# slcr vet
+
+[[validator]]
+requirement = "slcr/REQ-012"
+criterion = "AC-025"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_passes_the_canon_example_in_every_format" }
+
+[[validator]]
+requirement = "slcr/REQ-012"
+criterion = "AC-026"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_every_finding_in_every_file" }
+
+[[validator]]
+requirement = "slcr/REQ-013"
+criterion = "AC-027"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_passes_warnings_unless_they_are_denied" }
+
+[[validator]]
+requirement = "slcr/REQ-014"
+criterion = "AC-028"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-014"
+criterion = "AC-029"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_denied_warnings_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-014"
+criterion = "AC-030"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_the_project_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-014"
+criterion = "AC-030"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_an_invalid_manifest_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-014"
+criterion = "AC-031"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_validator_problems_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-014"
+criterion = "AC-031"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_descriptor_problems_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-014"
+criterion = "AC-032"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_in_human_form_explicitly" }
+
+[[validator]]
+requirement = "slcr/REQ-015"
+criterion = "AC-033"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_without_files_vets_the_project" }
+
+[[validator]]
+requirement = "slcr/REQ-015"
+criterion = "AC-034"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_names_project_files_from_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-015"
+criterion = "AC-035"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_every_finding_in_the_project" }
+
+[[validator]]
+requirement = "slcr/REQ-015"
+criterion = "AC-036"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_requires_a_project_without_files" }
+
+[[validator]]
+requirement = "slcr/REQ-015"
+criterion = "AC-037"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_rejects_a_misnamed_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-016"
+criterion = "AC-038"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_without_files_vets_the_project" }
+
+[[validator]]
+requirement = "slcr/REQ-016"
+criterion = "AC-039"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_pattern_that_matches_nothing" }
+
+[[validator]]
+requirement = "slcr/REQ-016"
+criterion = "AC-040"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_an_invalid_pattern" }
+
+[[validator]]
+requirement = "slcr/REQ-016"
+criterion = "AC-041"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_pattern_that_matches_a_validator_file" }
+
+[[validator]]
+requirement = "slcr/REQ-016"
+criterion = "AC-042"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_match_of_an_unsupported_format" }
+
+[[validator]]
+requirement = "slcr/REQ-016"
+criterion = "AC-043"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_duplicate_specification_names" }
+
+[[validator]]
+requirement = "slcr/REQ-016"
+criterion = "AC-044"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_an_invalid_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-017"
+criterion = "AC-045"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_vets_the_project_s_validator_files" }
+
+[[validator]]
+requirement = "slcr/REQ-017"
+criterion = "AC-046"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_names_validator_files_from_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-017"
+criterion = "AC-047"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_every_problem_in_a_validator_file" }
+
+[[validator]]
+requirement = "slcr/REQ-017"
+criterion = "AC-048"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_labels_validator_problems_in_json_and_yaml" }
+
+[[validator]]
+requirement = "slcr/REQ-017"
+criterion = "AC-049"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_validator_file_that_breaks_its_schema" }
+
+[[validator]]
+requirement = "slcr/REQ-017"
+criterion = "AC-050"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_two_validator_files_in_one_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-018"
+criterion = "AC-051"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_descriptor_that_is_not_installed" }
+
+[[validator]]
+requirement = "slcr/REQ-018"
+criterion = "AC-052"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_corrupted_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-018"
+criterion = "AC-053"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_an_invalid_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-018"
+criterion = "AC-054"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_descriptor_whose_version_is_not_declared" }
+
+[[validator]]
+requirement = "slcr/REQ-019"
+criterion = "AC-055"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_help" }
+
+[[validator]]
+requirement = "slcr/REQ-019"
+criterion = "AC-056"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_rejects_an_unknown_format" }

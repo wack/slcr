@@ -208,10 +208,254 @@ Below a directory holding `slcr.toml`, `slcr init` fails, says that the manifest
 
 `slcr init SPEC.md` fails, lists the supported extensions, and creates nothing.
 
+<a id="REQ-011"></a>
+### 1.3 vet
+
+`slcr` MUST have a `vet` subcommand that checks requirements files, or a whole project, against every rule of the SLCR formats, including the invariants their schemas can't express, and reports every finding at once. It runs nothing and never uses the network.
+
+*Rationale:* Like `terraform validate`, vetting is fast, offline, and deterministic, so it can run on every save and in every sandbox, and it finds a broken specification before `check` spends time running validators against it.
+
+All of the following must hold:
+
+- [Vets requirements files](#REQ-012)
+- [Warnings pass unless denied](#REQ-013)
+- [Reports in JSON](#REQ-014)
+- [Vets the project](#REQ-015)
+- [Discovers specifications](#REQ-016)
+- [Vets validator files](#REQ-017)
+- [Vets pinned descriptors](#REQ-018)
+- [vet usage](#REQ-019)
+
+*Terms:* [Finding](#TERM-005)
+
+<a id="REQ-012"></a>
+#### 1.3.1 Vets requirements files
+
+`slcr vet FILE...` MUST load each FILE and write its status to stdout (`ok`, its counts of violations and warnings, or `could not be loaded`) and each of its findings to stderr, labeled in the file's source where the problem has a location. A file that can't be read, can't be parsed, or names no supported format MUST be reported without stopping the others. `slcr vet` fails when any file could not be loaded or breaks an invariant.
+
+*Terms:* [Requirements file](#TERM-002), [Finding](#TERM-005)
+
+*Acceptance criteria:*
+
+<a id="AC-025"></a>**Passes the canon example in every format**
+
+`slcr vet` given the canon `todo-api` example as YAML, JSON, and TOML reports each file `ok` and exits with status 0.
+
+<a id="AC-026"></a>**Reports every finding in every file**
+
+Given a valid file, one with a warning, one with a violation, one that isn't valid YAML, one with an invalid ID, a missing file, and a Markdown file, `slcr vet` reports a status for each of the seven, labels the invalid ID at its line, says that vetting failed for 5 of 7 files, and exits with status 1.
+
+<a id="REQ-013"></a>
+#### 1.3.2 Warnings pass unless denied
+
+A warning MUST be reported without failing `slcr vet`, unless `--deny-warnings` is given, which makes any warning fail its file and the command.
+
+*Rationale:* Warnings flag what is probably a mistake, such as a body that never states its modality. Teams that want a clean specification can enforce one in CI without forcing it on every draft.
+
+*Terms:* [Finding](#TERM-005)
+
+*Acceptance criteria:*
+
+<a id="AC-027"></a>**Fails on a warning only when warnings are denied**
+
+A file whose only finding is a warning passes `slcr vet` with the warning on stderr, and fails `slcr vet --deny-warnings` with help naming the flag.
+
+<a id="REQ-014"></a>
+#### 1.3.3 Reports in JSON
+
+`slcr vet --format json` MUST write one JSON document to stdout instead of human output: whether vetting passed and, for each file, its path, whether it passed, its counts, and its findings, each with a kebab-case `code`, its fields, its severity, its message, and any help. A file that could not be loaded carries its error instead. In project mode, the document MUST also hold a `project` object for the manifest's problems and a `validators` array for the validator files. `--format human` is the default.
+
+*Rationale:* Agents and editors consume findings programmatically; a stable `code` lets them act on a kind of finding without parsing its prose.
+
+*Terms:* [Finding](#TERM-005)
+
+*Acceptance criteria:*
+
+<a id="AC-028"></a>**Reports files in JSON**
+
+`slcr vet --format json` given the seven files of AC-026 writes one document whose files carry their findings or errors, and exits with status 1.
+
+<a id="AC-029"></a>**Reports denied warnings in JSON**
+
+With `--deny-warnings`, a file whose only finding is a warning does not pass in the JSON document.
+
+<a id="AC-030"></a>**Reports the project in JSON**
+
+In project mode, the document holds the manifest's problems in `project`, including a manifest that can't be parsed, alongside the files.
+
+<a id="AC-031"></a>**Reports validator and descriptor problems in JSON**
+
+Validator files' problems appear in `validators`, and pinned descriptors' problems in `project`, each with its own `code`.
+
+<a id="AC-032"></a>**Writes human output by default**
+
+`slcr vet --format human` writes the human report: status lines on stdout and diagnostics on stderr.
+
+<a id="REQ-015"></a>
+#### 1.3.4 Vets the project
+
+Given no FILE, `slcr vet` MUST vet the project: it finds `SLCR.toml` in the working directory or a parent, vets every requirements file the manifest's `specs` match, and reports the manifest as one more file with its own status. It names every file relative to the working directory. Outside a project, it MUST fail with help on creating a manifest, and a manifest whose name differs from `SLCR.toml` only in case MUST be an error.
+
+*Terms:* [Project manifest](#TERM-003), [Project](#TERM-004)
+
+*Acceptance criteria:*
+
+<a id="AC-033"></a>**Vets the project**
+
+In a project whose `specs` match three specifications, `slcr vet` reports `SLCR.toml: ok` and each specification `ok`, and exits with status 0.
+
+<a id="AC-034"></a>**Names files from the working directory**
+
+Run in `docs/api`, `slcr vet` names the manifest `../../SLCR.toml` and the files beside it by their bare names.
+
+<a id="AC-035"></a>**Reports every finding in the project**
+
+In a project holding a valid specification, one with a warning, one with a violation, and one that can't be parsed, `slcr vet --deny-warnings` reports all of them and fails.
+
+<a id="AC-036"></a>**Requires a project**
+
+`slcr vet` with no FILE outside any project fails, and its help shows a minimal manifest.
+
+<a id="AC-037"></a>**Rejects a misnamed manifest**
+
+`slcr vet` beside `slcr.toml` fails, saying that the manifest's name is case-sensitive.
+
+<a id="REQ-016"></a>
+#### 1.3.5 Discovers specifications
+
+`slcr vet` MUST expand each `specs` pattern as a glob relative to the project root, in which `*` and `?` never cross a `/` and `**` does, seeing hidden files but skipping `.git` and whatever git ignores. A pattern that is invalid or matches nothing, a match that is a validator file or has no supported format's extension, and two files whose specifications share a name MUST each be a problem of the manifest, as MUST a manifest that breaks its schema, such as a pattern that leaves the project.
+
+*Rationale:* A pattern that silently matches nothing would leave a specification unvetted and unchecked while every command passes.
+
+*Terms:* [Project manifest](#TERM-003), [Project](#TERM-004)
+
+*Acceptance criteria:*
+
+<a id="AC-038"></a>**Searches hidden directories and skips ignored files**
+
+`docs/**/*.slcr.{json,toml}` matches a specification under `docs/.drafts` but not an unparsable one under a directory that `.gitignore` lists.
+
+<a id="AC-039"></a>**Reports a pattern that matches nothing**
+
+A `specs` pattern that matches no file is a manifest problem whose help mentions typos and `.gitignore`.
+
+<a id="AC-040"></a>**Reports an invalid pattern**
+
+The pattern `specs/[a` is a manifest problem that explains the glob syntax.
+
+<a id="AC-041"></a>**Reports a pattern that matches a validator file**
+
+A pattern matching `.validators.slcr.toml` is a manifest problem whose help shows how to narrow it.
+
+<a id="AC-042"></a>**Reports a match of no supported format**
+
+A pattern matching `notes.md` is a manifest problem that lists the supported extensions.
+
+<a id="AC-043"></a>**Reports duplicate specification names**
+
+Two files that both name their specification `todo-api` are one manifest problem naming both files.
+
+<a id="AC-044"></a>**Rejects a pattern that leaves the project**
+
+A manifest whose `specs` holds `../SPEC.slcr.yml` can't be loaded, and the error labels the pattern in `SLCR.toml`.
+
+<a id="REQ-017"></a>
+#### 1.3.6 Vets validator files
+
+In project mode, `slcr vet` MUST find every validator file in the project, however `specs` reads, by the same walk that finds specifications, and report each with a status line. Each problem MUST be labeled at its validator in the file's source: a requirement that doesn't resolve to a specification and a requirement in it, an acceptance criterion that isn't the requirement's own, a tool the manifest doesn't declare, a `with` that the tool's validator schema rejects (one problem per schema error), and a validator identical to an earlier one. Two validator files in one directory MUST be a problem of the manifest.
+
+*Terms:* [Validator](#TERM-006), [Validator file](#TERM-007)
+
+*Acceptance criteria:*
+
+<a id="AC-045"></a>**Vets validator files in every format**
+
+Validator files in TOML, JSON, and YAML are each reported `ok`, and one in a directory that `.gitignore` lists is skipped.
+
+<a id="AC-046"></a>**Names validator files from the working directory**
+
+Run in `src/views`, `slcr vet` names validator files relative to it.
+
+<a id="AC-047"></a>**Labels every problem at its validator**
+
+A validator file with an unknown specification, an unknown requirement, another requirement's criterion, an undeclared tool, a `with` that breaks the schema twice, and a repeated validator reports 7 problems, each labeled in the file, with help listing what does exist.
+
+<a id="AC-048"></a>**Labels problems in JSON and YAML**
+
+Problems in validator files written in JSON and in YAML are labeled at their location too.
+
+<a id="AC-049"></a>**Reports a validator file that breaks its schema**
+
+A validator file whose `criterion` is `AC-1` can't be loaded, and the error labels the value.
+
+<a id="AC-050"></a>**Reports two validator files in one directory**
+
+`.validators.slcr.toml` and `.validators.slcr.yml` in one directory are a manifest problem, and both files are still vetted.
+
+<a id="REQ-018"></a>
+#### 1.3.7 Vets pinned descriptors
+
+For each tool the manifest declares, `slcr vet` MUST report a problem of the manifest when the descriptor store doesn't hold the descriptor the tool pins, holds bytes that don't hash to the pin, holds an invalid descriptor, or holds one whose version isn't the declared one, with help naming `slcr tools install` or `slcr tools update`, whichever fixes it. It MUST only read the store, never fetching or installing a descriptor.
+
+*Rationale:* Without its descriptor, `with` can't be checked against the tool's schema and the tool can't run; reporting that offline tells the user exactly which command restores it.
+
+*Terms:* [Tool descriptor](#TERM-008), [Descriptor store](#TERM-009), [Pin](#TERM-010)
+
+*Acceptance criteria:*
+
+<a id="AC-051"></a>**Reports a descriptor that is not installed**
+
+When the store lacks a pinned descriptor, `slcr vet` reports it with help naming `slcr tools install`, skips checking `with` against its schema, and installs nothing.
+
+<a id="AC-052"></a>**Reports a corrupted descriptor**
+
+When the store's copy no longer hashes to its pin, `slcr vet` says so, with help naming `slcr tools install`.
+
+<a id="AC-053"></a>**Reports an invalid descriptor**
+
+When the pinned descriptor's argv names a `with` field its schema lacks, `slcr vet` reports why it is invalid, with help naming `slcr tools update`.
+
+<a id="AC-054"></a>**Reports an undeclared version**
+
+When the manifest declares version 0.9.0 but the pinned descriptor is 1.0.0, `slcr vet` reports both versions, with help naming `slcr tools update`.
+
+<a id="REQ-019"></a>
+#### 1.3.8 vet usage
+
+`slcr vet` MUST take any number of FILEs, MUST reject a `--format` other than `human` or `json`, and MUST describe itself, its arguments, and its options when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-055"></a>**Describes itself**
+
+`slcr vet --help` describes FILE, project mode, `--deny-warnings`, and `--format`.
+
+<a id="AC-056"></a>**Rejects an unknown format**
+
+`slcr vet --format xml` is a usage error listing `human` and `json`.
+
 <a id="SEC-002"></a>
 ## 2. Glossary
 
 <dl>
+<dt><a id="TERM-009"></a>Descriptor store</dt>
+<dd>
+
+A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine. Only `slcr tools add`, `update`, and `install`, and `slcr check`, ever fill it.
+
+</dd>
+<dt><a id="TERM-005"></a>Finding</dt>
+<dd>
+
+Something vetting reports about a specification. A violation breaks an invariant of the format, such as a dangling reference or a `refines` cycle, and fails vetting; a warning, such as a body that never states its modality, fails it only when warnings are denied.
+
+</dd>
+<dt><a id="TERM-010"></a>Pin</dt>
+<dd>
+
+`blake3:` followed by the 64 lowercase hex digits of a descriptor's BLAKE3 hash. The manifest records each tool's pin, so a validator always runs exactly the descriptor that was declared, wherever it came from.
+
+</dd>
 <dt><a id="TERM-004"></a>Project</dt>
 <dd>
 
@@ -236,6 +480,26 @@ A file that holds one specification, in the format its extension names: YAML (`.
 <dd>
 
 An SLCR requirements document: a named tree of Sections and Requirements, the acceptance criteria of those Requirements, the cross edges between them (`refines`, `dependsOn`, and `usesTerm`), and a Glossary of Terms. Its name, such as `todo-api`, qualifies its requirements' IDs elsewhere, as in `todo-api/REQ-002`.
+
+</dd>
+<dt><a id="TERM-008"></a>Tool descriptor</dt>
+<dd>
+
+*Also called:* Descriptor
+
+A declarative TOML file that tells SLCR how to run one tool: its argument vector, whose placeholders are filled from a validator's `with`; its working directory and environment; the JSON Schema that every validator's `with` must satisfy; and which exit codes pass. A descriptor is never executed itself, and is never run through a shell.
+
+</dd>
+<dt><a id="TERM-006"></a>Validator</dt>
+<dd>
+
+One entry of a validator file: a qualified requirement, such as `slcr/REQ-002`, optionally one of its acceptance criteria, the tool that checks it, and the fields (`with`) the tool's validator schema requires. A validator is green when its tool exits with a passing code, and red otherwise.
+
+</dd>
+<dt><a id="TERM-007"></a>Validator file</dt>
+<dd>
+
+A file named `.validators.slcr.toml`, `.validators.slcr.json`, `.validators.slcr.yaml`, or `.validators.slcr.yml`, holding a list of validators. A directory holds at most one, and commands find every one in the project, so validators can sit beside the code they check.
 
 </dd>
 </dl>
