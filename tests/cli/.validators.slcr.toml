@@ -1,8 +1,25 @@
+# Each validator proves one acceptance criterion of the `slcr`
+# specification (SPEC.slcr.toml) by running one test of this suite with
+# `cargo insta test`, which also asserts the test's snapshots. They are
+# grouped by subcommand, in the order of the specification.
 formatVersion = "1"
 
+# slcr version
+
 [[validator]]
-requirement = "slcr/REQ-001"
+requirement = "slcr/REQ-002"
 criterion = "AC-001"
 tool = "cargo-insta"
-description = "`slcr version` prints `v` and the package version, and its snapshot matches."
 with = { target = "cli", test = "version::version_prints_the_package_version" }
+
+[[validator]]
+requirement = "slcr/REQ-003"
+criterion = "AC-002"
+tool = "cargo-insta"
+with = { target = "cli", test = "version::version_help" }
+
+[[validator]]
+requirement = "slcr/REQ-003"
+criterion = "AC-003"
+tool = "cargo-insta"
+with = { target = "cli", test = "version::version_takes_no_arguments" }

@@ -14,21 +14,50 @@ body = "The requirements of `slcr`, the reference command-line implementation of
 kind = "section"
 id = "SEC-003"
 title = "Commands"
-body = "The subcommands `slcr` offers, and what each does."
+body = "The subcommands `slcr` offers. Each is a requirement whose behaviors refine it, so a subcommand is satisfied exactly when all of its behaviors are. Unless a requirement says otherwise, a subcommand that succeeds exits with status 0, one that fails exits with status 1 and explains why on stderr, and a usage error, such as an unknown argument or a missing one, exits with status 2 and prints the subcommand's usage."
 
 [[root.children.children]]
 kind = "requirement"
 id = "REQ-001"
-title = "Version subcommand"
-body = "`slcr` MUST have a `version` subcommand that prints the version of the running CLI and exits successfully."
+title = "version"
+body = "`slcr` MUST have a `version` subcommand that prints the version of the running CLI."
 rationale = "Users and bug reports need to know which release of `slcr` produced an output."
 modality = "MUST"
+refinement = "AND"
 
-[[root.children.children.acceptanceCriteria]]
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-002"
+title = "Prints the package version"
+body = "`slcr version` MUST write `v`, the package version from `Cargo.toml`, and a newline to stdout, write nothing to stderr, and exit with status 0."
+modality = "MUST"
+refines = ["REQ-001"]
+
+[[root.children.children.children.acceptanceCriteria]]
 kind = "acceptanceCriterion"
 id = "AC-001"
 title = "Prints the package version"
 body = "`slcr version`, given no arguments, exits with status 0 and writes exactly `v`, the package version from `Cargo.toml`, and a newline to stdout."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-003"
+title = "version usage"
+body = "`slcr version` MUST take no arguments, and MUST describe itself and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-001"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-002"
+title = "Describes itself"
+body = "`slcr version --help` exits with status 0 and prints what the subcommand does, its usage, and its options."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-003"
+title = "Rejects an argument"
+body = "`slcr version extra` is a usage error: it exits with status 2, names the unexpected argument, and prints the usage."
 
 [glossary]
 kind = "section"

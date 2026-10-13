@@ -8,20 +8,45 @@ The requirements of `slcr`, the reference command-line implementation of SLCR sp
 <a id="SEC-003"></a>
 ## 1. Commands
 
-The subcommands `slcr` offers, and what each does.
+The subcommands `slcr` offers. Each is a requirement whose behaviors refine it, so a subcommand is satisfied exactly when all of its behaviors are. Unless a requirement says otherwise, a subcommand that succeeds exits with status 0, one that fails exits with status 1 and explains why on stderr, and a usage error, such as an unknown argument or a missing one, exits with status 2 and prints the subcommand's usage.
 
 <a id="REQ-001"></a>
-### 1.1 Version subcommand
+### 1.1 version
 
-`slcr` MUST have a `version` subcommand that prints the version of the running CLI and exits successfully.
+`slcr` MUST have a `version` subcommand that prints the version of the running CLI.
 
 *Rationale:* Users and bug reports need to know which release of `slcr` produced an output.
+
+All of the following must hold:
+
+- [Prints the package version](#REQ-002)
+- [version usage](#REQ-003)
+
+<a id="REQ-002"></a>
+#### 1.1.1 Prints the package version
+
+`slcr version` MUST write `v`, the package version from `Cargo.toml`, and a newline to stdout, write nothing to stderr, and exit with status 0.
 
 *Acceptance criteria:*
 
 <a id="AC-001"></a>**Prints the package version**
 
 `slcr version`, given no arguments, exits with status 0 and writes exactly `v`, the package version from `Cargo.toml`, and a newline to stdout.
+
+<a id="REQ-003"></a>
+#### 1.1.2 version usage
+
+`slcr version` MUST take no arguments, and MUST describe itself and its options when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-002"></a>**Describes itself**
+
+`slcr version --help` exits with status 0 and prints what the subcommand does, its usage, and its options.
+
+<a id="AC-003"></a>**Rejects an argument**
+
+`slcr version extra` is a usage error: it exits with status 2, names the unexpected argument, and prints the usage.
 
 <a id="SEC-002"></a>
 ## 2. Glossary
