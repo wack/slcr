@@ -1456,10 +1456,238 @@ When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, `slcr tools
 
 `slcr tools show --help` describes NAME and `--format`.
 
+<a id="REQ-070"></a>
+### 1.8 check
+
+`slcr` MUST have a `check` subcommand that runs every validator in the project and reports whether each requirement is satisfied, unsatisfied, or unknown. "Check" means only this.
+
+*Rationale:* This is the loop that makes a specification executable: requirements say what must hold, validators prove it, and `check` combines their verdicts through the refinement graph. This specification is checked this way, by `slcr check` itself.
+
+All of the following must hold:
+
+- [Runs every validator](#REQ-071)
+- [Evaluates satisfaction](#REQ-072)
+- [Fails by severity](#REQ-073)
+- [Shows why a validator is red](#REQ-074)
+- [Reports a validator that can't be run](#REQ-075)
+- [Installs and vets before running](#REQ-076)
+- [Runs validators in parallel](#REQ-077)
+- [Stops when interrupted](#REQ-078)
+- [Reports in JSON](#REQ-079)
+- [check usage](#REQ-080)
+
+*Terms:* [Validator](#TERM-006), [Satisfaction status](#TERM-015)
+
+<a id="REQ-071"></a>
+#### 1.8.1 Runs every validator
+
+`slcr check` MUST work on the project, found as `slcr vet` finds it, and run every validator in every validator file. It MUST write a status line for each validator, in report order (validator files in project order, validators in file order): `green`, `red (exit N)`, `could not be run`, or `interrupted`. Then it writes one summary line per specification, counting its satisfied, unsatisfied, and unknown requirements, and its coverage gaps. Files are named relative to the working directory. It takes no FILE.
+
+*Depends on:* [Vets the project](#REQ-015), [Vets validator files](#REQ-017)
+
+*Terms:* [Project](#TERM-004), [Validator](#TERM-006), [Validator file](#TERM-007), [Satisfaction status](#TERM-015), [Coverage gap](#TERM-016)
+
+*Acceptance criteria:*
+
+<a id="AC-182"></a>**Passes a project whose requirements are satisfied**
+
+With a green validator for every leaf of the `shop` specification, `slcr check` writes five `green` lines and `shop: 7 satisfied, 0 unsatisfied, 0 unknown`, and exits with status 0.
+
+<a id="AC-183"></a>**Names files from the working directory**
+
+Run in `src/mail`, `slcr check` names the validator files `../.validators.slcr.toml` and `.validators.slcr.toml`.
+
+<a id="AC-184"></a>**Requires a project**
+
+`slcr check` outside any project fails, with help showing a minimal manifest.
+
+<a id="AC-185"></a>**Takes no files**
+
+`slcr check SPEC.slcr.yml` is a usage error naming the unexpected argument.
+
+<a id="REQ-072"></a>
+#### 1.8.2 Evaluates satisfaction
+
+`slcr check` MUST evaluate each requirement from its validators' outcomes and its refiners' statuses, in strong Kleene logic, so that a status is decided only when every resolution of the unknowns agrees. A requirement without refiners is the AND of its own outcomes, and unknown, a coverage gap, when it has none. A requirement with refiners combines their statuses by its `refinement`: AND leaves out MAY refiners, while OR and XOR count them. The result is ANDed with the requirement's own outcomes. Only `refines` edges count, never containment.
+
+*Rationale:* Treating an unvalidated requirement as unknown, rather than as a pass or a fail, keeps `check` honest about what has been proven while a specification is still being covered.
+
+*Terms:* [Satisfaction status](#TERM-015), [Coverage gap](#TERM-016)
+
+*Acceptance criteria:*
+
+<a id="AC-186"></a>**Counts unvalidated requirements as unknown**
+
+With validators only for the cart total and paying by card, `shop` is `4 satisfied, 0 unsatisfied, 3 unknown (3 coverage gaps)`: paying succeeds by card alone, while the voucher, the receipt, and gift wrap are unknown.
+
+<a id="AC-187"></a>**A failed refiner fails an AND**
+
+When the cart total's validator is red, the cart total and checking out, which is the AND of it and paying, are both unsatisfied.
+
+<a id="AC-188"></a>**One alternative satisfies an OR**
+
+When paying by voucher fails but paying by card passes, paying, their OR, is satisfied, and so is checking out.
+
+<a id="REQ-073"></a>
+#### 1.8.3 Fails by severity
+
+An unsatisfied requirement MUST be a finding as severe as its modality: for MUST and MUST NOT, a violation, which fails `slcr check`; for SHOULD and SHOULD NOT, a warning; for MAY, an informational finding. A failure that is absorbed is a warning, whatever its modality, except that a MAY stays informational. Warnings fail `slcr check` only under `--deny-warnings`. Unknown requirements and informational findings MUST never fail it.
+
+*Terms:* [Finding](#TERM-005), [Satisfaction status](#TERM-015), [Absorbed failure](#TERM-017)
+
+*Acceptance criteria:*
+
+<a id="AC-189"></a>**Fails an unsatisfied MUST**
+
+When the cart total's validator is red, `slcr check` reports both unsatisfied MUST requirements as violations and fails with `check failed: 2 violations`.
+
+<a id="AC-190"></a>**Passes an unsatisfied SHOULD with a warning**
+
+When the receipt's validator is red, `slcr check` warns that REQ-006, a SHOULD requirement, is unsatisfied, and succeeds.
+
+<a id="AC-191"></a>**Passes an unsatisfied MAY**
+
+When gift wrap's validator is red, `slcr check --deny-warnings` reports it as informational and succeeds.
+
+<a id="AC-192"></a>**Passes an absorbed failure unless warnings are denied**
+
+When paying by voucher fails but paying succeeds by card, `slcr check` warns that the failure is absorbed and succeeds; `slcr check --deny-warnings` fails, naming the flag.
+
+<a id="AC-193"></a>**Never fails on unknown requirements**
+
+With three requirements unknown, `slcr check --deny-warnings` succeeds.
+
+<a id="REQ-074"></a>
+#### 1.8.4 Shows why a validator is red
+
+`slcr check` MUST repeat a red validator's status on stderr, as severe as its requirement's finding, followed by the last 20 lines of its stderr and of its stdout, saying how many lines there were. A green validator's output MUST NOT be shown.
+
+*Terms:* [Validator](#TERM-006)
+
+*Acceptance criteria:*
+
+<a id="AC-194"></a>**Shows the end of a red validator's output**
+
+A red validator that wrote 30 lines to stdout and an assertion to stderr is shown with its stderr and `stdout, last 20 of 30 lines`; a green validator's `hidden` output appears nowhere.
+
+<a id="REQ-075"></a>
+#### 1.8.5 Reports a validator that can't be run
+
+A validator that can't be run, such as one whose program isn't on the PATH it would see, MUST be reported `could not be run`, with the reason, labeled at the validator in its file, and MUST fail `slcr check`. It gives its requirement no outcome.
+
+*Rationale:* A validator that never ran proves nothing either way; failing the check makes sure a broken environment is never mistaken for a broken requirement, nor for a passing one.
+
+*Terms:* [Validator](#TERM-006), [Tool descriptor](#TERM-008)
+
+*Acceptance criteria:*
+
+<a id="AC-195"></a>**Reports a validator that cannot be run**
+
+A validator whose tool runs `slcr-no-such-program` is `could not be run`, its requirement is unknown, and `slcr check` fails with `1 validator could not be run`, with help explaining how the PATH is searched.
+
+<a id="REQ-076"></a>
+#### 1.8.6 Installs and vets before running
+
+Before running anything, `slcr check` MUST install every pinned descriptor the store lacks, as `slcr tools install` does and with a status line for each it installs, unless `--offline` is given, and then vet the project, writing vet's findings to stderr. If an install fails, or the project doesn't vet cleanly (warnings aside), it MUST say why and run no validator.
+
+*Rationale:* Installing first lets a fresh clone check in one command; vetting first means a validator never runs against a specification or a validator file that is broken.
+
+*Depends on:* [Vets the project](#REQ-015), [Installs what the store lacks](#REQ-053)
+
+*Terms:* [Descriptor store](#TERM-009)
+
+*Acceptance criteria:*
+
+<a id="AC-196"></a>**Installs a missing descriptor**
+
+When the store lacks the `sh` tool's descriptor, `slcr check` reports `sh: installed` with its pin, installs it, then runs every validator.
+
+<a id="AC-197"></a>**Fails when a descriptor can't be installed**
+
+When the store lacks the descriptor and its source is gone, `slcr check` reports `sh: failed` and fails, running no validator.
+
+<a id="AC-198"></a>**Never installs offline**
+
+`slcr check --offline`, when the store lacks the descriptor, reports vet's statuses and the missing descriptor, fails because the project doesn't vet cleanly, and neither installs nor runs anything.
+
+<a id="AC-199"></a>**Runs nothing when vetting fails**
+
+When a validator names REQ-099, which `shop` lacks, `slcr check` reports the problem and fails, and no validator runs, not even the valid one.
+
+<a id="REQ-077"></a>
+#### 1.8.7 Runs validators in parallel
+
+`slcr check` MUST run at most N validators at once, given `--jobs N` (or `-j N`), and by default as many as the machine has CPUs. It MUST write each status line as soon as that validator and every one before it have finished, so its output is the same whatever N is. `--jobs 0` MUST be a usage error. No duration appears in its human output.
+
+*Acceptance criteria:*
+
+<a id="AC-200"></a>**Reports the same whatever the number of jobs**
+
+With validators that finish in reverse order when run at once, `slcr check -j 1` and `slcr check -j 4` write identical stdout and stderr and exit with the same status.
+
+<a id="AC-201"></a>**Rejects zero jobs**
+
+`slcr check -j 0` is a usage error saying that N must be at least 1.
+
+<a id="REQ-078"></a>
+#### 1.8.8 Stops when interrupted
+
+When interrupted (Ctrl-C, SIGINT), `slcr check` MUST stop every validator still running, together with every process it started, start no other, report each unfinished validator `interrupted`, evaluate no requirement, and fail.
+
+*Rationale:* Validators run in process groups of their own, so the terminal's Ctrl-C doesn't reach them; without this, an interrupted check would leave test runs going in the background.
+
+*Terms:* [Validator](#TERM-006)
+
+*Acceptance criteria:*
+
+<a id="AC-202"></a>**Stops every validator when interrupted**
+
+On Linux, SIGINT sent while the second of five validators runs `sleep 30` in the background reports four validators `interrupted` and `1 of 5 validators finished`, kills the `sleep`, and never starts the third validator.
+
+<a id="REQ-079"></a>
+#### 1.8.9 Reports in JSON
+
+`slcr check --format json` MUST write one JSON document to stdout instead of human output: whether the check passed and whether it was interrupted; each descriptor install; vet's report; every validator's run, with its file, position, requirement, tool, outcome and its reason, exit code, duration, and the whole captured stdout and stderr; and, for each specification, its summary and every requirement's status. When vetting fails, the document holds no runs. `--format human` is the default.
+
+*Depends on:* [Reports in JSON](#REQ-014)
+
+*Acceptance criteria:*
+
+<a id="AC-203"></a>**Reports in JSON**
+
+`slcr check --format json`, with the cart total's and the voucher's validators red, writes every run with its captured output, each requirement's status, and `shop`'s summary, and fails.
+
+<a id="AC-204"></a>**Reports a vetting failure in JSON**
+
+When vetting fails, `slcr check --format json` writes vet's report and no run, and nothing runs.
+
+<a id="REQ-080"></a>
+#### 1.8.10 check usage
+
+`slcr check` MUST describe itself and its options, `--jobs`, `--offline`, `--deny-warnings`, and `--format`, when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-205"></a>**Describes itself**
+
+`slcr check --help` describes `--jobs` and its default, `--offline`, `--deny-warnings`, and `--format`.
+
 <a id="SEC-002"></a>
 ## 2. Glossary
 
 <dl>
+<dt><a id="TERM-017"></a>Absorbed failure</dt>
+<dd>
+
+An unsatisfied requirement that refines at least one requirement, every one of which is satisfied anyway, as when one alternative of an OR fails and another passes. It is reported as a warning rather than as a violation.
+
+</dd>
+<dt><a id="TERM-016"></a>Coverage gap</dt>
+<dd>
+
+A requirement that no validator checks and nothing refines, whose status is therefore unknown. `slcr check` counts gaps in its summary, but never fails on one.
+
+</dd>
 <dt><a id="TERM-009"></a>Descriptor store</dt>
 <dd>
 
@@ -1502,6 +1730,14 @@ The canonical Markdown of a specification: a comment saying that `slcr` generate
 <dd>
 
 A file that holds one specification, in the format its extension names: YAML (`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`). The well-known one, which commands read when given no FILE, is `SPEC.slcr.toml`.
+
+</dd>
+<dt><a id="TERM-015"></a>Satisfaction status</dt>
+<dd>
+
+*Also called:* Satisfied, Unsatisfied, Unknown
+
+What `slcr check` concludes about a requirement: satisfied or unsatisfied when its validators and its refiners decide it, and unknown when they leave it open. Statuses combine in strong Kleene logic, so an unknown never hides a result that every possibility agrees on.
 
 </dd>
 <dt><a id="TERM-012"></a>SLCR query profile</dt>

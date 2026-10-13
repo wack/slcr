@@ -1223,3 +1223,149 @@ requirement = "slcr/REQ-069"
 criterion = "AC-181"
 tool = "cargo-insta"
 with = { target = "cli", test = "tools::tools_show_help" }
+
+# slcr check
+
+[[validator]]
+requirement = "slcr/REQ-071"
+criterion = "AC-182"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_passes_a_project_whose_requirements_are_satisfied" }
+
+[[validator]]
+requirement = "slcr/REQ-071"
+criterion = "AC-183"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_names_files_from_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-071"
+criterion = "AC-184"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_requires_a_project" }
+
+[[validator]]
+requirement = "slcr/REQ-071"
+criterion = "AC-185"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_takes_no_files" }
+
+[[validator]]
+requirement = "slcr/REQ-072"
+criterion = "AC-186"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_passes_unknown_requirements" }
+
+[[validator]]
+requirement = "slcr/REQ-072"
+criterion = "AC-187"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_fails_an_unsatisfied_must" }
+
+[[validator]]
+requirement = "slcr/REQ-072"
+criterion = "AC-188"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_passes_an_absorbed_failure_unless_warnings_are_denied" }
+
+[[validator]]
+requirement = "slcr/REQ-073"
+criterion = "AC-189"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_fails_an_unsatisfied_must" }
+
+[[validator]]
+requirement = "slcr/REQ-073"
+criterion = "AC-190"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_passes_an_unsatisfied_should_with_a_warning" }
+
+[[validator]]
+requirement = "slcr/REQ-073"
+criterion = "AC-191"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_passes_an_unsatisfied_may" }
+
+[[validator]]
+requirement = "slcr/REQ-073"
+criterion = "AC-192"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_passes_an_absorbed_failure_unless_warnings_are_denied" }
+
+[[validator]]
+requirement = "slcr/REQ-073"
+criterion = "AC-193"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_passes_unknown_requirements" }
+
+[[validator]]
+requirement = "slcr/REQ-074"
+criterion = "AC-194"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_shows_the_end_of_a_red_validator_s_output" }
+
+[[validator]]
+requirement = "slcr/REQ-075"
+criterion = "AC-195"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_reports_a_validator_that_cannot_be_run" }
+
+[[validator]]
+requirement = "slcr/REQ-076"
+criterion = "AC-196"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_installs_a_missing_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-076"
+criterion = "AC-197"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_fails_when_a_descriptor_cannot_be_installed" }
+
+[[validator]]
+requirement = "slcr/REQ-076"
+criterion = "AC-198"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_offline_never_installs_a_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-076"
+criterion = "AC-199"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_runs_nothing_when_vetting_fails" }
+
+[[validator]]
+requirement = "slcr/REQ-077"
+criterion = "AC-200"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_reports_the_same_whatever_the_number_of_jobs" }
+
+[[validator]]
+requirement = "slcr/REQ-077"
+criterion = "AC-201"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_rejects_zero_jobs" }
+
+[[validator]]
+requirement = "slcr/REQ-078"
+criterion = "AC-202"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_stops_every_validator_when_interrupted" }
+
+[[validator]]
+requirement = "slcr/REQ-079"
+criterion = "AC-203"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_reports_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-079"
+criterion = "AC-204"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_reports_a_vetting_failure_in_json" }
+
+[[validator]]
+requirement = "slcr/REQ-080"
+criterion = "AC-205"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_help" }
