@@ -900,6 +900,7 @@ All of the following must hold:
 - [Works on the project's manifest](#REQ-040)
 - [Names tools](#REQ-041)
 - [tools add](#REQ-042)
+- [tools update](#REQ-047)
 
 *Terms:* [Project manifest](#TERM-003), [Tool](#TERM-014)
 
@@ -1056,6 +1057,114 @@ When a file stands where the data directory would be, `slcr tools add` fails, sa
 <a id="AC-139"></a>**Describes itself**
 
 `slcr tools add --help` describes SOURCE, as a path or an HTTPS URL, and `--as`.
+
+<a id="REQ-047"></a>
+#### 1.7.4 tools update
+
+`slcr tools` MUST have an `update` subcommand that re-fetches a declared tool's descriptor from its recorded source and re-pins the tool to it.
+
+*Rationale:* Re-pinning is the one deliberate way to change which descriptor a tool runs; it shows up in review as a change to the manifest.
+
+All of the following must hold:
+
+- [Re-fetches and re-pins](#REQ-048)
+- [Leaves an up-to-date tool alone](#REQ-049)
+- [Changes nothing on failure](#REQ-050)
+- [tools update usage](#REQ-051)
+
+*Terms:* [Pin](#TERM-010), [Tool](#TERM-014)
+
+<a id="REQ-048"></a>
+##### 1.7.4.1 Re-fetches and re-pins
+
+`slcr tools update NAME` MUST re-fetch the descriptor of the tool declared as NAME from its recorded source, check and install it as `slcr tools add` does, and re-pin the entry, editing only its `version` and `pin` values in place, so that the rest of the manifest, comments and spacing included, stays as it was. It reports `updated tool NAME OLD -> NEW`, or `re-pinned tool NAME VERSION` when only the bytes changed. The descriptor it replaces MUST stay in the store, where other projects may pin it.
+
+*Depends on:* [Accepts only a sound descriptor from a trusted source](#REQ-045)
+
+*Terms:* [Project manifest](#TERM-003), [Descriptor store](#TERM-009), [Pin](#TERM-010)
+
+*Acceptance criteria:*
+
+<a id="AC-140"></a>**Installs and pins a new version**
+
+After the project's cargo-nextest descriptor is bumped to 1.1.0, `slcr tools update cargo-nextest` reports `updated tool cargo-nextest 1.0.0 -> 1.1.0`, re-pins the entry, and the store holds both descriptors.
+
+<a id="AC-141"></a>**Re-pins an edited descriptor**
+
+After a comment is added to the descriptor, `slcr tools update cargo-nextest` reports `re-pinned tool cargo-nextest 1.0.0` and pins the edited bytes.
+
+<a id="AC-142"></a>**Keeps the rest of the manifest**
+
+Updating a tool in a manifest with comments, aligned `=` signs, and a second tool changes only that tool's `version` and `pin` values.
+
+<a id="REQ-049"></a>
+##### 1.7.4.2 Leaves an up-to-date tool alone
+
+When the source serves exactly the bytes the entry pins, `slcr tools update` MUST leave the manifest unchanged and report the tool up to date, installing the descriptor if the store lacks it.
+
+*Terms:* [Descriptor store](#TERM-009)
+
+*Acceptance criteria:*
+
+<a id="AC-143"></a>**Leaves an up-to-date tool alone**
+
+`slcr tools update cargo-nextest` right after `slcr tools add` reports `SLCR.toml: tool cargo-nextest 1.0.0 is up to date` and leaves the manifest's bytes unchanged.
+
+<a id="AC-144"></a>**Installs a descriptor the store lost**
+
+When the store lost the pinned descriptor, so that `slcr vet` fails, `slcr tools update` reports the tool up to date and installs it, after which `slcr vet` passes.
+
+<a id="REQ-050"></a>
+##### 1.7.4.3 Changes nothing on failure
+
+A NAME the manifest doesn't declare, and a recorded source that can't be fetched, doesn't exist, leads outside the project (by a symlink, say), or serves bytes that aren't a valid descriptor, MUST fail the update, changing neither the manifest nor the store. So MUST a descriptor store that can't be created.
+
+*Depends on:* [Accepts only a sound descriptor from a trusted source](#REQ-045)
+
+*Acceptance criteria:*
+
+<a id="AC-145"></a>**Requires a declared tool**
+
+`slcr tools update jev`, when only cargo-nextest is declared, fails with help listing the declared tools, and leaves the manifest unchanged.
+
+<a id="AC-146"></a>**Reports a missing descriptor**
+
+When the recorded `path` no longer exists, the update fails, saying so, and leaves the manifest unchanged.
+
+<a id="AC-147"></a>**Rejects a source that leads outside the project**
+
+When the recorded `path` is a symlink to a file outside the project, the update fails, saying that it is outside the project.
+
+<a id="AC-148"></a>**Reports a failed fetch**
+
+When the recorded `url` can't be reached, the update fails, saying why, and leaves the manifest unchanged.
+
+<a id="AC-149"></a>**Rejects a descriptor that is not UTF-8**
+
+When the source serves invalid UTF-8, the update fails, saying so, and leaves the manifest unchanged.
+
+<a id="AC-150"></a>**Rejects a descriptor that breaks its schema**
+
+When the source serves a descriptor with an unknown field, the update fails, labeling it, and installs nothing.
+
+<a id="AC-151"></a>**Rejects a descriptor that breaks an invariant**
+
+When the source serves a descriptor whose argv uses an undeclared `with` field, the update fails, installs nothing, and leaves the manifest unchanged.
+
+<a id="AC-152"></a>**Reports a descriptor store it cannot create**
+
+When a file stands where the data directory would be, the update fails, saying that it could not create the descriptor store, and leaves the manifest unchanged.
+
+<a id="REQ-051"></a>
+##### 1.7.4.4 tools update usage
+
+`slcr tools update` MUST describe itself and NAME when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-153"></a>**Describes itself**
+
+`slcr tools update --help` describes NAME as the name the tool is declared under.
 
 <a id="SEC-002"></a>
 ## 2. Glossary

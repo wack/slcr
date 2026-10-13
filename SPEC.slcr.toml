@@ -1279,6 +1279,137 @@ id = "AC-139"
 title = "Describes itself"
 body = "`slcr tools add --help` describes SOURCE, as a path or an HTTPS URL, and `--as`."
 
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-047"
+title = "tools update"
+body = "`slcr tools` MUST have an `update` subcommand that re-fetches a declared tool's descriptor from its recorded source and re-pins the tool to it."
+rationale = "Re-pinning is the one deliberate way to change which descriptor a tool runs; it shows up in review as a change to the manifest."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-010", "TERM-014"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-048"
+title = "Re-fetches and re-pins"
+body = "`slcr tools update NAME` MUST re-fetch the descriptor of the tool declared as NAME from its recorded source, check and install it as `slcr tools add` does, and re-pin the entry, editing only its `version` and `pin` values in place, so that the rest of the manifest, comments and spacing included, stays as it was. It reports `updated tool NAME OLD -> NEW`, or `re-pinned tool NAME VERSION` when only the bytes changed. The descriptor it replaces MUST stay in the store, where other projects may pin it."
+modality = "MUST"
+refines = ["REQ-047"]
+dependsOn = ["REQ-045"]
+usesTerm = ["TERM-003", "TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-140"
+title = "Installs and pins a new version"
+body = "After the project's cargo-nextest descriptor is bumped to 1.1.0, `slcr tools update cargo-nextest` reports `updated tool cargo-nextest 1.0.0 -> 1.1.0`, re-pins the entry, and the store holds both descriptors."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-141"
+title = "Re-pins an edited descriptor"
+body = "After a comment is added to the descriptor, `slcr tools update cargo-nextest` reports `re-pinned tool cargo-nextest 1.0.0` and pins the edited bytes."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-142"
+title = "Keeps the rest of the manifest"
+body = "Updating a tool in a manifest with comments, aligned `=` signs, and a second tool changes only that tool's `version` and `pin` values."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-049"
+title = "Leaves an up-to-date tool alone"
+body = "When the source serves exactly the bytes the entry pins, `slcr tools update` MUST leave the manifest unchanged and report the tool up to date, installing the descriptor if the store lacks it."
+modality = "MUST"
+refines = ["REQ-047"]
+usesTerm = ["TERM-009"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-143"
+title = "Leaves an up-to-date tool alone"
+body = "`slcr tools update cargo-nextest` right after `slcr tools add` reports `SLCR.toml: tool cargo-nextest 1.0.0 is up to date` and leaves the manifest's bytes unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-144"
+title = "Installs a descriptor the store lost"
+body = "When the store lost the pinned descriptor, so that `slcr vet` fails, `slcr tools update` reports the tool up to date and installs it, after which `slcr vet` passes."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-050"
+title = "Changes nothing on failure"
+body = "A NAME the manifest doesn't declare, and a recorded source that can't be fetched, doesn't exist, leads outside the project (by a symlink, say), or serves bytes that aren't a valid descriptor, MUST fail the update, changing neither the manifest nor the store. So MUST a descriptor store that can't be created."
+modality = "MUST"
+refines = ["REQ-047"]
+dependsOn = ["REQ-045"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-145"
+title = "Requires a declared tool"
+body = "`slcr tools update jev`, when only cargo-nextest is declared, fails with help listing the declared tools, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-146"
+title = "Reports a missing descriptor"
+body = "When the recorded `path` no longer exists, the update fails, saying so, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-147"
+title = "Rejects a source that leads outside the project"
+body = "When the recorded `path` is a symlink to a file outside the project, the update fails, saying that it is outside the project."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-148"
+title = "Reports a failed fetch"
+body = "When the recorded `url` can't be reached, the update fails, saying why, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-149"
+title = "Rejects a descriptor that is not UTF-8"
+body = "When the source serves invalid UTF-8, the update fails, saying so, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-150"
+title = "Rejects a descriptor that breaks its schema"
+body = "When the source serves a descriptor with an unknown field, the update fails, labeling it, and installs nothing."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-151"
+title = "Rejects a descriptor that breaks an invariant"
+body = "When the source serves a descriptor whose argv uses an undeclared `with` field, the update fails, installs nothing, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-152"
+title = "Reports a descriptor store it cannot create"
+body = "When a file stands where the data directory would be, the update fails, saying that it could not create the descriptor store, and leaves the manifest unchanged."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-051"
+title = "tools update usage"
+body = "`slcr tools update` MUST describe itself and NAME when given `--help`."
+modality = "MUST"
+refines = ["REQ-047"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-153"
+title = "Describes itself"
+body = "`slcr tools update --help` describes NAME as the name the tool is declared under."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
