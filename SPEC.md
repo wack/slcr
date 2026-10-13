@@ -901,6 +901,7 @@ All of the following must hold:
 - [Names tools](#REQ-041)
 - [tools add](#REQ-042)
 - [tools update](#REQ-047)
+- [tools install](#REQ-052)
 
 *Terms:* [Project manifest](#TERM-003), [Tool](#TERM-014)
 
@@ -1165,6 +1166,106 @@ When a file stands where the data directory would be, the update fails, saying t
 <a id="AC-153"></a>**Describes itself**
 
 `slcr tools update --help` describes NAME as the name the tool is declared under.
+
+<a id="REQ-052"></a>
+#### 1.7.5 tools install
+
+`slcr tools` MUST have an `install` subcommand that fills the descriptor store with every descriptor the manifest pins, exactly as pinned.
+
+*Rationale:* Like `cargo fetch` or `terraform init`, it prepares a fresh clone, or a sandbox about to go offline, to vet and check the project.
+
+All of the following must hold:
+
+- [Installs what the store lacks](#REQ-053)
+- [Never re-pins](#REQ-054)
+- [Reports every tool](#REQ-055)
+- [tools install usage](#REQ-056)
+
+*Terms:* [Descriptor store](#TERM-009), [Pin](#TERM-010)
+
+<a id="REQ-053"></a>
+##### 1.7.5.1 Installs what the store lacks
+
+`slcr tools install` MUST install each descriptor that the manifest's tools pin and that the store lacks or holds corrupted. It fetches the descriptor from the tool's recorded source, and installs it only once its bytes hash to the pin, it is a valid descriptor, and its version is the declared one. A descriptor already installed MUST be left alone, unfetched. Each tool gets a status line on stdout: `installed PIN`, `installed PIN, replacing a corrupted copy`, `already installed`, or `failed`.
+
+*Depends on:* [Vets pinned descriptors](#REQ-018)
+
+*Terms:* [Descriptor store](#TERM-009), [Pin](#TERM-010)
+
+*Acceptance criteria:*
+
+<a id="AC-154"></a>**Installs every missing descriptor**
+
+With three tools declared and none installed, `slcr tools install` reports each `installed` with its abbreviated pin, files each descriptor's exact bytes in the store, and leaves the manifest unchanged.
+
+<a id="AC-155"></a>**Leaves installed descriptors alone**
+
+Run again after their sources are deleted, `slcr tools install` reports each tool `already installed` and succeeds, having fetched nothing.
+
+<a id="AC-156"></a>**Replaces a corrupted copy**
+
+When the store's copy no longer hashes to its pin, `slcr tools install` reports `installed PIN, replacing a corrupted copy` and restores the pinned bytes.
+
+<a id="AC-157"></a>**Prepares a fresh clone**
+
+In a fresh clone whose store is empty, `slcr vet` reports the tool's descriptor not installed; `slcr tools install` installs it; then `slcr vet` passes, and the manifest is unchanged.
+
+<a id="AC-158"></a>**Reports a manifest without tools**
+
+With no tools declared, `slcr tools install` says that there is nothing to install, and succeeds.
+
+<a id="REQ-054"></a>
+##### 1.7.5.2 Never re-pins
+
+`slcr tools install` MUST NOT write the manifest, nor install any bytes but the pinned ones. A source that now serves other bytes, a pinned descriptor that is invalid, and a declared version that isn't the pinned descriptor's each fail that tool, with help naming `slcr tools update` where re-pinning would fix it.
+
+*Rationale:* Installing is safe to run anywhere, in CI included, because it can only ever reproduce what was reviewed; changing what is pinned takes `slcr tools update`.
+
+*Terms:* [Pin](#TERM-010)
+
+*Acceptance criteria:*
+
+<a id="AC-159"></a>**Refuses a source that serves other bytes**
+
+When the source serves a newer descriptor than the pinned one, the tool fails, the help gives both pins and names `slcr tools update`, and neither the manifest nor the store changes.
+
+<a id="AC-160"></a>**Rejects a pinned descriptor that breaks an invariant**
+
+When the pin is of an invalid descriptor, the tool fails, explaining why it is invalid, and nothing is installed.
+
+<a id="AC-161"></a>**Rejects a version the manifest does not declare**
+
+When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, the tool fails as `slcr vet` reports it, and nothing is installed.
+
+<a id="REQ-055"></a>
+##### 1.7.5.3 Reports every tool
+
+One tool failing MUST NOT stop `slcr tools install` from installing the others. Each failure is a diagnostic on stderr, and the command fails, counting the tools that failed, if any did.
+
+*Acceptance criteria:*
+
+<a id="AC-162"></a>**Reports every tool**
+
+When one tool's source serves other bytes, one is installed, and one is not, the first is `failed`, the second `already installed`, and the third `installed`, and the command fails for 1 of 3 tools.
+
+<a id="AC-163"></a>**Reports a failed fetch**
+
+When a tool's `url` can't be reached, the tool fails, saying why, and neither the manifest nor the store changes.
+
+<a id="REQ-056"></a>
+##### 1.7.5.4 tools install usage
+
+`slcr tools install` MUST take no arguments, and MUST describe itself when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-164"></a>**Describes itself**
+
+`slcr tools install --help` describes what it installs, and that it never re-pins.
+
+<a id="AC-165"></a>**Takes no arguments**
+
+`slcr tools install cargo-nextest` is a usage error naming the unexpected argument.
 
 <a id="SEC-002"></a>
 ## 2. Glossary

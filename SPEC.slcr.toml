@@ -1410,6 +1410,125 @@ id = "AC-153"
 title = "Describes itself"
 body = "`slcr tools update --help` describes NAME as the name the tool is declared under."
 
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-052"
+title = "tools install"
+body = "`slcr tools` MUST have an `install` subcommand that fills the descriptor store with every descriptor the manifest pins, exactly as pinned."
+rationale = "Like `cargo fetch` or `terraform init`, it prepares a fresh clone, or a sandbox about to go offline, to vet and check the project."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-009", "TERM-010"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-053"
+title = "Installs what the store lacks"
+body = "`slcr tools install` MUST install each descriptor that the manifest's tools pin and that the store lacks or holds corrupted. It fetches the descriptor from the tool's recorded source, and installs it only once its bytes hash to the pin, it is a valid descriptor, and its version is the declared one. A descriptor already installed MUST be left alone, unfetched. Each tool gets a status line on stdout: `installed PIN`, `installed PIN, replacing a corrupted copy`, `already installed`, or `failed`."
+modality = "MUST"
+refines = ["REQ-052"]
+dependsOn = ["REQ-018"]
+usesTerm = ["TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-154"
+title = "Installs every missing descriptor"
+body = "With three tools declared and none installed, `slcr tools install` reports each `installed` with its abbreviated pin, files each descriptor's exact bytes in the store, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-155"
+title = "Leaves installed descriptors alone"
+body = "Run again after their sources are deleted, `slcr tools install` reports each tool `already installed` and succeeds, having fetched nothing."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-156"
+title = "Replaces a corrupted copy"
+body = "When the store's copy no longer hashes to its pin, `slcr tools install` reports `installed PIN, replacing a corrupted copy` and restores the pinned bytes."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-157"
+title = "Prepares a fresh clone"
+body = "In a fresh clone whose store is empty, `slcr vet` reports the tool's descriptor not installed; `slcr tools install` installs it; then `slcr vet` passes, and the manifest is unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-158"
+title = "Reports a manifest without tools"
+body = "With no tools declared, `slcr tools install` says that there is nothing to install, and succeeds."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-054"
+title = "Never re-pins"
+body = "`slcr tools install` MUST NOT write the manifest, nor install any bytes but the pinned ones. A source that now serves other bytes, a pinned descriptor that is invalid, and a declared version that isn't the pinned descriptor's each fail that tool, with help naming `slcr tools update` where re-pinning would fix it."
+rationale = "Installing is safe to run anywhere, in CI included, because it can only ever reproduce what was reviewed; changing what is pinned takes `slcr tools update`."
+modality = "MUST NOT"
+refines = ["REQ-052"]
+usesTerm = ["TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-159"
+title = "Refuses a source that serves other bytes"
+body = "When the source serves a newer descriptor than the pinned one, the tool fails, the help gives both pins and names `slcr tools update`, and neither the manifest nor the store changes."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-160"
+title = "Rejects a pinned descriptor that breaks an invariant"
+body = "When the pin is of an invalid descriptor, the tool fails, explaining why it is invalid, and nothing is installed."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-161"
+title = "Rejects a version the manifest does not declare"
+body = "When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, the tool fails as `slcr vet` reports it, and nothing is installed."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-055"
+title = "Reports every tool"
+body = "One tool failing MUST NOT stop `slcr tools install` from installing the others. Each failure is a diagnostic on stderr, and the command fails, counting the tools that failed, if any did."
+modality = "MUST NOT"
+refines = ["REQ-052"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-162"
+title = "Reports every tool"
+body = "When one tool's source serves other bytes, one is installed, and one is not, the first is `failed`, the second `already installed`, and the third `installed`, and the command fails for 1 of 3 tools."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-163"
+title = "Reports a failed fetch"
+body = "When a tool's `url` can't be reached, the tool fails, saying why, and neither the manifest nor the store changes."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-056"
+title = "tools install usage"
+body = "`slcr tools install` MUST take no arguments, and MUST describe itself when given `--help`."
+modality = "MUST"
+refines = ["REQ-052"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-164"
+title = "Describes itself"
+body = "`slcr tools install --help` describes what it installs, and that it never re-pins."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-165"
+title = "Takes no arguments"
+body = "`slcr tools install cargo-nextest` is a usage error naming the unexpected argument."
+
 [glossary]
 kind = "section"
 id = "SEC-002"

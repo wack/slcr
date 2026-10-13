@@ -1047,3 +1047,77 @@ requirement = "slcr/REQ-051"
 criterion = "AC-153"
 tool = "cargo-insta"
 with = { target = "cli", test = "tools::tools_update_help" }
+
+# slcr tools install
+
+[[validator]]
+requirement = "slcr/REQ-053"
+criterion = "AC-154"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_installs_every_missing_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-053"
+criterion = "AC-155"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_leaves_installed_descriptors_alone" }
+
+[[validator]]
+requirement = "slcr/REQ-053"
+criterion = "AC-156"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_replaces_a_corrupted_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-053"
+criterion = "AC-157"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_installs_what_vet_reports_missing" }
+
+[[validator]]
+requirement = "slcr/REQ-053"
+criterion = "AC-158"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_reports_a_manifest_without_tools" }
+
+[[validator]]
+requirement = "slcr/REQ-054"
+criterion = "AC-159"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_refuses_a_source_that_serves_other_bytes" }
+
+[[validator]]
+requirement = "slcr/REQ-054"
+criterion = "AC-160"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_rejects_a_pinned_descriptor_that_breaks_an_invariant" }
+
+[[validator]]
+requirement = "slcr/REQ-054"
+criterion = "AC-161"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_rejects_a_version_the_manifest_does_not_declare" }
+
+[[validator]]
+requirement = "slcr/REQ-055"
+criterion = "AC-162"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_reports_every_tool" }
+
+[[validator]]
+requirement = "slcr/REQ-055"
+criterion = "AC-163"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_reports_a_failed_fetch" }
+
+[[validator]]
+requirement = "slcr/REQ-056"
+criterion = "AC-164"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_help" }
+
+[[validator]]
+requirement = "slcr/REQ-056"
+criterion = "AC-165"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_takes_no_arguments" }
