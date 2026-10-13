@@ -953,6 +953,136 @@ id = "AC-105"
 title = "Rejects an unsupported format"
 body = "`slcr query \"RETURN 1\" SPEC.md` fails, listing the supported extensions."
 
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-034"
+title = "slice"
+body = "`slcr` MUST have a `slice` subcommand that writes the slice of one requirement: everything in the specification needed to understand and implement it, and nothing more, as Markdown."
+rationale = "An agent implementing one requirement works best with a bounded, self-contained context. The slice gives it exactly that, instead of the whole document or a hand-picked excerpt that misses a dependency."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-013"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-035"
+title = "Writes the slice"
+body = "`slcr slice REQUIREMENT [FILE]` MUST write the slice of REQUIREMENT in the specification in FILE, by default `SPEC.slcr.toml`, whatever its format, to stdout as Markdown, and write no file. The slice MUST hold the requirement's ancestors as headings with their bodies; the requirement and the requirements that refine it, in full; what it refines, and the `dependsOn` closure of it and its refinements, under \"Related requirements\", each with a breadcrumb of its ancestors; and a Glossary of the terms all of these use. Nodes keep their document numbers, and a reference to a node the slice leaves out is its plain title, so every link resolves within the slice."
+modality = "MUST"
+refines = ["REQ-034"]
+usesTerm = ["TERM-011", "TERM-013"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-106"
+title = "Slices from the well-known file"
+body = "`slcr slice REQ-005` beside the canon example in `SPEC.slcr.toml` writes the controller's slice to stdout and creates no file."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-107"
+title = "Matches the golden slice in every format"
+body = "The canon example in YAML, JSON, and TOML each slices REQ-005 to exactly the golden file `tests/fixtures/todo-api.REQ-005.md`, with nothing on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-108"
+title = "Brings a shared requirement's other parent"
+body = "REQ-004, which is housed under REQ-002 and also refines REQ-003, slices to a document holding its ancestors and, under \"Related requirements\", REQ-003 with its breadcrumb."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-109"
+title = "Brings refinements housed elsewhere"
+body = "The slice of REQ-003 holds REQ-004, which refines it though it is housed under REQ-002."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-036"
+title = "Slices only a sound specification"
+body = "`slcr slice` MUST write the specification's findings to stderr as `slcr vet` reports them, slice a specification whose findings are only warnings, and refuse one that breaks an invariant."
+modality = "MUST"
+refines = ["REQ-034"]
+dependsOn = ["REQ-012"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-110"
+title = "Slices despite warnings"
+body = "A specification with a warning is sliced, with the warning on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-111"
+title = "Refuses a broken specification"
+body = "A specification with a violation is not sliced: the violation is on stderr, with help to fix it."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-037"
+title = "Names one requirement"
+body = "REQUIREMENT MUST be a requirement ID spelled canonically, such as `REQ-005`; anything else, including the ID of a Section or another kind of node, MUST be a usage error. An ID that the specification lacks MUST fail, with help showing how to list its requirements."
+modality = "MUST"
+refines = ["REQ-034"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-112"
+title = "Reports a requirement the specification lacks"
+body = "`slcr slice REQ-099` fails, saying that `SPEC.slcr.toml` has no REQ-099, with help giving a `slcr query` that lists the requirements."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-113"
+title = "Rejects an invalid requirement ID"
+body = "`slcr slice REQ-5` is a usage error saying that it is not a valid requirement ID."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-114"
+title = "Rejects an ID of another kind"
+body = "`slcr slice SEC-001` is a usage error saying that it is not a valid requirement ID."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-038"
+title = "slice usage"
+body = "`slcr slice` MUST require a REQUIREMENT, take at most one FILE, fail on a FILE that can't be read or names no supported format, and describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-034"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-115"
+title = "Describes itself"
+body = "`slcr slice --help` describes REQUIREMENT, and FILE and its default."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-116"
+title = "Requires a requirement"
+body = "`slcr slice` alone is a usage error naming `<REQUIREMENT>`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-117"
+title = "Takes at most one file"
+body = "`slcr slice REQ-001 a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-118"
+title = "Reports a missing file"
+body = "`slcr slice REQ-001` without `SPEC.slcr.toml` fails, saying it could not read it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-119"
+title = "Rejects an unsupported format"
+body = "`slcr slice REQ-001 SPEC.md` fails, listing the supported extensions."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
@@ -1031,3 +1161,9 @@ kind = "term"
 id = "TERM-012"
 title = "SLCR query profile"
 definition = "The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `PROFILE.md` in `wack/gql-rust` specifies it."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-013"
+title = "Slice"
+definition = "The part of a specification that one requirement needs, rendered like the whole document: the requirement's ancestors (bodies only), the requirement and its refinement descendants in full, what it refines, the requirements it and its descendants depend on, and the terms all of them use. A node included for several reasons is shown in the most detail any of them calls for."

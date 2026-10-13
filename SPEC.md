@@ -780,6 +780,114 @@ A specification with a violation is not queried: the violation is on stderr, wit
 
 `slcr query "RETURN 1" SPEC.md` fails, listing the supported extensions.
 
+<a id="REQ-034"></a>
+### 1.6 slice
+
+`slcr` MUST have a `slice` subcommand that writes the slice of one requirement: everything in the specification needed to understand and implement it, and nothing more, as Markdown.
+
+*Rationale:* An agent implementing one requirement works best with a bounded, self-contained context. The slice gives it exactly that, instead of the whole document or a hand-picked excerpt that misses a dependency.
+
+All of the following must hold:
+
+- [Writes the slice](#REQ-035)
+- [Slices only a sound specification](#REQ-036)
+- [Names one requirement](#REQ-037)
+- [slice usage](#REQ-038)
+
+*Terms:* [Slice](#TERM-013)
+
+<a id="REQ-035"></a>
+#### 1.6.1 Writes the slice
+
+`slcr slice REQUIREMENT [FILE]` MUST write the slice of REQUIREMENT in the specification in FILE, by default `SPEC.slcr.toml`, whatever its format, to stdout as Markdown, and write no file. The slice MUST hold the requirement's ancestors as headings with their bodies; the requirement and the requirements that refine it, in full; what it refines, and the `dependsOn` closure of it and its refinements, under "Related requirements", each with a breadcrumb of its ancestors; and a Glossary of the terms all of these use. Nodes keep their document numbers, and a reference to a node the slice leaves out is its plain title, so every link resolves within the slice.
+
+*Terms:* [Rendering](#TERM-011), [Slice](#TERM-013)
+
+*Acceptance criteria:*
+
+<a id="AC-106"></a>**Slices from the well-known file**
+
+`slcr slice REQ-005` beside the canon example in `SPEC.slcr.toml` writes the controller's slice to stdout and creates no file.
+
+<a id="AC-107"></a>**Matches the golden slice in every format**
+
+The canon example in YAML, JSON, and TOML each slices REQ-005 to exactly the golden file `tests/fixtures/todo-api.REQ-005.md`, with nothing on stderr.
+
+<a id="AC-108"></a>**Brings a shared requirement's other parent**
+
+REQ-004, which is housed under REQ-002 and also refines REQ-003, slices to a document holding its ancestors and, under "Related requirements", REQ-003 with its breadcrumb.
+
+<a id="AC-109"></a>**Brings refinements housed elsewhere**
+
+The slice of REQ-003 holds REQ-004, which refines it though it is housed under REQ-002.
+
+<a id="REQ-036"></a>
+#### 1.6.2 Slices only a sound specification
+
+`slcr slice` MUST write the specification's findings to stderr as `slcr vet` reports them, slice a specification whose findings are only warnings, and refuse one that breaks an invariant.
+
+*Depends on:* [Vets requirements files](#REQ-012)
+
+*Terms:* [Finding](#TERM-005)
+
+*Acceptance criteria:*
+
+<a id="AC-110"></a>**Slices despite warnings**
+
+A specification with a warning is sliced, with the warning on stderr.
+
+<a id="AC-111"></a>**Refuses a broken specification**
+
+A specification with a violation is not sliced: the violation is on stderr, with help to fix it.
+
+<a id="REQ-037"></a>
+#### 1.6.3 Names one requirement
+
+REQUIREMENT MUST be a requirement ID spelled canonically, such as `REQ-005`; anything else, including the ID of a Section or another kind of node, MUST be a usage error. An ID that the specification lacks MUST fail, with help showing how to list its requirements.
+
+*Acceptance criteria:*
+
+<a id="AC-112"></a>**Reports a requirement the specification lacks**
+
+`slcr slice REQ-099` fails, saying that `SPEC.slcr.toml` has no REQ-099, with help giving a `slcr query` that lists the requirements.
+
+<a id="AC-113"></a>**Rejects an invalid requirement ID**
+
+`slcr slice REQ-5` is a usage error saying that it is not a valid requirement ID.
+
+<a id="AC-114"></a>**Rejects an ID of another kind**
+
+`slcr slice SEC-001` is a usage error saying that it is not a valid requirement ID.
+
+<a id="REQ-038"></a>
+#### 1.6.4 slice usage
+
+`slcr slice` MUST require a REQUIREMENT, take at most one FILE, fail on a FILE that can't be read or names no supported format, and describe itself, its arguments, and its options when given `--help`.
+
+*Terms:* [Requirements file](#TERM-002)
+
+*Acceptance criteria:*
+
+<a id="AC-115"></a>**Describes itself**
+
+`slcr slice --help` describes REQUIREMENT, and FILE and its default.
+
+<a id="AC-116"></a>**Requires a requirement**
+
+`slcr slice` alone is a usage error naming `<REQUIREMENT>`.
+
+<a id="AC-117"></a>**Takes at most one file**
+
+`slcr slice REQ-001 a.yaml b.yaml` is a usage error naming `b.yaml`.
+
+<a id="AC-118"></a>**Reports a missing file**
+
+`slcr slice REQ-001` without `SPEC.slcr.toml` fails, saying it could not read it.
+
+<a id="AC-119"></a>**Rejects an unsupported format**
+
+`slcr slice REQ-001 SPEC.md` fails, listing the supported extensions.
+
 <a id="SEC-002"></a>
 ## 2. Glossary
 
@@ -832,6 +940,12 @@ A file that holds one specification, in the format its extension names: YAML (`.
 <dd>
 
 The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `PROFILE.md` in `wack/gql-rust` specifies it.
+
+</dd>
+<dt><a id="TERM-013"></a>Slice</dt>
+<dd>
+
+The part of a specification that one requirement needs, rendered like the whole document: the requirement's ancestors (bodies only), the requirement and its refinement descendants in full, what it refines, the requirements it and its descendants depend on, and the terms all of them use. A node included for several reasons is shown in the most detail any of them calls for.
 
 </dd>
 <dt><a id="TERM-001"></a>Specification</dt>

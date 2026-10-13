@@ -661,3 +661,89 @@ requirement = "slcr/REQ-033"
 criterion = "AC-105"
 tool = "cargo-insta"
 with = { target = "cli", test = "query::query_rejects_an_unsupported_format" }
+
+# slcr slice
+
+[[validator]]
+requirement = "slcr/REQ-035"
+criterion = "AC-106"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_reads_the_well_known_file" }
+
+[[validator]]
+requirement = "slcr/REQ-035"
+criterion = "AC-107"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_reads_the_file_in_every_format" }
+
+[[validator]]
+requirement = "slcr/REQ-035"
+criterion = "AC-108"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_brings_a_shared_requirement_s_parents" }
+
+[[validator]]
+requirement = "slcr/REQ-035"
+criterion = "AC-109"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_brings_refinements_housed_elsewhere" }
+
+[[validator]]
+requirement = "slcr/REQ-036"
+criterion = "AC-110"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_reports_warnings_and_slices_anyway" }
+
+[[validator]]
+requirement = "slcr/REQ-036"
+criterion = "AC-111"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_refuses_a_specification_that_breaks_its_invariants" }
+
+[[validator]]
+requirement = "slcr/REQ-037"
+criterion = "AC-112"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_reports_a_requirement_the_specification_lacks" }
+
+[[validator]]
+requirement = "slcr/REQ-037"
+criterion = "AC-113"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_rejects_an_invalid_requirement_id" }
+
+[[validator]]
+requirement = "slcr/REQ-037"
+criterion = "AC-114"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_rejects_an_id_of_another_kind" }
+
+[[validator]]
+requirement = "slcr/REQ-038"
+criterion = "AC-115"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_help" }
+
+[[validator]]
+requirement = "slcr/REQ-038"
+criterion = "AC-116"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_requires_a_requirement" }
+
+[[validator]]
+requirement = "slcr/REQ-038"
+criterion = "AC-117"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_takes_only_one_file" }
+
+[[validator]]
+requirement = "slcr/REQ-038"
+criterion = "AC-118"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_reports_a_missing_file" }
+
+[[validator]]
+requirement = "slcr/REQ-038"
+criterion = "AC-119"
+tool = "cargo-insta"
+with = { target = "cli", test = "slice::slice_rejects_an_unsupported_format" }
