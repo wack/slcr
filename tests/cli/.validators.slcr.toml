@@ -497,3 +497,167 @@ requirement = "slcr/REQ-026"
 criterion = "AC-078"
 tool = "cargo-insta"
 with = { target = "cli", test = "render::render_reports_a_missing_file" }
+
+# slcr query
+
+[[validator]]
+requirement = "slcr/REQ-028"
+criterion = "AC-079"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reads_the_well_known_file" }
+
+[[validator]]
+requirement = "slcr/REQ-028"
+criterion = "AC-080"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reads_the_file_in_every_format" }
+
+[[validator]]
+requirement = "slcr/REQ-028"
+criterion = "AC-081"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_names_nodes_and_edges_by_id" }
+
+[[validator]]
+requirement = "slcr/REQ-028"
+criterion = "AC-082"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_names_nodes_in_lists_by_id" }
+
+[[validator]]
+requirement = "slcr/REQ-028"
+criterion = "AC-083"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_no_rows" }
+
+[[validator]]
+requirement = "slcr/REQ-029"
+criterion = "AC-084"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_binds_params" }
+
+[[validator]]
+requirement = "slcr/REQ-029"
+criterion = "AC-085"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_rejects_a_param_bound_twice" }
+
+[[validator]]
+requirement = "slcr/REQ-029"
+criterion = "AC-086"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_rejects_a_param_that_is_not_json" }
+
+[[validator]]
+requirement = "slcr/REQ-029"
+criterion = "AC-087"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_rejects_a_param_without_a_value" }
+
+[[validator]]
+requirement = "slcr/REQ-029"
+criterion = "AC-088"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_rejects_a_param_named_with_a_dollar" }
+
+[[validator]]
+requirement = "slcr/REQ-030"
+criterion = "AC-089"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_writes_a_table_explicitly" }
+
+[[validator]]
+requirement = "slcr/REQ-030"
+criterion = "AC-090"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_writes_tsv" }
+
+[[validator]]
+requirement = "slcr/REQ-030"
+criterion = "AC-091"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_writes_json" }
+
+[[validator]]
+requirement = "slcr/REQ-030"
+criterion = "AC-092"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_rejects_an_unknown_format" }
+
+[[validator]]
+requirement = "slcr/REQ-031"
+criterion = "AC-093"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_a_syntax_error" }
+
+[[validator]]
+requirement = "slcr/REQ-031"
+criterion = "AC-094"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_a_syntax_error_before_reading_the_file" }
+
+[[validator]]
+requirement = "slcr/REQ-031"
+criterion = "AC-095"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_a_feature_outside_the_profile" }
+
+[[validator]]
+requirement = "slcr/REQ-031"
+criterion = "AC-096"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_an_invalid_query" }
+
+[[validator]]
+requirement = "slcr/REQ-031"
+criterion = "AC-097"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_a_missing_param" }
+
+[[validator]]
+requirement = "slcr/REQ-031"
+criterion = "AC-098"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_a_query_that_fails" }
+
+[[validator]]
+requirement = "slcr/REQ-032"
+criterion = "AC-099"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_warnings_and_queries_anyway" }
+
+[[validator]]
+requirement = "slcr/REQ-032"
+criterion = "AC-100"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_refuses_a_specification_that_breaks_its_invariants" }
+
+[[validator]]
+requirement = "slcr/REQ-033"
+criterion = "AC-101"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_help" }
+
+[[validator]]
+requirement = "slcr/REQ-033"
+criterion = "AC-102"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_requires_a_query" }
+
+[[validator]]
+requirement = "slcr/REQ-033"
+criterion = "AC-103"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_takes_only_one_file" }
+
+[[validator]]
+requirement = "slcr/REQ-033"
+criterion = "AC-104"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_reports_a_missing_file" }
+
+[[validator]]
+requirement = "slcr/REQ-033"
+criterion = "AC-105"
+tool = "cargo-insta"
+with = { target = "cli", test = "query::query_rejects_an_unsupported_format" }

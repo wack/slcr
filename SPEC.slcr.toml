@@ -726,6 +726,233 @@ id = "AC-078"
 title = "Reports a missing file"
 body = "`slcr render` without `SPEC.slcr.toml` fails, saying it could not read it."
 
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-027"
+title = "query"
+body = "`slcr` MUST have a `query` subcommand that runs a read-only query, in the SLCR query profile of GQL, against the graph of a specification, and writes the rows it returns."
+rationale = "Agents and people ask structural questions of a specification, such as what transitively refines a requirement or which MUST requirements lack acceptance criteria. A query answers them from the graph without anyone parsing YAML, JSON, or TOML by hand."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-012"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-028"
+title = "Runs queries"
+body = "`slcr query QUERY [FILE]` MUST run QUERY against the graph of the specification in FILE, by default `SPEC.slcr.toml`, whatever its format, and write the rows to stdout. A node MUST be written as its SLCR ID wherever it appears, inside lists too, and an edge as `(SOURCE)-[:LABEL]->(TARGET)`."
+modality = "MUST"
+refines = ["REQ-027"]
+usesTerm = ["TERM-001", "TERM-012"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-079"
+title = "Reads the well-known file"
+body = "Against the canon example in `SPEC.slcr.toml`, a query for what transitively refines REQ-001 writes REQ-002, REQ-003, and REQ-004 with their modalities, and `(3 rows)`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-080"
+title = "Reads every format alike"
+body = "The same query against the canon example in YAML, JSON, and TOML succeeds with identical output."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-081"
+title = "Names nodes and edges by ID"
+body = "Returning a requirement, its `REFINES` edges, and their targets writes `REQ-004`, `(REQ-004)-[:REFINES]->(REQ-002)`, and `REQ-002`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-082"
+title = "Names nodes in lists by ID"
+body = "`collect_list` of each Section's children writes lists of IDs, such as `[SEC-002, SEC-003, SEC-004, SEC-005, SEC-006]`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-083"
+title = "Reports no rows"
+body = "A query that matches nothing writes its header and `(0 rows)`, and succeeds."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-029"
+title = "Binds parameters"
+body = "`slcr query --param NAME=JSON` (or `-p NAME=JSON`) MUST bind the parameter `$NAME` to the JSON value, once per name. A value that isn't JSON, an argument without `=`, and a name written with its `$` MUST be usage errors, and binding a name twice MUST be an error."
+rationale = "Parameters keep values out of the query text, so a script never has to quote an ID into GQL."
+modality = "MUST"
+refines = ["REQ-027"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-084"
+title = "Binds parameters"
+body = "`--param modality='\"MAY\"'` and `-p 'ids=[\"REQ-009\", \"REQ-010\", \"REQ-099\"]'` bind a string and a list, and the query writes REQ-009 and REQ-010."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-085"
+title = "Rejects a parameter bound twice"
+body = "`-p n=1 -p n=2` fails, saying that `$n` is bound more than once."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-086"
+title = "Rejects a value that is not JSON"
+body = "`--param id=REQ-001` is a usage error whose message shows how to quote a JSON string."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-087"
+title = "Rejects a parameter without a value"
+body = "`--param id` is a usage error expecting `NAME=JSON`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-088"
+title = "Rejects a name written with its dollar"
+body = "`--param '$id=1'` is a usage error saying to drop the `$`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-030"
+title = "Writes rows in a chosen format"
+body = "`slcr query` MUST write rows as an aligned table, with a header, a rule, and a row count, by default or under `--format table`; as tab-separated values with a header line under `--format tsv`; and as one JSON document of `columns` and `rows` under `--format json`, in which an edge is an object of its `label`, `source`, and `target`. Any other format MUST be a usage error."
+modality = "MUST"
+refines = ["REQ-027"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-089"
+title = "Writes a table"
+body = "`--format table` writes the aligned table with `(1 row)`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-090"
+title = "Writes TSV"
+body = "`--format tsv` writes a header line and one tab-separated line per row, a null as an empty field."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-091"
+title = "Writes JSON"
+body = "`--format json` writes `columns` and `rows`, an edge as an object of `label`, `source`, and `target`, and numbers, nulls, booleans, and lists as JSON."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-092"
+title = "Rejects an unknown format"
+body = "`--format csv` is a usage error listing `table`, `tsv`, and `json`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-031"
+title = "Explains a query that can't run"
+body = "A query that can't run MUST fail with an explanation: a syntax error, or a feature outside the profile, labeled where it is in the query, the latter with help linking the profile; an undefined variable or a missing parameter as an invalid query; and an error raised while running, such as arithmetic on a string, as a failed query. The query MUST be parsed before FILE is read."
+rationale = "Parsing first reports a typo in the query immediately, even when the file is large or missing."
+modality = "MUST"
+refines = ["REQ-027"]
+usesTerm = ["TERM-012"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-093"
+title = "Labels a syntax error"
+body = "`MATCH (r:Requirement RETURN r` fails as not valid GQL, labeling `RETURN` with what was expected."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-094"
+title = "Parses before reading the file"
+body = "A query with a syntax error, given a FILE that doesn't exist, reports the syntax error, not the missing file."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-095"
+title = "Labels a feature outside the profile"
+body = "`OPTIONAL MATCH` fails, labeling `OPTIONAL` as outside the profile, with help linking `PROFILE.md`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-096"
+title = "Reports an undefined variable"
+body = "`MATCH (r) RETURN s` fails as invalid, naming the undefined variable `s`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-097"
+title = "Reports a missing parameter"
+body = "A query using `$id` with no `--param id=...` fails as invalid, naming `$id`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-098"
+title = "Reports a query that fails while running"
+body = "`MATCH (r) RETURN r.id + 1` fails, explaining the arithmetic on a string and an integer."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-032"
+title = "Queries only a sound specification"
+body = "`slcr query` MUST write the specification's findings to stderr as `slcr vet` reports them, query a specification whose findings are only warnings, and refuse one that breaks an invariant."
+modality = "MUST"
+refines = ["REQ-027"]
+dependsOn = ["REQ-012"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-099"
+title = "Queries despite warnings"
+body = "A specification with a warning is queried, with the warning on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-100"
+title = "Refuses a broken specification"
+body = "A specification with a violation is not queried: the violation is on stderr, with help to fix it."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-033"
+title = "query usage"
+body = "`slcr query` MUST require a QUERY, take at most one FILE, fail on a FILE that can't be read or names no supported format, and describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-027"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-101"
+title = "Describes itself"
+body = "`slcr query --help` describes QUERY, FILE and its default, `--param`, and `--format`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-102"
+title = "Requires a query"
+body = "`slcr query` alone is a usage error naming `<QUERY>`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-103"
+title = "Takes at most one file"
+body = "`slcr query \"RETURN 1\" a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-104"
+title = "Reports a missing file"
+body = "`slcr query \"RETURN 1\"` without `SPEC.slcr.toml` fails, saying it could not read it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-105"
+title = "Rejects an unsupported format"
+body = "`slcr query \"RETURN 1\" SPEC.md` fails, listing the supported extensions."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
@@ -798,3 +1025,9 @@ kind = "term"
 id = "TERM-011"
 title = "Rendering"
 definition = "The canonical Markdown of a specification: a comment saying that `slcr` generated it, then every Section and Requirement as a numbered heading, in document order, with its body, rationale, refinements, dependencies, terms, and acceptance criteria, and finally the Glossary. Every node is preceded by a hidden anchor named by its ID, and every cross-reference is a link to one, so IDs never appear in the visible text."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-012"
+title = "SLCR query profile"
+definition = "The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `PROFILE.md` in `wack/gql-rust` specifies it."

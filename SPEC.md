@@ -598,6 +598,188 @@ A specification with a violation fails to render, with the violation on stderr a
 
 `slcr render` without `SPEC.slcr.toml` fails, saying it could not read it.
 
+<a id="REQ-027"></a>
+### 1.5 query
+
+`slcr` MUST have a `query` subcommand that runs a read-only query, in the SLCR query profile of GQL, against the graph of a specification, and writes the rows it returns.
+
+*Rationale:* Agents and people ask structural questions of a specification, such as what transitively refines a requirement or which MUST requirements lack acceptance criteria. A query answers them from the graph without anyone parsing YAML, JSON, or TOML by hand.
+
+All of the following must hold:
+
+- [Runs queries](#REQ-028)
+- [Binds parameters](#REQ-029)
+- [Writes rows in a chosen format](#REQ-030)
+- [Explains a query that can't run](#REQ-031)
+- [Queries only a sound specification](#REQ-032)
+- [query usage](#REQ-033)
+
+*Terms:* [SLCR query profile](#TERM-012)
+
+<a id="REQ-028"></a>
+#### 1.5.1 Runs queries
+
+`slcr query QUERY [FILE]` MUST run QUERY against the graph of the specification in FILE, by default `SPEC.slcr.toml`, whatever its format, and write the rows to stdout. A node MUST be written as its SLCR ID wherever it appears, inside lists too, and an edge as `(SOURCE)-[:LABEL]->(TARGET)`.
+
+*Terms:* [Specification](#TERM-001), [SLCR query profile](#TERM-012)
+
+*Acceptance criteria:*
+
+<a id="AC-079"></a>**Reads the well-known file**
+
+Against the canon example in `SPEC.slcr.toml`, a query for what transitively refines REQ-001 writes REQ-002, REQ-003, and REQ-004 with their modalities, and `(3 rows)`.
+
+<a id="AC-080"></a>**Reads every format alike**
+
+The same query against the canon example in YAML, JSON, and TOML succeeds with identical output.
+
+<a id="AC-081"></a>**Names nodes and edges by ID**
+
+Returning a requirement, its `REFINES` edges, and their targets writes `REQ-004`, `(REQ-004)-[:REFINES]->(REQ-002)`, and `REQ-002`.
+
+<a id="AC-082"></a>**Names nodes in lists by ID**
+
+`collect_list` of each Section's children writes lists of IDs, such as `[SEC-002, SEC-003, SEC-004, SEC-005, SEC-006]`.
+
+<a id="AC-083"></a>**Reports no rows**
+
+A query that matches nothing writes its header and `(0 rows)`, and succeeds.
+
+<a id="REQ-029"></a>
+#### 1.5.2 Binds parameters
+
+`slcr query --param NAME=JSON` (or `-p NAME=JSON`) MUST bind the parameter `$NAME` to the JSON value, once per name. A value that isn't JSON, an argument without `=`, and a name written with its `$` MUST be usage errors, and binding a name twice MUST be an error.
+
+*Rationale:* Parameters keep values out of the query text, so a script never has to quote an ID into GQL.
+
+*Acceptance criteria:*
+
+<a id="AC-084"></a>**Binds parameters**
+
+`--param modality='"MAY"'` and `-p 'ids=["REQ-009", "REQ-010", "REQ-099"]'` bind a string and a list, and the query writes REQ-009 and REQ-010.
+
+<a id="AC-085"></a>**Rejects a parameter bound twice**
+
+`-p n=1 -p n=2` fails, saying that `$n` is bound more than once.
+
+<a id="AC-086"></a>**Rejects a value that is not JSON**
+
+`--param id=REQ-001` is a usage error whose message shows how to quote a JSON string.
+
+<a id="AC-087"></a>**Rejects a parameter without a value**
+
+`--param id` is a usage error expecting `NAME=JSON`.
+
+<a id="AC-088"></a>**Rejects a name written with its dollar**
+
+`--param '$id=1'` is a usage error saying to drop the `$`.
+
+<a id="REQ-030"></a>
+#### 1.5.3 Writes rows in a chosen format
+
+`slcr query` MUST write rows as an aligned table, with a header, a rule, and a row count, by default or under `--format table`; as tab-separated values with a header line under `--format tsv`; and as one JSON document of `columns` and `rows` under `--format json`, in which an edge is an object of its `label`, `source`, and `target`. Any other format MUST be a usage error.
+
+*Acceptance criteria:*
+
+<a id="AC-089"></a>**Writes a table**
+
+`--format table` writes the aligned table with `(1 row)`.
+
+<a id="AC-090"></a>**Writes TSV**
+
+`--format tsv` writes a header line and one tab-separated line per row, a null as an empty field.
+
+<a id="AC-091"></a>**Writes JSON**
+
+`--format json` writes `columns` and `rows`, an edge as an object of `label`, `source`, and `target`, and numbers, nulls, booleans, and lists as JSON.
+
+<a id="AC-092"></a>**Rejects an unknown format**
+
+`--format csv` is a usage error listing `table`, `tsv`, and `json`.
+
+<a id="REQ-031"></a>
+#### 1.5.4 Explains a query that can't run
+
+A query that can't run MUST fail with an explanation: a syntax error, or a feature outside the profile, labeled where it is in the query, the latter with help linking the profile; an undefined variable or a missing parameter as an invalid query; and an error raised while running, such as arithmetic on a string, as a failed query. The query MUST be parsed before FILE is read.
+
+*Rationale:* Parsing first reports a typo in the query immediately, even when the file is large or missing.
+
+*Terms:* [SLCR query profile](#TERM-012)
+
+*Acceptance criteria:*
+
+<a id="AC-093"></a>**Labels a syntax error**
+
+`MATCH (r:Requirement RETURN r` fails as not valid GQL, labeling `RETURN` with what was expected.
+
+<a id="AC-094"></a>**Parses before reading the file**
+
+A query with a syntax error, given a FILE that doesn't exist, reports the syntax error, not the missing file.
+
+<a id="AC-095"></a>**Labels a feature outside the profile**
+
+`OPTIONAL MATCH` fails, labeling `OPTIONAL` as outside the profile, with help linking `PROFILE.md`.
+
+<a id="AC-096"></a>**Reports an undefined variable**
+
+`MATCH (r) RETURN s` fails as invalid, naming the undefined variable `s`.
+
+<a id="AC-097"></a>**Reports a missing parameter**
+
+A query using `$id` with no `--param id=...` fails as invalid, naming `$id`.
+
+<a id="AC-098"></a>**Reports a query that fails while running**
+
+`MATCH (r) RETURN r.id + 1` fails, explaining the arithmetic on a string and an integer.
+
+<a id="REQ-032"></a>
+#### 1.5.5 Queries only a sound specification
+
+`slcr query` MUST write the specification's findings to stderr as `slcr vet` reports them, query a specification whose findings are only warnings, and refuse one that breaks an invariant.
+
+*Depends on:* [Vets requirements files](#REQ-012)
+
+*Terms:* [Finding](#TERM-005)
+
+*Acceptance criteria:*
+
+<a id="AC-099"></a>**Queries despite warnings**
+
+A specification with a warning is queried, with the warning on stderr.
+
+<a id="AC-100"></a>**Refuses a broken specification**
+
+A specification with a violation is not queried: the violation is on stderr, with help to fix it.
+
+<a id="REQ-033"></a>
+#### 1.5.6 query usage
+
+`slcr query` MUST require a QUERY, take at most one FILE, fail on a FILE that can't be read or names no supported format, and describe itself, its arguments, and its options when given `--help`.
+
+*Terms:* [Requirements file](#TERM-002)
+
+*Acceptance criteria:*
+
+<a id="AC-101"></a>**Describes itself**
+
+`slcr query --help` describes QUERY, FILE and its default, `--param`, and `--format`.
+
+<a id="AC-102"></a>**Requires a query**
+
+`slcr query` alone is a usage error naming `<QUERY>`.
+
+<a id="AC-103"></a>**Takes at most one file**
+
+`slcr query "RETURN 1" a.yaml b.yaml` is a usage error naming `b.yaml`.
+
+<a id="AC-104"></a>**Reports a missing file**
+
+`slcr query "RETURN 1"` without `SPEC.slcr.toml` fails, saying it could not read it.
+
+<a id="AC-105"></a>**Rejects an unsupported format**
+
+`slcr query "RETURN 1" SPEC.md` fails, listing the supported extensions.
+
 <a id="SEC-002"></a>
 ## 2. Glossary
 
@@ -644,6 +826,12 @@ The canonical Markdown of a specification: a comment saying that `slcr` generate
 <dd>
 
 A file that holds one specification, in the format its extension names: YAML (`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`). The well-known one, which commands read when given no FILE, is `SPEC.slcr.toml`.
+
+</dd>
+<dt><a id="TERM-012"></a>SLCR query profile</dt>
+<dd>
+
+The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `PROFILE.md` in `wack/gql-rust` specifies it.
 
 </dd>
 <dt><a id="TERM-001"></a>Specification</dt>
