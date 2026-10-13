@@ -902,6 +902,7 @@ All of the following must hold:
 - [tools add](#REQ-042)
 - [tools update](#REQ-047)
 - [tools install](#REQ-052)
+- [tools remove](#REQ-057)
 
 *Terms:* [Project manifest](#TERM-003), [Tool](#TERM-014)
 
@@ -1266,6 +1267,58 @@ When a tool's `url` can't be reached, the tool fails, saying why, and neither th
 <a id="AC-165"></a>**Takes no arguments**
 
 `slcr tools install cargo-nextest` is a usage error naming the unexpected argument.
+
+<a id="REQ-057"></a>
+#### 1.7.6 tools remove
+
+`slcr tools` MUST have a `remove` subcommand that removes a tool from the project manifest.
+
+All of the following must hold:
+
+- [Removes the entry](#REQ-058)
+- [Requires a declared tool](#REQ-059)
+- [tools remove usage](#REQ-060)
+
+*Terms:* [Tool](#TERM-014)
+
+<a id="REQ-058"></a>
+##### 1.7.6.1 Removes the entry
+
+`slcr tools remove NAME` MUST delete the entry of the tool declared as NAME, with the comment above it, and the `tools` table too if no tool is left, keeping the rest of the manifest as it was, and report `removed tool NAME VERSION`. The tool's descriptor MUST stay in the store, where other projects may pin it.
+
+*Terms:* [Project manifest](#TERM-003), [Descriptor store](#TERM-009)
+
+*Acceptance criteria:*
+
+<a id="AC-166"></a>**Removes the entry**
+
+After `slcr tools add` then `slcr tools remove cargo-nextest`, the manifest is byte for byte what it was before the add, and the descriptor is still in the store.
+
+<a id="AC-167"></a>**Keeps the rest of the manifest**
+
+Removing one of two tools from a commented manifest removes that tool's entry and the comment above it, and nothing else.
+
+<a id="REQ-059"></a>
+##### 1.7.6.2 Requires a declared tool
+
+`slcr tools remove` MUST fail for a NAME the manifest doesn't declare, changing nothing, with help naming the tools it does declare, or `slcr tools add` if it declares none.
+
+*Acceptance criteria:*
+
+<a id="AC-168"></a>**Requires a declared tool**
+
+`slcr tools remove cargo-nextest` in a project that declares no tools fails, with help to declare one with `slcr tools add`, and leaves the manifest unchanged.
+
+<a id="REQ-060"></a>
+##### 1.7.6.3 tools remove usage
+
+`slcr tools remove` MUST describe itself and NAME when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-169"></a>**Describes itself**
+
+`slcr tools remove --help` describes NAME as the name the tool is declared under.
 
 <a id="SEC-002"></a>
 ## 2. Glossary

@@ -1121,3 +1121,29 @@ requirement = "slcr/REQ-056"
 criterion = "AC-165"
 tool = "cargo-insta"
 with = { target = "cli", test = "tools::tools_install_takes_no_arguments" }
+
+# slcr tools remove
+
+[[validator]]
+requirement = "slcr/REQ-058"
+criterion = "AC-166"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_removes_the_entry" }
+
+[[validator]]
+requirement = "slcr/REQ-058"
+criterion = "AC-167"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_keeps_the_rest_of_the_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-059"
+criterion = "AC-168"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_requires_a_declared_tool" }
+
+[[validator]]
+requirement = "slcr/REQ-060"
+criterion = "AC-169"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_remove_help" }
