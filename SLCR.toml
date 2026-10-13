@@ -1,0 +1,7 @@
+formatVersion = "1"
+specs = ["SPEC.slcr.toml"]
+
+[tools.cargo-insta]
+version = "1.0.0"
+source = { path = "tools/cargo-insta.toml" }
+pin = "blake3:5938a1a1f330618c38a831ff3651a55303f1e4f1460a3e91b02f4447df9d2414"

@@ -1,0 +1,2175 @@
+"$schema" = "https://slcr.io/reference/schemas/spec/v1.schema.json"
+formatVersion = "1"
+
+[spec]
+name = "slcr"
+
+[root]
+kind = "section"
+id = "SEC-001"
+title = "SLCR CLI"
+body = "The requirements of `slcr`, the reference command-line implementation of SLCR specifications, written as an SLCR specification and checked by `slcr check`."
+
+[[root.children]]
+kind = "section"
+id = "SEC-003"
+title = "Commands"
+body = "The subcommands `slcr` offers. Each is a requirement whose behaviors refine it, so a subcommand is satisfied exactly when all of its behaviors are. Unless a requirement says otherwise, a subcommand that succeeds exits with status 0, one that fails exits with status 1 and explains why on stderr, and a usage error, such as an unknown argument or a missing one, exits with status 2 and prints the subcommand's usage."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-001"
+title = "version"
+body = "`slcr` MUST have a `version` subcommand that prints the version of the running CLI."
+rationale = "Users and bug reports need to know which release of `slcr` produced an output."
+modality = "MUST"
+refinement = "AND"
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-002"
+title = "Prints the package version"
+body = "`slcr version` MUST write `v`, the package version from `Cargo.toml`, and a newline to stdout, write nothing to stderr, and exit with status 0."
+modality = "MUST"
+refines = ["REQ-001"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-001"
+title = "Prints the package version"
+body = "`slcr version`, given no arguments, exits with status 0 and writes exactly `v`, the package version from `Cargo.toml`, and a newline to stdout."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-003"
+title = "version usage"
+body = "`slcr version` MUST take no arguments, and MUST describe itself and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-001"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-002"
+title = "Describes itself"
+body = "`slcr version --help` exits with status 0 and prints what the subcommand does, its usage, and its options."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-003"
+title = "Rejects an argument"
+body = "`slcr version extra` is a usage error: it exits with status 2, names the unexpected argument, and prints the usage."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-004"
+title = "init"
+body = "`slcr` MUST have an `init` subcommand that creates a new specification, together with the project manifest that lists it when the working directory belongs to no project yet."
+rationale = "Starting a specification by hand means knowing the schema's required nodes and the manifest's format before writing a single requirement. `init` writes a valid starting point instead."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-001", "TERM-003"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-005"
+title = "Creates a specification"
+body = "`slcr init [FILE]` MUST create the requirements file FILE, by default `SPEC.slcr.toml` in the working directory, holding a new specification whose root Section is `SEC-001` and whose empty Glossary is `SEC-002`. It MUST write the format FILE's extension names, and report `FILE: created specification NAME` on stdout."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-001", "TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-004"
+title = "Creates the well-known file"
+body = "`slcr init` with no FILE, in a directory outside any project, creates `SPEC.slcr.toml` holding a TOML specification with a root Section `SEC-001` and an empty Glossary `SEC-002`, and reports it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-005"
+title = "Writes the format the file names"
+body = "`slcr init todo-api.spec.json` writes JSON, and `slcr init todo-api.slcr.yml` writes YAML."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-006"
+title = "Names and titles the specification"
+body = "The new specification MUST be named `--name`, or else after FILE's name without its extension and any `.slcr` or `.spec` suffix, or, for `SPEC.slcr.*`, after the name of its directory. Its root Section MUST be titled `--title`, or else after the name. A name that is not a valid specification name (lowercase letters and digits, in dash-separated words) is an error, never silently rewritten."
+rationale = "A name derived from a file name is a guess. Rewriting a bad guess into a valid name would give the specification a name nobody chose, which validators then have to spell."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-001"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-006"
+title = "Names the well-known file after its directory"
+body = "`slcr init` in a directory named `todo-api` creates a specification named `todo-api`, whose root Section is titled `todo-api`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-007"
+title = "Takes a name and a title"
+body = "`slcr init specs.yaml --name billing --title \"Billing Service\"` creates a specification named `billing` whose root Section is titled `Billing Service`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-008"
+title = "Never rewrites a derived name"
+body = "`slcr init \"My Spec.yaml\"` fails, creates nothing, and its help says that `My Spec` is not a valid name and suggests `--name`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-009"
+title = "Rejects an invalid name or title"
+body = "`--name \"Todo API\"` and `--title \" padded\"` are usage errors that say why the value is invalid."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-007"
+title = "Starts a project"
+body = "When neither the working directory nor any of its parents holds `SLCR.toml`, `slcr init` MUST also create `SLCR.toml` in the working directory, with `formatVersion` and a `specs` list holding FILE relative to it. Because `specs` holds globs, FILE MUST then be inside the working directory, contain no glob metacharacter, and not be named like the manifest."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-010"
+title = "Lists the new file"
+body = "`slcr init specs/api.slcr.toml` creates `SLCR.toml` whose `specs` is `[\"specs/api.slcr.toml\"]`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-011"
+title = "Rejects a file outside the working directory"
+body = "`slcr init ../SPEC.slcr.toml` outside any project fails, explains that `SLCR.toml` lists files relative to its own directory, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-012"
+title = "Rejects a path a glob would misread"
+body = "`slcr init \"[draft].slcr.toml\"` fails, names the characters to avoid, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-013"
+title = "Rejects a file named like the manifest"
+body = "`slcr init SLCR.toml` fails, suggests a name such as `SPEC.slcr.toml`, and creates nothing."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-008"
+title = "Joins an existing project"
+body = "When the working directory or a parent holds `SLCR.toml`, `slcr init` MUST leave it unchanged and say so, and MUST warn when its `specs` don't match the new file, when the new file is outside that project, or when the manifest can't be read to tell. A manifest whose name differs from `SLCR.toml` only in case MUST be an error."
+rationale = "Editing a hand-written manifest could reorder or drop its comments, so `init` only points out what to add. Rejecting a case-only near miss keeps case-insensitive filesystems, such as macOS's, from finding a project that Linux would not."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-014"
+title = "Leaves the manifest unchanged"
+body = "With `SLCR.toml` in the working directory, `slcr init` creates only the specification, reports that it left the manifest unchanged, and the manifest's bytes are unchanged."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-015"
+title = "Finds the manifest in a parent directory"
+body = "Run in `services/billing` below a directory holding `SLCR.toml`, `slcr init` creates `services/billing/SPEC.slcr.toml` named `billing` and reports the manifest as `../../SLCR.toml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-016"
+title = "Warns about a file the manifest doesn't list"
+body = "When the manifest's `specs` don't match the new file, `slcr init` succeeds with a warning whose help gives the entry to add to `specs`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-017"
+title = "Warns about a file outside the project"
+body = "`slcr init ../todo-api.slcr.toml` inside a project succeeds with a warning that the file is outside the project, whose `specs` can't list it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-018"
+title = "Warns about an unreadable manifest"
+body = "When `SLCR.toml` isn't valid TOML, `slcr init` still creates the specification, warns that it could not tell whether `specs` match it, and points at `slcr vet`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-019"
+title = "Rejects a misnamed manifest"
+body = "Below a directory holding `slcr.toml`, `slcr init` fails, says that the manifest's name is case-sensitive, and creates nothing."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-009"
+title = "Never overwrites"
+body = "`slcr init` MUST NOT overwrite an existing file, not even a dangling symlink, and MUST NOT create a missing directory. It creates the specification and the manifest together or not at all."
+rationale = "`init` runs where files may already exist; losing one to a typo is worse than retyping the command."
+modality = "MUST NOT"
+refines = ["REQ-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-020"
+title = "Refuses an existing file"
+body = "`slcr init todo-api.yaml`, when `todo-api.yaml` exists, fails, says that it already exists, and leaves it and the directory unchanged."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-021"
+title = "Refuses a missing directory"
+body = "`slcr init specs/todo-api.yaml`, when `specs` doesn't exist, fails with help to create the directory first, and creates nothing."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-010"
+title = "init usage"
+body = "`slcr init` MUST take at most one FILE, MUST reject a FILE whose extension names no supported format, and MUST describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-004"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-022"
+title = "Describes itself"
+body = "`slcr init --help` describes FILE and its default, `--name`, and `--title`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-023"
+title = "Takes at most one file"
+body = "`slcr init a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-024"
+title = "Rejects an unsupported format"
+body = "`slcr init SPEC.md` fails, lists the supported extensions, and creates nothing."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-011"
+title = "vet"
+body = "`slcr` MUST have a `vet` subcommand that checks requirements files, or a whole project, against every rule of the SLCR formats, including the invariants their schemas can't express, and reports every finding at once. It runs nothing and never uses the network."
+rationale = "Like `terraform validate`, vetting is fast, offline, and deterministic, so it can run on every save and in every sandbox, and it finds a broken specification before `check` spends time running validators against it."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-012"
+title = "Vets requirements files"
+body = "`slcr vet FILE...` MUST load each FILE and write its status to stdout (`ok`, its counts of violations and warnings, or `could not be loaded`) and each of its findings to stderr, labeled in the file's source where the problem has a location. A file that can't be read, can't be parsed, or names no supported format MUST be reported without stopping the others. `slcr vet` fails when any file could not be loaded or breaks an invariant."
+modality = "MUST"
+refines = ["REQ-011"]
+usesTerm = ["TERM-002", "TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-025"
+title = "Passes the canon example in every format"
+body = "`slcr vet` given the canon `todo-api` example as YAML, JSON, and TOML reports each file `ok` and exits with status 0."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-026"
+title = "Reports every finding in every file"
+body = "Given a valid file, one with a warning, one with a violation, one that isn't valid YAML, one with an invalid ID, a missing file, and a Markdown file, `slcr vet` reports a status for each of the seven, labels the invalid ID at its line, says that vetting failed for 5 of 7 files, and exits with status 1."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-013"
+title = "Warnings pass unless denied"
+body = "A warning MUST be reported without failing `slcr vet`, unless `--deny-warnings` is given, which makes any warning fail its file and the command."
+rationale = "Warnings flag what is probably a mistake, such as a body that never states its modality. Teams that want a clean specification can enforce one in CI without forcing it on every draft."
+modality = "MUST"
+refines = ["REQ-011"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-027"
+title = "Fails on a warning only when warnings are denied"
+body = "A file whose only finding is a warning passes `slcr vet` with the warning on stderr, and fails `slcr vet --deny-warnings` with help naming the flag."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-014"
+title = "Reports in JSON"
+body = "`slcr vet --format json` MUST write one JSON document to stdout instead of human output: whether vetting passed and, for each file, its path, whether it passed, its counts, and its findings, each with a kebab-case `code`, its fields, its severity, its message, and any help. A file that could not be loaded carries its error instead. In project mode, the document MUST also hold a `project` object for the manifest's problems and a `validators` array for the validator files. `--format human` is the default."
+rationale = "Agents and editors consume findings programmatically; a stable `code` lets them act on a kind of finding without parsing its prose."
+modality = "MUST"
+refines = ["REQ-011"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-028"
+title = "Reports files in JSON"
+body = "`slcr vet --format json` given the seven files of AC-026 writes one document whose files carry their findings or errors, and exits with status 1."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-029"
+title = "Reports denied warnings in JSON"
+body = "With `--deny-warnings`, a file whose only finding is a warning does not pass in the JSON document."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-030"
+title = "Reports the project in JSON"
+body = "In project mode, the document holds the manifest's problems in `project`, including a manifest that can't be parsed, alongside the files."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-031"
+title = "Reports validator and descriptor problems in JSON"
+body = "Validator files' problems appear in `validators`, and pinned descriptors' problems in `project`, each with its own `code`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-032"
+title = "Writes human output by default"
+body = "`slcr vet --format human` writes the human report: status lines on stdout and diagnostics on stderr."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-015"
+title = "Vets the project"
+body = "Given no FILE, `slcr vet` MUST vet the project: it finds `SLCR.toml` in the working directory or a parent, vets every requirements file the manifest's `specs` match, and reports the manifest as one more file with its own status. It names every file relative to the working directory. Outside a project, it MUST fail with help on creating a manifest, and a manifest whose name differs from `SLCR.toml` only in case MUST be an error."
+modality = "MUST"
+refines = ["REQ-011"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-033"
+title = "Vets the project"
+body = "In a project whose `specs` match three specifications, `slcr vet` reports `SLCR.toml: ok` and each specification `ok`, and exits with status 0."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-034"
+title = "Names files from the working directory"
+body = "Run in `docs/api`, `slcr vet` names the manifest `../../SLCR.toml` and the files beside it by their bare names."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-035"
+title = "Reports every finding in the project"
+body = "In a project holding a valid specification, one with a warning, one with a violation, and one that can't be parsed, `slcr vet --deny-warnings` reports all of them and fails."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-036"
+title = "Requires a project"
+body = "`slcr vet` with no FILE outside any project fails, and its help shows a minimal manifest."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-037"
+title = "Rejects a misnamed manifest"
+body = "`slcr vet` beside `slcr.toml` fails, saying that the manifest's name is case-sensitive."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-016"
+title = "Discovers specifications"
+body = "`slcr vet` MUST expand each `specs` pattern as a glob relative to the project root, in which `*` and `?` never cross a `/` and `**` does, seeing hidden files but skipping `.git` and whatever git ignores. A pattern that is invalid or matches nothing, a match that is a validator file or has no supported format's extension, and two files whose specifications share a name MUST each be a problem of the manifest, as MUST a manifest that breaks its schema, such as a pattern that leaves the project."
+rationale = "A pattern that silently matches nothing would leave a specification unvetted and unchecked while every command passes."
+modality = "MUST"
+refines = ["REQ-011"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-038"
+title = "Searches hidden directories and skips ignored files"
+body = "`docs/**/*.slcr.{json,toml}` matches a specification under `docs/.drafts` but not an unparsable one under a directory that `.gitignore` lists."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-039"
+title = "Reports a pattern that matches nothing"
+body = "A `specs` pattern that matches no file is a manifest problem whose help mentions typos and `.gitignore`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-040"
+title = "Reports an invalid pattern"
+body = "The pattern `specs/[a` is a manifest problem that explains the glob syntax."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-041"
+title = "Reports a pattern that matches a validator file"
+body = "A pattern matching `.validators.slcr.toml` is a manifest problem whose help shows how to narrow it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-042"
+title = "Reports a match of no supported format"
+body = "A pattern matching `notes.md` is a manifest problem that lists the supported extensions."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-043"
+title = "Reports duplicate specification names"
+body = "Two files that both name their specification `todo-api` are one manifest problem naming both files."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-044"
+title = "Rejects a pattern that leaves the project"
+body = "A manifest whose `specs` holds `../SPEC.slcr.yml` can't be loaded, and the error labels the pattern in `SLCR.toml`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-017"
+title = "Vets validator files"
+body = "In project mode, `slcr vet` MUST find every validator file in the project, however `specs` reads, by the same walk that finds specifications, and report each with a status line. Each problem MUST be labeled at its validator in the file's source: a requirement that doesn't resolve to a specification and a requirement in it, an acceptance criterion that isn't the requirement's own, a tool the manifest doesn't declare, a `with` that the tool's validator schema rejects (one problem per schema error), and a validator identical to an earlier one. Two validator files in one directory MUST be a problem of the manifest."
+modality = "MUST"
+refines = ["REQ-011"]
+usesTerm = ["TERM-006", "TERM-007"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-045"
+title = "Vets validator files in every format"
+body = "Validator files in TOML, JSON, and YAML are each reported `ok`, and one in a directory that `.gitignore` lists is skipped."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-046"
+title = "Names validator files from the working directory"
+body = "Run in `src/views`, `slcr vet` names validator files relative to it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-047"
+title = "Labels every problem at its validator"
+body = "A validator file with an unknown specification, an unknown requirement, another requirement's criterion, an undeclared tool, a `with` that breaks the schema twice, and a repeated validator reports 7 problems, each labeled in the file, with help listing what does exist."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-048"
+title = "Labels problems in JSON and YAML"
+body = "Problems in validator files written in JSON and in YAML are labeled at their location too."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-049"
+title = "Reports a validator file that breaks its schema"
+body = "A validator file whose `criterion` is `AC-1` can't be loaded, and the error labels the value."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-050"
+title = "Reports two validator files in one directory"
+body = "`.validators.slcr.toml` and `.validators.slcr.yml` in one directory are a manifest problem, and both files are still vetted."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-018"
+title = "Vets pinned descriptors"
+body = "For each tool the manifest declares, `slcr vet` MUST report a problem of the manifest when the descriptor store doesn't hold the descriptor the tool pins, holds bytes that don't hash to the pin, holds an invalid descriptor, or holds one whose version isn't the declared one, with help naming `slcr tools install` or `slcr tools update`, whichever fixes it. It MUST only read the store, never fetching or installing a descriptor."
+rationale = "Without its descriptor, `with` can't be checked against the tool's schema and the tool can't run; reporting that offline tells the user exactly which command restores it."
+modality = "MUST"
+refines = ["REQ-011"]
+usesTerm = ["TERM-008", "TERM-009", "TERM-010"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-051"
+title = "Reports a descriptor that is not installed"
+body = "When the store lacks a pinned descriptor, `slcr vet` reports it with help naming `slcr tools install`, skips checking `with` against its schema, and installs nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-052"
+title = "Reports a corrupted descriptor"
+body = "When the store's copy no longer hashes to its pin, `slcr vet` says so, with help naming `slcr tools install`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-053"
+title = "Reports an invalid descriptor"
+body = "When the pinned descriptor's argv names a `with` field its schema lacks, `slcr vet` reports why it is invalid, with help naming `slcr tools update`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-054"
+title = "Reports an undeclared version"
+body = "When the manifest declares version 0.9.0 but the pinned descriptor is 1.0.0, `slcr vet` reports both versions, with help naming `slcr tools update`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-019"
+title = "vet usage"
+body = "`slcr vet` MUST take any number of FILEs, MUST reject a `--format` other than `human` or `json`, and MUST describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-055"
+title = "Describes itself"
+body = "`slcr vet --help` describes FILE, project mode, `--deny-warnings`, and `--format`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-056"
+title = "Rejects an unknown format"
+body = "`slcr vet --format xml` is a usage error listing `human` and `json`."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-020"
+title = "render"
+body = "`slcr` MUST have a `render` subcommand that renders a specification as canonical Markdown, so that people can read it, and review changes to it, wherever they read code."
+rationale = "A rendering committed beside its specification shows up readably on GitHub and in code review, where the YAML, JSON, or TOML of a large graph does not."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-011"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-021"
+title = "Renders canonical Markdown"
+body = "`slcr render [FILE]` MUST render the specification in FILE, by default `SPEC.slcr.toml`, as canonical Markdown, the same specification always rendering to the same bytes. By default it MUST write it beside FILE, named after FILE without its extension and any `.slcr` or `.spec` suffix, plus `.md`, and report `OUTPUT: rendered NAME`."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-002", "TERM-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-057"
+title = "Renders the canon example beside the well-known file"
+body = "`slcr render` beside the canon `todo-api` example in `SPEC.slcr.toml` writes `SPEC.md` holding exactly the golden rendering `tests/fixtures/todo-api.md`, and nothing else."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-058"
+title = "Names the Markdown after the file"
+body = "`slcr render specs/todo-api.spec.yaml` writes `specs/todo-api.md`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-059"
+title = "Needs an output for a file named only by its suffix"
+body = "`slcr render .spec.yaml` fails, since no name is left for the Markdown, and its help suggests `--output`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-022"
+title = "Chooses its output"
+body = "`slcr render --output PATH` (or `-o PATH`) MUST write the Markdown to PATH instead, and `-o -` to stdout. It MUST NOT create a missing directory, and MUST NOT write over the requirements file being rendered, even with `--force`."
+modality = "MUST"
+refines = ["REQ-020"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-060"
+title = "Writes to the output"
+body = "`slcr render --output docs/API.md` writes the rendering to `docs/API.md` and nowhere else."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-061"
+title = "Writes to stdout"
+body = "`slcr render -o -` writes the rendering to stdout and creates no file."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-062"
+title = "Refuses a missing directory"
+body = "`slcr render -o docs/SPEC.md`, when `docs` doesn't exist, fails with help to create it first, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-063"
+title = "Never writes over the requirements file"
+body = "`slcr render --output ./SPEC.slcr.toml --force` fails, saying that this is the file being rendered, and leaves it unchanged."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-023"
+title = "Replaces only its own output"
+body = "`slcr render` MUST replace an existing output only when it starts with the comment that marks a file `slcr` generated, unless `--force` is given, and MUST replace it atomically. An output that already holds the rendering MUST be left untouched and reported `up to date`."
+rationale = "A hand-written `SPEC.md` is someone's work. Leaving an up-to-date file untouched keeps its modification time, so build tools don't rebuild what didn't change."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-064"
+title = "Replaces its own earlier output"
+body = "`slcr render` replaces a stale `SPEC.md` that starts with the generated-file comment with the current rendering."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-065"
+title = "Replaces a hand-written file only by force"
+body = "`slcr render` refuses to replace a hand-written `SPEC.md`, suggesting `--force` or `--output` and leaving it unchanged; `slcr render --force` replaces it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-066"
+title = "Leaves an up-to-date output alone"
+body = "`slcr render` reports `SPEC.md: up to date` when `SPEC.md` already holds the rendering."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-024"
+title = "Reports findings"
+body = "`slcr render` MUST write the specification's findings to stderr as `slcr vet` reports them, render a specification whose findings are only warnings, and refuse one that breaks an invariant, writing nothing."
+modality = "MUST"
+refines = ["REQ-020"]
+dependsOn = ["REQ-012"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-067"
+title = "Renders despite warnings"
+body = "A specification with a warning renders, with the warning on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-068"
+title = "Refuses a broken specification"
+body = "A specification with a violation fails to render, with the violation on stderr and help to fix it, and no Markdown is written."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-025"
+title = "Expects no diff"
+body = "`slcr render --expect-no-diff` MUST write nothing, and fail unless the output already holds exactly what FILE renders to, saying whether the output is missing or the first line on which it differs. It compares a file, so it MUST refuse stdout as the output, and it conflicts with `--force`."
+rationale = "CI and pre-commit hooks use it to keep a committed rendering in step with its specification, as this repository does with `SPEC.md`. The flag avoids the word \"check\", which means running validators."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-069"
+title = "Passes an up-to-date output"
+body = "`slcr render --expect-no-diff` reports `SPEC.md: up to date` and exits with status 0 when it is."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-070"
+title = "Compares the chosen output"
+body = "`slcr render --expect-no-diff --output docs/API.md` compares `docs/API.md`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-071"
+title = "Fails on a missing output"
+body = "`slcr render --expect-no-diff` without `SPEC.md` fails, saying it does not exist, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-072"
+title = "Fails on a stale output"
+body = "`slcr render --expect-no-diff` with a stale `SPEC.md` fails, naming the first line that differs, and leaves the file unchanged."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-073"
+title = "Cannot compare stdout"
+body = "`slcr render --expect-no-diff -o -` fails, with help to name a file instead."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-074"
+title = "Conflicts with force"
+body = "`slcr render --expect-no-diff --force` is a usage error."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-026"
+title = "render usage"
+body = "`slcr render` MUST take at most one FILE, MUST fail on a FILE that can't be read or names no supported format, and MUST describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-020"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-075"
+title = "Describes itself"
+body = "`slcr render --help` describes FILE and its default, `--output`, `--force`, and `--expect-no-diff`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-076"
+title = "Takes at most one file"
+body = "`slcr render a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-077"
+title = "Rejects an unsupported format"
+body = "`slcr render SPEC.md` fails, listing the supported extensions."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-078"
+title = "Reports a missing file"
+body = "`slcr render` without `SPEC.slcr.toml` fails, saying it could not read it."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-027"
+title = "query"
+body = "`slcr` MUST have a `query` subcommand that runs a read-only query, in the SLCR query profile of GQL, against the graph of a specification, and writes the rows it returns."
+rationale = "Agents and people ask structural questions of a specification, such as what transitively refines a requirement or which MUST requirements lack acceptance criteria. A query answers them from the graph without anyone parsing YAML, JSON, or TOML by hand."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-012"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-028"
+title = "Runs queries"
+body = "`slcr query QUERY [FILE]` MUST run QUERY against the graph of the specification in FILE, by default `SPEC.slcr.toml`, whatever its format, and write the rows to stdout. A node MUST be written as its SLCR ID wherever it appears, inside lists too, and an edge as `(SOURCE)-[:LABEL]->(TARGET)`."
+modality = "MUST"
+refines = ["REQ-027"]
+usesTerm = ["TERM-001", "TERM-012"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-079"
+title = "Reads the well-known file"
+body = "Against the canon example in `SPEC.slcr.toml`, a query for what transitively refines REQ-001 writes REQ-002, REQ-003, and REQ-004 with their modalities, and `(3 rows)`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-080"
+title = "Reads every format alike"
+body = "The same query against the canon example in YAML, JSON, and TOML succeeds with identical output."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-081"
+title = "Names nodes and edges by ID"
+body = "Returning a requirement, its `REFINES` edges, and their targets writes `REQ-004`, `(REQ-004)-[:REFINES]->(REQ-002)`, and `REQ-002`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-082"
+title = "Names nodes in lists by ID"
+body = "`collect_list` of each Section's children writes lists of IDs, such as `[SEC-002, SEC-003, SEC-004, SEC-005, SEC-006]`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-083"
+title = "Reports no rows"
+body = "A query that matches nothing writes its header and `(0 rows)`, and succeeds."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-029"
+title = "Binds parameters"
+body = "`slcr query --param NAME=JSON` (or `-p NAME=JSON`) MUST bind the parameter `$NAME` to the JSON value, once per name. A value that isn't JSON, an argument without `=`, and a name written with its `$` MUST be usage errors, and binding a name twice MUST be an error."
+rationale = "Parameters keep values out of the query text, so a script never has to quote an ID into GQL."
+modality = "MUST"
+refines = ["REQ-027"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-084"
+title = "Binds parameters"
+body = "`--param modality='\"MAY\"'` and `-p 'ids=[\"REQ-009\", \"REQ-010\", \"REQ-099\"]'` bind a string and a list, and the query writes REQ-009 and REQ-010."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-085"
+title = "Rejects a parameter bound twice"
+body = "`-p n=1 -p n=2` fails, saying that `$n` is bound more than once."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-086"
+title = "Rejects a value that is not JSON"
+body = "`--param id=REQ-001` is a usage error whose message shows how to quote a JSON string."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-087"
+title = "Rejects a parameter without a value"
+body = "`--param id` is a usage error expecting `NAME=JSON`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-088"
+title = "Rejects a name written with its dollar"
+body = "`--param '$id=1'` is a usage error saying to drop the `$`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-030"
+title = "Writes rows in a chosen format"
+body = "`slcr query` MUST write rows as an aligned table, with a header, a rule, and a row count, by default or under `--format table`; as tab-separated values with a header line under `--format tsv`; and as one JSON document of `columns` and `rows` under `--format json`, in which an edge is an object of its `label`, `source`, and `target`. Any other format MUST be a usage error."
+modality = "MUST"
+refines = ["REQ-027"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-089"
+title = "Writes a table"
+body = "`--format table` writes the aligned table with `(1 row)`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-090"
+title = "Writes TSV"
+body = "`--format tsv` writes a header line and one tab-separated line per row, a null as an empty field."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-091"
+title = "Writes JSON"
+body = "`--format json` writes `columns` and `rows`, an edge as an object of `label`, `source`, and `target`, and numbers, nulls, booleans, and lists as JSON."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-092"
+title = "Rejects an unknown format"
+body = "`--format csv` is a usage error listing `table`, `tsv`, and `json`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-031"
+title = "Explains a query that can't run"
+body = "A query that can't run MUST fail with an explanation: a syntax error, or a feature outside the profile, labeled where it is in the query, the latter with help linking the profile; an undefined variable or a missing parameter as an invalid query; and an error raised while running, such as arithmetic on a string, as a failed query. The query MUST be parsed before FILE is read."
+rationale = "Parsing first reports a typo in the query immediately, even when the file is large or missing."
+modality = "MUST"
+refines = ["REQ-027"]
+usesTerm = ["TERM-012"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-093"
+title = "Labels a syntax error"
+body = "`MATCH (r:Requirement RETURN r` fails as not valid GQL, labeling `RETURN` with what was expected."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-094"
+title = "Parses before reading the file"
+body = "A query with a syntax error, given a FILE that doesn't exist, reports the syntax error, not the missing file."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-095"
+title = "Labels a feature outside the profile"
+body = "`OPTIONAL MATCH` fails, labeling `OPTIONAL` as outside the profile, with help linking `PROFILE.md`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-096"
+title = "Reports an undefined variable"
+body = "`MATCH (r) RETURN s` fails as invalid, naming the undefined variable `s`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-097"
+title = "Reports a missing parameter"
+body = "A query using `$id` with no `--param id=...` fails as invalid, naming `$id`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-098"
+title = "Reports a query that fails while running"
+body = "`MATCH (r) RETURN r.id + 1` fails, explaining the arithmetic on a string and an integer."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-032"
+title = "Queries only a sound specification"
+body = "`slcr query` MUST write the specification's findings to stderr as `slcr vet` reports them, query a specification whose findings are only warnings, and refuse one that breaks an invariant."
+modality = "MUST"
+refines = ["REQ-027"]
+dependsOn = ["REQ-012"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-099"
+title = "Queries despite warnings"
+body = "A specification with a warning is queried, with the warning on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-100"
+title = "Refuses a broken specification"
+body = "A specification with a violation is not queried: the violation is on stderr, with help to fix it."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-033"
+title = "query usage"
+body = "`slcr query` MUST require a QUERY, take at most one FILE, fail on a FILE that can't be read or names no supported format, and describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-027"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-101"
+title = "Describes itself"
+body = "`slcr query --help` describes QUERY, FILE and its default, `--param`, and `--format`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-102"
+title = "Requires a query"
+body = "`slcr query` alone is a usage error naming `<QUERY>`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-103"
+title = "Takes at most one file"
+body = "`slcr query \"RETURN 1\" a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-104"
+title = "Reports a missing file"
+body = "`slcr query \"RETURN 1\"` without `SPEC.slcr.toml` fails, saying it could not read it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-105"
+title = "Rejects an unsupported format"
+body = "`slcr query \"RETURN 1\" SPEC.md` fails, listing the supported extensions."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-034"
+title = "slice"
+body = "`slcr` MUST have a `slice` subcommand that writes the slice of one requirement: everything in the specification needed to understand and implement it, and nothing more, as Markdown."
+rationale = "An agent implementing one requirement works best with a bounded, self-contained context. The slice gives it exactly that, instead of the whole document or a hand-picked excerpt that misses a dependency."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-013"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-035"
+title = "Writes the slice"
+body = "`slcr slice REQUIREMENT [FILE]` MUST write the slice of REQUIREMENT in the specification in FILE, by default `SPEC.slcr.toml`, whatever its format, to stdout as Markdown, and write no file. The slice MUST hold the requirement's ancestors as headings with their bodies; the requirement and the requirements that refine it, in full; what it refines, and the `dependsOn` closure of it and its refinements, under \"Related requirements\", each with a breadcrumb of its ancestors; and a Glossary of the terms all of these use. Nodes keep their document numbers, and a reference to a node the slice leaves out is its plain title, so every link resolves within the slice."
+modality = "MUST"
+refines = ["REQ-034"]
+usesTerm = ["TERM-011", "TERM-013"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-106"
+title = "Slices from the well-known file"
+body = "`slcr slice REQ-005` beside the canon example in `SPEC.slcr.toml` writes the controller's slice to stdout and creates no file."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-107"
+title = "Matches the golden slice in every format"
+body = "The canon example in YAML, JSON, and TOML each slices REQ-005 to exactly the golden file `tests/fixtures/todo-api.REQ-005.md`, with nothing on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-108"
+title = "Brings a shared requirement's other parent"
+body = "REQ-004, which is housed under REQ-002 and also refines REQ-003, slices to a document holding its ancestors and, under \"Related requirements\", REQ-003 with its breadcrumb."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-109"
+title = "Brings refinements housed elsewhere"
+body = "The slice of REQ-003 holds REQ-004, which refines it though it is housed under REQ-002."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-036"
+title = "Slices only a sound specification"
+body = "`slcr slice` MUST write the specification's findings to stderr as `slcr vet` reports them, slice a specification whose findings are only warnings, and refuse one that breaks an invariant."
+modality = "MUST"
+refines = ["REQ-034"]
+dependsOn = ["REQ-012"]
+usesTerm = ["TERM-005"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-110"
+title = "Slices despite warnings"
+body = "A specification with a warning is sliced, with the warning on stderr."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-111"
+title = "Refuses a broken specification"
+body = "A specification with a violation is not sliced: the violation is on stderr, with help to fix it."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-037"
+title = "Names one requirement"
+body = "REQUIREMENT MUST be a requirement ID spelled canonically, such as `REQ-005`; anything else, including the ID of a Section or another kind of node, MUST be a usage error. An ID that the specification lacks MUST fail, with help showing how to list its requirements."
+modality = "MUST"
+refines = ["REQ-034"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-112"
+title = "Reports a requirement the specification lacks"
+body = "`slcr slice REQ-099` fails, saying that `SPEC.slcr.toml` has no REQ-099, with help giving a `slcr query` that lists the requirements."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-113"
+title = "Rejects an invalid requirement ID"
+body = "`slcr slice REQ-5` is a usage error saying that it is not a valid requirement ID."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-114"
+title = "Rejects an ID of another kind"
+body = "`slcr slice SEC-001` is a usage error saying that it is not a valid requirement ID."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-038"
+title = "slice usage"
+body = "`slcr slice` MUST require a REQUIREMENT, take at most one FILE, fail on a FILE that can't be read or names no supported format, and describe itself, its arguments, and its options when given `--help`."
+modality = "MUST"
+refines = ["REQ-034"]
+usesTerm = ["TERM-002"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-115"
+title = "Describes itself"
+body = "`slcr slice --help` describes REQUIREMENT, and FILE and its default."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-116"
+title = "Requires a requirement"
+body = "`slcr slice` alone is a usage error naming `<REQUIREMENT>`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-117"
+title = "Takes at most one file"
+body = "`slcr slice REQ-001 a.yaml b.yaml` is a usage error naming `b.yaml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-118"
+title = "Reports a missing file"
+body = "`slcr slice REQ-001` without `SPEC.slcr.toml` fails, saying it could not read it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-119"
+title = "Rejects an unsupported format"
+body = "`slcr slice REQ-001 SPEC.md` fails, listing the supported extensions."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-039"
+title = "tools"
+body = "`slcr` MUST have a `tools` subcommand that manages the tools a project's validators run, through its manifest: declaring, updating, installing, removing, listing, and showing them."
+rationale = "A validator names a tool, not a command line. Declaring each tool once in the manifest, pinned to the exact descriptor that says how to run it, keeps every validator file short, and makes the commands that run on a machine reviewable in the manifest's history."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-003", "TERM-014"]
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-120"
+title = "Lists its subcommands"
+body = "`slcr tools --help` describes `add`, `update`, `install`, `remove`, `list`, and `show`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-040"
+title = "Works on the project's manifest"
+body = "Every `slcr tools` subcommand MUST find the project as `slcr vet` does, by walking up from the working directory to the nearest `SLCR.toml`, and name the manifest relative to the working directory. Outside a project it MUST fail with help on creating a manifest. A manifest whose name differs from `SLCR.toml` only in case, and one that breaks the manifest schema, MUST be errors that change nothing."
+modality = "MUST"
+refines = ["REQ-039"]
+dependsOn = ["REQ-015"]
+usesTerm = ["TERM-003", "TERM-004"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-121"
+title = "Finds the project above the working directory"
+body = "Run in `crates/api`, `slcr tools add`, `update`, `remove`, and `install` work on the manifest two directories up, which they name `../../SLCR.toml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-122"
+title = "Requires a manifest"
+body = "Outside any project, every `slcr tools` subcommand fails, with help showing a minimal manifest, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-123"
+title = "Rejects a misnamed manifest"
+body = "Beside `slcr.toml`, `slcr tools add`, `update`, and `remove` fail, saying that the manifest's name is case-sensitive."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-124"
+title = "Refuses an invalid manifest"
+body = "When `SLCR.toml` breaks its schema, such as with a `specs` pattern or a `path` source that leaves the project, `slcr tools add`, `update`, and `remove` fail, labeling the problem, and leave it unchanged."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-041"
+title = "Names tools"
+body = "A tool's name, the key of its entry in the manifest's `tools`, by which validators refer to it, MUST be lowercase letters and digits in dash-separated words, such as `cargo-insta`. Any other name given to a `slcr tools` subcommand MUST be a usage error."
+modality = "MUST"
+refines = ["REQ-039"]
+usesTerm = ["TERM-014"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-125"
+title = "Rejects an invalid name"
+body = "`Nextest`, given to `slcr tools add --as`, `update`, `remove`, or `show`, is a usage error saying that it is not a valid tool name."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-042"
+title = "tools add"
+body = "`slcr tools` MUST have an `add` subcommand that declares a tool in the project manifest from its descriptor's source."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-008", "TERM-014"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-043"
+title = "Declares and installs a descriptor"
+body = "`slcr tools add SOURCE` MUST fetch the descriptor at SOURCE, check that it is a valid descriptor, install it in the descriptor store, and only then declare it in the manifest under its `name`, or under NAME given `--as NAME`, with its `version`, its source, and its pin, reporting `SLCR.toml: added tool NAME VERSION`. A path is recorded relative to the project root, wherever the command runs. The manifest MUST be edited in place, keeping the rest of it as it was."
+modality = "MUST"
+refines = ["REQ-042"]
+usesTerm = ["TERM-003", "TERM-008", "TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-126"
+title = "Declares and installs a descriptor kept in the project"
+body = "`slcr tools add tools/cargo-nextest.toml` adds `[tools.cargo-nextest]` with version `1.0.0`, `source = { path = \"tools/cargo-nextest.toml\" }`, and the descriptor's pin, and files the descriptor's exact bytes in the store under that pin."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-127"
+title = "Takes a name"
+body = "`slcr tools add tools/cargo-nextest.toml --as nextest` declares it as `[tools.nextest]`."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-128"
+title = "Records a path relative to the project root"
+body = "Run in `crates/api`, `slcr tools add ../../tools/cargo-nextest.toml` records `source = { path = \"tools/cargo-nextest.toml\" }`."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-044"
+title = "Never replaces a declared tool"
+body = "Adding the descriptor already declared under a name MUST change nothing and say so. Adding a different descriptor under a name already taken MUST fail, installing nothing and changing nothing, with help to choose another name with `--as` or to remove the declared tool first."
+rationale = "A silent replacement would change what every validator of that tool runs; `slcr tools update` is the deliberate way to change it."
+modality = "MUST"
+refines = ["REQ-042"]
+usesTerm = ["TERM-014"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-129"
+title = "Is idempotent"
+body = "Adding the same descriptor twice reports `SLCR.toml: tool cargo-nextest 1.0.0 is already declared` the second time, and leaves the manifest's bytes unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-130"
+title = "Never replaces another tool of the same name"
+body = "Adding a newer cargo-nextest descriptor while cargo-nextest is declared fails, with help naming `--as` and `slcr tools remove`, leaves the manifest unchanged, and doesn't install the newer descriptor."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-045"
+title = "Accepts only a sound descriptor from a trusted source"
+body = "SOURCE MUST be either a path inside the project, still inside it after following symlinks, or an `https://` URL; any other URL MUST be a usage error. URLs MUST be fetched over HTTPS only, even across redirects, and a body larger than 1 MiB refused. A source that can't be fetched or doesn't exist, bytes that aren't UTF-8 or TOML, a descriptor that breaks its schema or its invariants, and a descriptor store that can't be created MUST each fail, declaring and installing nothing."
+rationale = "A descriptor decides which program runs on every machine that checks the project. Accepting it only over a channel that can't be tampered with, and only once it is valid, keeps a typo or an attacker out of the manifest."
+modality = "MUST"
+refines = ["REQ-042"]
+usesTerm = ["TERM-008", "TERM-009"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-131"
+title = "Rejects a descriptor outside the project"
+body = "`slcr tools add ../cargo-nextest.toml` from a project's root fails, with help to copy it into the project or publish it at an HTTPS URL, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-132"
+title = "Fetches only over HTTPS"
+body = "`slcr tools add http://example.com/cargo-nextest.toml` is a usage error saying that it is not an HTTPS URL."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-133"
+title = "Reports a failed fetch"
+body = "`slcr tools add https://127.0.0.1:1/cargo-nextest.toml`, where nothing listens, fails, saying that it could not fetch the URL and why, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-134"
+title = "Reports a missing descriptor"
+body = "`slcr tools add tools/jev.toml`, when no such file exists, fails, saying that it does not exist."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-135"
+title = "Rejects a descriptor that is not UTF-8"
+body = "A descriptor holding invalid UTF-8 fails, saying that it is not UTF-8 text."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-136"
+title = "Rejects a descriptor that breaks its schema"
+body = "A descriptor with an unknown field, `invoke.shell`, fails to parse, with the field labeled, and nothing is installed."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-137"
+title = "Rejects a descriptor that breaks an invariant"
+body = "A descriptor whose argv uses `{with.name}`, which its validator schema doesn't declare, fails as not a valid descriptor, with help to declare the field."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-138"
+title = "Reports a descriptor store it cannot create"
+body = "When a file stands where the data directory would be, `slcr tools add` fails, saying that it could not create the descriptor store, and leaves the manifest unchanged."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-046"
+title = "tools add usage"
+body = "`slcr tools add` MUST describe itself, SOURCE, and `--as` when given `--help`."
+modality = "MUST"
+refines = ["REQ-042"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-139"
+title = "Describes itself"
+body = "`slcr tools add --help` describes SOURCE, as a path or an HTTPS URL, and `--as`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-047"
+title = "tools update"
+body = "`slcr tools` MUST have an `update` subcommand that re-fetches a declared tool's descriptor from its recorded source and re-pins the tool to it."
+rationale = "Re-pinning is the one deliberate way to change which descriptor a tool runs; it shows up in review as a change to the manifest."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-010", "TERM-014"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-048"
+title = "Re-fetches and re-pins"
+body = "`slcr tools update NAME` MUST re-fetch the descriptor of the tool declared as NAME from its recorded source, check and install it as `slcr tools add` does, and re-pin the entry, editing only its `version` and `pin` values in place, so that the rest of the manifest, comments and spacing included, stays as it was. It reports `updated tool NAME OLD -> NEW`, or `re-pinned tool NAME VERSION` when only the bytes changed. The descriptor it replaces MUST stay in the store, where other projects may pin it."
+modality = "MUST"
+refines = ["REQ-047"]
+dependsOn = ["REQ-045"]
+usesTerm = ["TERM-003", "TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-140"
+title = "Installs and pins a new version"
+body = "After the project's cargo-nextest descriptor is bumped to 1.1.0, `slcr tools update cargo-nextest` reports `updated tool cargo-nextest 1.0.0 -> 1.1.0`, re-pins the entry, and the store holds both descriptors."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-141"
+title = "Re-pins an edited descriptor"
+body = "After a comment is added to the descriptor, `slcr tools update cargo-nextest` reports `re-pinned tool cargo-nextest 1.0.0` and pins the edited bytes."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-142"
+title = "Keeps the rest of the manifest"
+body = "Updating a tool in a manifest with comments, aligned `=` signs, and a second tool changes only that tool's `version` and `pin` values."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-049"
+title = "Leaves an up-to-date tool alone"
+body = "When the source serves exactly the bytes the entry pins, `slcr tools update` MUST leave the manifest unchanged and report the tool up to date, installing the descriptor if the store lacks it."
+modality = "MUST"
+refines = ["REQ-047"]
+usesTerm = ["TERM-009"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-143"
+title = "Leaves an up-to-date tool alone"
+body = "`slcr tools update cargo-nextest` right after `slcr tools add` reports `SLCR.toml: tool cargo-nextest 1.0.0 is up to date` and leaves the manifest's bytes unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-144"
+title = "Installs a descriptor the store lost"
+body = "When the store lost the pinned descriptor, so that `slcr vet` fails, `slcr tools update` reports the tool up to date and installs it, after which `slcr vet` passes."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-050"
+title = "Changes nothing on failure"
+body = "A NAME the manifest doesn't declare, and a recorded source that can't be fetched, doesn't exist, leads outside the project (by a symlink, say), or serves bytes that aren't a valid descriptor, MUST fail the update, changing neither the manifest nor the store. So MUST a descriptor store that can't be created."
+modality = "MUST"
+refines = ["REQ-047"]
+dependsOn = ["REQ-045"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-145"
+title = "Requires a declared tool"
+body = "`slcr tools update jev`, when only cargo-nextest is declared, fails with help listing the declared tools, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-146"
+title = "Reports a missing descriptor"
+body = "When the recorded `path` no longer exists, the update fails, saying so, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-147"
+title = "Rejects a source that leads outside the project"
+body = "When the recorded `path` is a symlink to a file outside the project, the update fails, saying that it is outside the project."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-148"
+title = "Reports a failed fetch"
+body = "When the recorded `url` can't be reached, the update fails, saying why, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-149"
+title = "Rejects a descriptor that is not UTF-8"
+body = "When the source serves invalid UTF-8, the update fails, saying so, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-150"
+title = "Rejects a descriptor that breaks its schema"
+body = "When the source serves a descriptor with an unknown field, the update fails, labeling it, and installs nothing."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-151"
+title = "Rejects a descriptor that breaks an invariant"
+body = "When the source serves a descriptor whose argv uses an undeclared `with` field, the update fails, installs nothing, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-152"
+title = "Reports a descriptor store it cannot create"
+body = "When a file stands where the data directory would be, the update fails, saying that it could not create the descriptor store, and leaves the manifest unchanged."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-051"
+title = "tools update usage"
+body = "`slcr tools update` MUST describe itself and NAME when given `--help`."
+modality = "MUST"
+refines = ["REQ-047"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-153"
+title = "Describes itself"
+body = "`slcr tools update --help` describes NAME as the name the tool is declared under."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-052"
+title = "tools install"
+body = "`slcr tools` MUST have an `install` subcommand that fills the descriptor store with every descriptor the manifest pins, exactly as pinned."
+rationale = "Like `cargo fetch` or `terraform init`, it prepares a fresh clone, or a sandbox about to go offline, to vet and check the project."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-009", "TERM-010"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-053"
+title = "Installs what the store lacks"
+body = "`slcr tools install` MUST install each descriptor that the manifest's tools pin and that the store lacks or holds corrupted. It fetches the descriptor from the tool's recorded source, and installs it only once its bytes hash to the pin, it is a valid descriptor, and its version is the declared one. A descriptor already installed MUST be left alone, unfetched. Each tool gets a status line on stdout: `installed PIN`, `installed PIN, replacing a corrupted copy`, `already installed`, or `failed`."
+modality = "MUST"
+refines = ["REQ-052"]
+dependsOn = ["REQ-018"]
+usesTerm = ["TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-154"
+title = "Installs every missing descriptor"
+body = "With three tools declared and none installed, `slcr tools install` reports each `installed` with its abbreviated pin, files each descriptor's exact bytes in the store, and leaves the manifest unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-155"
+title = "Leaves installed descriptors alone"
+body = "Run again after their sources are deleted, `slcr tools install` reports each tool `already installed` and succeeds, having fetched nothing."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-156"
+title = "Replaces a corrupted copy"
+body = "When the store's copy no longer hashes to its pin, `slcr tools install` reports `installed PIN, replacing a corrupted copy` and restores the pinned bytes."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-157"
+title = "Prepares a fresh clone"
+body = "In a fresh clone whose store is empty, `slcr vet` reports the tool's descriptor not installed; `slcr tools install` installs it; then `slcr vet` passes, and the manifest is unchanged."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-158"
+title = "Reports a manifest without tools"
+body = "With no tools declared, `slcr tools install` says that there is nothing to install, and succeeds."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-054"
+title = "Never re-pins"
+body = "`slcr tools install` MUST NOT write the manifest, nor install any bytes but the pinned ones. A source that now serves other bytes, a pinned descriptor that is invalid, and a declared version that isn't the pinned descriptor's each fail that tool, with help naming `slcr tools update` where re-pinning would fix it."
+rationale = "Installing is safe to run anywhere, in CI included, because it can only ever reproduce what was reviewed; changing what is pinned takes `slcr tools update`."
+modality = "MUST NOT"
+refines = ["REQ-052"]
+usesTerm = ["TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-159"
+title = "Refuses a source that serves other bytes"
+body = "When the source serves a newer descriptor than the pinned one, the tool fails, the help gives both pins and names `slcr tools update`, and neither the manifest nor the store changes."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-160"
+title = "Rejects a pinned descriptor that breaks an invariant"
+body = "When the pin is of an invalid descriptor, the tool fails, explaining why it is invalid, and nothing is installed."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-161"
+title = "Rejects a version the manifest does not declare"
+body = "When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, the tool fails as `slcr vet` reports it, and nothing is installed."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-055"
+title = "Reports every tool"
+body = "One tool failing MUST NOT stop `slcr tools install` from installing the others. Each failure is a diagnostic on stderr, and the command fails, counting the tools that failed, if any did."
+modality = "MUST NOT"
+refines = ["REQ-052"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-162"
+title = "Reports every tool"
+body = "When one tool's source serves other bytes, one is installed, and one is not, the first is `failed`, the second `already installed`, and the third `installed`, and the command fails for 1 of 3 tools."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-163"
+title = "Reports a failed fetch"
+body = "When a tool's `url` can't be reached, the tool fails, saying why, and neither the manifest nor the store changes."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-056"
+title = "tools install usage"
+body = "`slcr tools install` MUST take no arguments, and MUST describe itself when given `--help`."
+modality = "MUST"
+refines = ["REQ-052"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-164"
+title = "Describes itself"
+body = "`slcr tools install --help` describes what it installs, and that it never re-pins."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-165"
+title = "Takes no arguments"
+body = "`slcr tools install cargo-nextest` is a usage error naming the unexpected argument."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-057"
+title = "tools remove"
+body = "`slcr tools` MUST have a `remove` subcommand that removes a tool from the project manifest."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-014"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-058"
+title = "Removes the entry"
+body = "`slcr tools remove NAME` MUST delete the entry of the tool declared as NAME, with the comment above it, and the `tools` table too if no tool is left, keeping the rest of the manifest as it was, and report `removed tool NAME VERSION`. The tool's descriptor MUST stay in the store, where other projects may pin it."
+modality = "MUST"
+refines = ["REQ-057"]
+usesTerm = ["TERM-003", "TERM-009"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-166"
+title = "Removes the entry"
+body = "After `slcr tools add` then `slcr tools remove cargo-nextest`, the manifest is byte for byte what it was before the add, and the descriptor is still in the store."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-167"
+title = "Keeps the rest of the manifest"
+body = "Removing one of two tools from a commented manifest removes that tool's entry and the comment above it, and nothing else."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-059"
+title = "Requires a declared tool"
+body = "`slcr tools remove` MUST fail for a NAME the manifest doesn't declare, changing nothing, with help naming the tools it does declare, or `slcr tools add` if it declares none."
+modality = "MUST"
+refines = ["REQ-057"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-168"
+title = "Requires a declared tool"
+body = "`slcr tools remove cargo-nextest` in a project that declares no tools fails, with help to declare one with `slcr tools add`, and leaves the manifest unchanged."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-060"
+title = "tools remove usage"
+body = "`slcr tools remove` MUST describe itself and NAME when given `--help`."
+modality = "MUST"
+refines = ["REQ-057"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-169"
+title = "Describes itself"
+body = "`slcr tools remove --help` describes NAME as the name the tool is declared under."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-061"
+title = "tools list"
+body = "`slcr tools` MUST have a `list` subcommand that lists the tools the project manifest declares, and whether this machine holds each one's descriptor."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-014"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-062"
+title = "Lists every declared tool"
+body = "`slcr tools list` MUST write a table of every tool the manifest declares: its name, its version, whether the descriptor store holds its descriptor (`installed` or `not installed`), its source, and its pin. It MUST only read the store, never fetching or installing a descriptor. A manifest that declares no tools MUST be reported as such, with help to declare one."
+modality = "MUST"
+refines = ["REQ-061"]
+usesTerm = ["TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-170"
+title = "Lists every declared tool"
+body = "With ast-grep and cargo-nextest declared and only cargo-nextest installed, `slcr tools list` writes both, ast-grep `not installed`, and adds nothing to the store."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-171"
+title = "Reports a manifest without tools"
+body = "With no tools declared, `slcr tools list` says so and suggests `slcr tools add <SOURCE>`."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-063"
+title = "Lists in JSON"
+body = "`slcr tools list --format json` MUST write one JSON document instead: the manifest's path and `tools`, each with its `key`, `version`, `source`, `pin`, and `descriptor` (`installed` or `not-installed`). `--format human` is the default, and any other format MUST be a usage error."
+modality = "MUST"
+refines = ["REQ-061"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-172"
+title = "Lists in JSON"
+body = "`slcr tools list --format json` writes `manifest` and the two tools, with `descriptor` `not-installed` for ast-grep and `installed` for cargo-nextest."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-173"
+title = "Rejects an unknown format"
+body = "`slcr tools list --format yaml` is a usage error listing `human` and `json`."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-064"
+title = "tools list usage"
+body = "`slcr tools list` MUST describe itself and `--format` when given `--help`."
+modality = "MUST"
+refines = ["REQ-061"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-174"
+title = "Describes itself"
+body = "`slcr tools list --help` describes `--format` and its values."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-065"
+title = "tools show"
+body = "`slcr tools` MUST have a `show` subcommand that prints the descriptor a declared tool pins: how the tool runs, and what each validator's `with` must hold."
+rationale = "Writing a validator means knowing which fields its tool takes; `show` answers that from the exact descriptor the project pins, not from documentation that may describe another version."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-006", "TERM-008"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-066"
+title = "Prints the pinned descriptor"
+body = "`slcr tools show NAME` MUST print the descriptor that the tool declared as NAME pins, as the store holds it: its name, version, source, and pin; its argv, working directory, environment, and timeout; the exit codes that pass; and the JSON Schema every validator's `with` must satisfy."
+modality = "MUST"
+refines = ["REQ-065"]
+usesTerm = ["TERM-008", "TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-175"
+title = "Prints a declared tool's descriptor"
+body = "`slcr tools show cargo-nextest` prints its source, pin, argv with its `{with.test}` placeholder, `cwd: nearest Cargo.toml`, `env: none`, `timeout: none`, `pass: 0`, and its validator schema."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-067"
+title = "Shows in JSON"
+body = "`slcr tools show NAME --format json` MUST write one JSON document instead, holding the tool's `key`, and the descriptor's `name`, `version`, `source`, `pin`, `invoke`, `results`, and `schema`. `--format human` is the default."
+modality = "MUST"
+refines = ["REQ-065"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-176"
+title = "Shows in JSON"
+body = "`slcr tools show cargo-nextest --format json` writes the document, its `invoke` holding the argv as written."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-068"
+title = "Shows only what the project pins"
+body = "`slcr tools show` MUST fail, changing nothing, for a NAME the manifest doesn't declare, with help listing the tools it does, and, with the problem `slcr vet` reports, for a descriptor the store doesn't hold, holds corrupted, or holds with another version than the declared one. It MUST only read the store, never fetching or installing a descriptor."
+modality = "MUST"
+refines = ["REQ-065"]
+dependsOn = ["REQ-018"]
+usesTerm = ["TERM-009"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-177"
+title = "Requires a declared tool"
+body = "`slcr tools show jev` fails, with help listing `ast-grep, cargo-nextest`."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-178"
+title = "Reports a descriptor that is not installed"
+body = "`slcr tools show ast-grep`, whose descriptor isn't installed, fails with help naming `slcr tools install`, and fetches nothing."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-179"
+title = "Reports a corrupted descriptor"
+body = "When the store's copy no longer hashes to its pin, `slcr tools show` fails, saying so."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-180"
+title = "Reports an undeclared version"
+body = "When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, `slcr tools show` fails with help naming `slcr tools update`."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-069"
+title = "tools show usage"
+body = "`slcr tools show` MUST describe itself, NAME, and `--format` when given `--help`."
+modality = "MUST"
+refines = ["REQ-065"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-181"
+title = "Describes itself"
+body = "`slcr tools show --help` describes NAME and `--format`."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-070"
+title = "check"
+body = "`slcr` MUST have a `check` subcommand that runs every validator in the project and reports whether each requirement is satisfied, unsatisfied, or unknown. \"Check\" means only this."
+rationale = "This is the loop that makes a specification executable: requirements say what must hold, validators prove it, and `check` combines their verdicts through the refinement graph. This specification is checked this way, by `slcr check` itself."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-006", "TERM-015"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-071"
+title = "Runs every validator"
+body = "`slcr check` MUST work on the project, found as `slcr vet` finds it, and run every validator in every validator file. It MUST write a status line for each validator, in report order (validator files in project order, validators in file order): `green`, `red (exit N)`, `could not be run`, or `interrupted`. Then it writes one summary line per specification, counting its satisfied, unsatisfied, and unknown requirements, and its coverage gaps. Files are named relative to the working directory. It takes no FILE."
+modality = "MUST"
+refines = ["REQ-070"]
+dependsOn = ["REQ-015", "REQ-017"]
+usesTerm = ["TERM-004", "TERM-006", "TERM-007", "TERM-015", "TERM-016"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-182"
+title = "Passes a project whose requirements are satisfied"
+body = "With a green validator for every leaf of the `shop` specification, `slcr check` writes five `green` lines and `shop: 7 satisfied, 0 unsatisfied, 0 unknown`, and exits with status 0."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-183"
+title = "Names files from the working directory"
+body = "Run in `src/mail`, `slcr check` names the validator files `../.validators.slcr.toml` and `.validators.slcr.toml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-184"
+title = "Requires a project"
+body = "`slcr check` outside any project fails, with help showing a minimal manifest."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-185"
+title = "Takes no files"
+body = "`slcr check SPEC.slcr.yml` is a usage error naming the unexpected argument."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-072"
+title = "Evaluates satisfaction"
+body = "`slcr check` MUST evaluate each requirement from its validators' outcomes and its refiners' statuses, in strong Kleene logic, so that a status is decided only when every resolution of the unknowns agrees. A requirement without refiners is the AND of its own outcomes, and unknown, a coverage gap, when it has none. A requirement with refiners combines their statuses by its `refinement`: AND leaves out MAY refiners, while OR and XOR count them. The result is ANDed with the requirement's own outcomes. Only `refines` edges count, never containment."
+rationale = "Treating an unvalidated requirement as unknown, rather than as a pass or a fail, keeps `check` honest about what has been proven while a specification is still being covered."
+modality = "MUST"
+refines = ["REQ-070"]
+usesTerm = ["TERM-015", "TERM-016"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-186"
+title = "Counts unvalidated requirements as unknown"
+body = "With validators only for the cart total and paying by card, `shop` is `4 satisfied, 0 unsatisfied, 3 unknown (3 coverage gaps)`: paying succeeds by card alone, while the voucher, the receipt, and gift wrap are unknown."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-187"
+title = "A failed refiner fails an AND"
+body = "When the cart total's validator is red, the cart total and checking out, which is the AND of it and paying, are both unsatisfied."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-188"
+title = "One alternative satisfies an OR"
+body = "When paying by voucher fails but paying by card passes, paying, their OR, is satisfied, and so is checking out."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-073"
+title = "Fails by severity"
+body = "An unsatisfied requirement MUST be a finding as severe as its modality: for MUST and MUST NOT, a violation, which fails `slcr check`; for SHOULD and SHOULD NOT, a warning; for MAY, an informational finding. A failure that is absorbed is a warning, whatever its modality, except that a MAY stays informational. Warnings fail `slcr check` only under `--deny-warnings`. Unknown requirements and informational findings MUST never fail it."
+modality = "MUST"
+refines = ["REQ-070"]
+usesTerm = ["TERM-005", "TERM-015", "TERM-017"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-189"
+title = "Fails an unsatisfied MUST"
+body = "When the cart total's validator is red, `slcr check` reports both unsatisfied MUST requirements as violations and fails with `check failed: 2 violations`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-190"
+title = "Passes an unsatisfied SHOULD with a warning"
+body = "When the receipt's validator is red, `slcr check` warns that REQ-006, a SHOULD requirement, is unsatisfied, and succeeds."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-191"
+title = "Passes an unsatisfied MAY"
+body = "When gift wrap's validator is red, `slcr check --deny-warnings` reports it as informational and succeeds."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-192"
+title = "Passes an absorbed failure unless warnings are denied"
+body = "When paying by voucher fails but paying succeeds by card, `slcr check` warns that the failure is absorbed and succeeds; `slcr check --deny-warnings` fails, naming the flag."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-193"
+title = "Never fails on unknown requirements"
+body = "With three requirements unknown, `slcr check --deny-warnings` succeeds."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-074"
+title = "Shows why a validator is red"
+body = "`slcr check` MUST repeat a red validator's status on stderr, as severe as its requirement's finding, followed by the last 20 lines of its stderr and of its stdout, saying how many lines there were. A green validator's output MUST NOT be shown."
+modality = "MUST"
+refines = ["REQ-070"]
+usesTerm = ["TERM-006"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-194"
+title = "Shows the end of a red validator's output"
+body = "A red validator that wrote 30 lines to stdout and an assertion to stderr is shown with its stderr and `stdout, last 20 of 30 lines`; a green validator's `hidden` output appears nowhere."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-075"
+title = "Reports a validator that can't be run"
+body = "A validator that can't be run, such as one whose program isn't on the PATH it would see, MUST be reported `could not be run`, with the reason, labeled at the validator in its file, and MUST fail `slcr check`. It gives its requirement no outcome."
+rationale = "A validator that never ran proves nothing either way; failing the check makes sure a broken environment is never mistaken for a broken requirement, nor for a passing one."
+modality = "MUST"
+refines = ["REQ-070"]
+usesTerm = ["TERM-006", "TERM-008"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-195"
+title = "Reports a validator that cannot be run"
+body = "A validator whose tool runs `slcr-no-such-program` is `could not be run`, its requirement is unknown, and `slcr check` fails with `1 validator could not be run`, with help explaining how the PATH is searched."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-076"
+title = "Installs and vets before running"
+body = "Before running anything, `slcr check` MUST install every pinned descriptor the store lacks, as `slcr tools install` does and with a status line for each it installs, unless `--offline` is given, and then vet the project, writing vet's findings to stderr. If an install fails, or the project doesn't vet cleanly (warnings aside), it MUST say why and run no validator."
+rationale = "Installing first lets a fresh clone check in one command; vetting first means a validator never runs against a specification or a validator file that is broken."
+modality = "MUST"
+refines = ["REQ-070"]
+dependsOn = ["REQ-015", "REQ-053"]
+usesTerm = ["TERM-009"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-196"
+title = "Installs a missing descriptor"
+body = "When the store lacks the `sh` tool's descriptor, `slcr check` reports `sh: installed` with its pin, installs it, then runs every validator."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-197"
+title = "Fails when a descriptor can't be installed"
+body = "When the store lacks the descriptor and its source is gone, `slcr check` reports `sh: failed` and fails, running no validator."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-198"
+title = "Never installs offline"
+body = "`slcr check --offline`, when the store lacks the descriptor, reports vet's statuses and the missing descriptor, fails because the project doesn't vet cleanly, and neither installs nor runs anything."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-199"
+title = "Runs nothing when vetting fails"
+body = "When a validator names REQ-099, which `shop` lacks, `slcr check` reports the problem and fails, and no validator runs, not even the valid one."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-077"
+title = "Runs validators in parallel"
+body = "`slcr check` MUST run at most N validators at once, given `--jobs N` (or `-j N`), and by default as many as the machine has CPUs. It MUST write each status line as soon as that validator and every one before it have finished, so its output is the same whatever N is. `--jobs 0` MUST be a usage error. No duration appears in its human output."
+modality = "MUST"
+refines = ["REQ-070"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-200"
+title = "Reports the same whatever the number of jobs"
+body = "With validators that finish in reverse order when run at once, `slcr check -j 1` and `slcr check -j 4` write identical stdout and stderr and exit with the same status."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-201"
+title = "Rejects zero jobs"
+body = "`slcr check -j 0` is a usage error saying that N must be at least 1."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-078"
+title = "Stops when interrupted"
+body = "When interrupted (Ctrl-C, SIGINT), `slcr check` MUST stop every validator still running, together with every process it started, start no other, report each unfinished validator `interrupted`, evaluate no requirement, and fail."
+rationale = "Validators run in process groups of their own, so the terminal's Ctrl-C doesn't reach them; without this, an interrupted check would leave test runs going in the background."
+modality = "MUST"
+refines = ["REQ-070"]
+usesTerm = ["TERM-006"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-202"
+title = "Stops every validator when interrupted"
+body = "On Linux, SIGINT sent while the second of five validators runs `sleep 30` in the background reports four validators `interrupted` and `1 of 5 validators finished`, kills the `sleep`, and never starts the third validator."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-079"
+title = "Reports in JSON"
+body = "`slcr check --format json` MUST write one JSON document to stdout instead of human output: whether the check passed and whether it was interrupted; each descriptor install; vet's report; every validator's run, with its file, position, requirement, tool, outcome and its reason, exit code, duration, and the whole captured stdout and stderr; and, for each specification, its summary and every requirement's status. When vetting fails, the document holds no runs. `--format human` is the default."
+modality = "MUST"
+refines = ["REQ-070"]
+dependsOn = ["REQ-014"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-203"
+title = "Reports in JSON"
+body = "`slcr check --format json`, with the cart total's and the voucher's validators red, writes every run with its captured output, each requirement's status, and `shop`'s summary, and fails."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-204"
+title = "Reports a vetting failure in JSON"
+body = "When vetting fails, `slcr check --format json` writes vet's report and no run, and nothing runs."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-080"
+title = "check usage"
+body = "`slcr check` MUST describe itself and its options, `--jobs`, `--offline`, `--deny-warnings`, and `--format`, when given `--help`."
+modality = "MUST"
+refines = ["REQ-070"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-205"
+title = "Describes itself"
+body = "`slcr check --help` describes `--jobs` and its default, `--offline`, `--deny-warnings`, and `--format`."
+
+[[root.children]]
+kind = "section"
+id = "SEC-004"
+title = "Global behavior"
+body = "What `slcr` does whichever subcommand runs: its top-level help, and the options every subcommand accepts, before or after the subcommand's name."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-081"
+title = "Lists its subcommands"
+body = "`slcr` with no subcommand MUST print its help, listing every subcommand with a one-line summary, and succeed. An unknown subcommand MUST be a usage error."
+modality = "MUST"
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-206"
+title = "Prints the help without a subcommand"
+body = "`slcr` alone lists `init`, `render`, `query`, `slice`, `check`, `vet`, `tools`, and `version`, and exits with status 0."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-207"
+title = "Rejects an unknown subcommand"
+body = "`slcr frobnicate` is a usage error naming the unrecognized subcommand."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-082"
+title = "Sets the log level"
+body = "`--log-level LEVEL`, or else the `LOG_LEVEL` environment variable, MUST set the most detailed level of the log lines `slcr` writes to stderr: `off`, `error`, `warn`, `info` (the default), `debug`, or `trace`, in any case. Log lines MUST never be written to stdout, so they can't corrupt output meant for other programs. An unknown level is a usage error."
+modality = "MUST"
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-208"
+title = "Shows lower levels on stderr"
+body = "`slcr --log-level debug render` writes a timestamped `DEBUG` line about rendering to stderr, while stdout holds only the render's status."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-209"
+title = "Reads the level from the environment"
+body = "`slcr init todo-api.yaml` with `LOG_LEVEL=DEBUG` writes a `DEBUG` line to stderr."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-210"
+title = "Rejects an unknown level"
+body = "`slcr --log-level loud version` is a usage error listing the levels."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-083"
+title = "Colors on request"
+body = "`--enable-colors always`, `never`, or `auto` MUST decide whether `slcr` colors its output; `auto`, the default, colors it only on a terminal. `never` MUST win over the environment, `CLICOLOR_FORCE` included. An unknown preference is a usage error."
+modality = "MUST"
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-211"
+title = "Forces colors on"
+body = "`slcr vet broken.yaml --enable-colors always`, though not on a terminal, colors its diagnostics with ANSI escapes."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-212"
+title = "Forces colors off whatever the environment says"
+body = "`slcr --enable-colors never vet broken.yaml` with `CLICOLOR_FORCE=1` writes no ANSI escape."
+
+[[root.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-213"
+title = "Rejects an unknown preference"
+body = "`slcr --enable-colors sometimes version` is a usage error listing `always`, `never`, and `auto`."
+
+[glossary]
+kind = "section"
+id = "SEC-002"
+title = "Glossary"
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-001"
+title = "Specification"
+definition = "An SLCR requirements document: a named tree of Sections and Requirements, the acceptance criteria of those Requirements, the cross edges between them (`refines`, `dependsOn`, and `usesTerm`), and a Glossary of Terms. Its name, such as `todo-api`, qualifies its requirements' IDs elsewhere, as in `todo-api/REQ-002`."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-002"
+title = "Requirements file"
+definition = "A file that holds one specification, in the format its extension names: YAML (`.yaml` or `.yml`), JSON (`.json`), or TOML (`.toml`). The well-known one, which commands read when given no FILE, is `SPEC.slcr.toml`."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-003"
+title = "Project manifest"
+aliases = ["SLCR.toml"]
+definition = "The file `SLCR.toml`, whose directory is a project's root. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-004"
+title = "Project"
+definition = "The directory tree under a project manifest. A command that works on a project finds it by walking up from the working directory to the nearest `SLCR.toml`, and names files relative to the working directory."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-005"
+title = "Finding"
+definition = "Something vetting reports about a specification. A violation breaks an invariant of the format, such as a dangling reference or a `refines` cycle, and fails vetting; a warning, such as a body that never states its modality, fails it only when warnings are denied."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-006"
+title = "Validator"
+definition = "One entry of a validator file: a qualified requirement, such as `slcr/REQ-002`, optionally one of its acceptance criteria, the tool that checks it, and the fields (`with`) the tool's validator schema requires. A validator is green when its tool exits with a passing code, and red otherwise."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-007"
+title = "Validator file"
+definition = "A file named `.validators.slcr.toml`, `.validators.slcr.json`, `.validators.slcr.yaml`, or `.validators.slcr.yml`, holding a list of validators. A directory holds at most one, and commands find every one in the project, so validators can sit beside the code they check."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-008"
+title = "Tool descriptor"
+aliases = ["Descriptor"]
+definition = "A declarative TOML file that tells SLCR how to run one tool: its argument vector, whose placeholders are filled from a validator's `with`; its working directory and environment; the JSON Schema that every validator's `with` must satisfy; and which exit codes pass. A descriptor is never executed itself, and is never run through a shell."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-009"
+title = "Descriptor store"
+definition = "A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine. Only `slcr tools add`, `update`, and `install`, and `slcr check`, ever fill it."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-010"
+title = "Pin"
+definition = "`blake3:` followed by the 64 lowercase hex digits of a descriptor's BLAKE3 hash. The manifest records each tool's pin, so a validator always runs exactly the descriptor that was declared, wherever it came from."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-011"
+title = "Rendering"
+definition = "The canonical Markdown of a specification: a comment saying that `slcr` generated it, then every Section and Requirement as a numbered heading, in document order, with its body, rationale, refinements, dependencies, terms, and acceptance criteria, and finally the Glossary. Every node is preceded by a hidden anchor named by its ID, and every cross-reference is a link to one, so IDs never appear in the visible text."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-012"
+title = "SLCR query profile"
+definition = "The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `PROFILE.md` in `wack/gql-rust` specifies it."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-013"
+title = "Slice"
+definition = "The part of a specification that one requirement needs, rendered like the whole document: the requirement's ancestors (bodies only), the requirement and its refinement descendants in full, what it refines, the requirements it and its descendants depend on, and the terms all of them use. A node included for several reasons is shown in the most detail any of them calls for."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-014"
+title = "Tool"
+definition = "An external program that validators run, such as `cargo insta`. A project declares it in its manifest's `tools`, under a name, with the version and the source (`{ path }` in the project, or `{ url }` over HTTPS) of its descriptor, and that descriptor's pin."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-015"
+title = "Satisfaction status"
+aliases = ["Satisfied", "Unsatisfied", "Unknown"]
+definition = "What `slcr check` concludes about a requirement: satisfied or unsatisfied when its validators and its refiners decide it, and unknown when they leave it open. Statuses combine in strong Kleene logic, so an unknown never hides a result that every possibility agrees on."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-016"
+title = "Coverage gap"
+definition = "A requirement that no validator checks and nothing refines, whose status is therefore unknown. `slcr check` counts gaps in its summary, but never fails on one."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-017"
+title = "Absorbed failure"
+definition = "An unsatisfied requirement that refines at least one requirement, every one of which is satisfied anyway, as when one alternative of an OR fails and another passes. It is reported as a warning rather than as a violation."

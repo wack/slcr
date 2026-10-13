@@ -550,3 +550,48 @@ Two layers, both run by `cargo make test`:
 - In CI, insta sees the `CI` variable: it never writes snapshots, and any
   mismatch or missing snapshot fails the run. A snapshot must be committed
   before CI can pass.
+
+# Self-hosting
+
+The repository is itself an SLCR project: `SPEC.slcr.toml` (spec `slcr`,
+created with `slcr init`) holds the CLI's own requirements, and `SLCR.toml`
+lists it and declares the tools its validators use. `slcr check` from the
+repository root runs them, and needs `cargo-insta` and `cargo-nextest`
+installed (`cargo install --locked cargo-insta cargo-nextest`).
+
+- `tools/cargo-insta.toml` — a descriptor that runs one test of an
+  integration test target with `cargo insta test --check` under nextest:
+  green when the test passes and its snapshots match. It never writes a
+  snapshot, and a test name that matches nothing is red. After editing it,
+  re-pin it with `slcr tools update cargo-insta`.
+- The spec's "Commands" section has one requirement per subcommand
+  (`tools` has one per `tools` subcommand, refining it); each behavior is a
+  requirement nested under and refining it, so a subcommand is satisfied
+  exactly when all its behaviors are. "Global behavior" covers top-level
+  help and the global flags. Shared rules are stated once and linked with
+  `dependsOn` (e.g. `render` reporting findings depends on `vet`'s REQ-012).
+- Validator files sit beside the tests they run: the CLI snapshot suite's
+  are in `tests/cli/.validators.slcr.toml`, grouped by subcommand, each
+  proving one acceptance criterion by naming its test by its path in the
+  `cli` target (`version::version_prints_the_package_version`). Every CLI
+  test proves at least one criterion. Renaming a test means updating its
+  validator, or `slcr check` fails.
+- When CLI behavior changes, change its requirement or criterion, its test,
+  and its validator together; a new CLI test gets a validator for the
+  criterion it proves, adding a criterion if none fits. IDs are never
+  renumbered or reused: take the next free one (`slcr query "MATCH (n)
+  WHERE n.id STARTS WITH 'REQ-' RETURN n.id ORDER BY n.id DESC LIMIT 1"`),
+  and keep Glossary terms in ID order. Requirement bodies must state their
+  modality keyword, since CI denies warnings.
+- `SPEC.md` is `SPEC.slcr.toml` rendered, and is committed. After changing
+  the spec, or the renderer's output, run `cargo run -- render` and commit
+  `SPEC.md` with it.
+- CI's `Specification` job (in `on-push.yml` and `on-merge.yml`, gating
+  "⚡ PR Ready") runs `cargo make render-expect-no-diff` (`slcr render
+  --expect-no-diff`) and `cargo make self-check` (`slcr check
+  --deny-warnings`), both with the checked-out `slcr`.
+- `.githooks/pre-commit` runs `slcr render --expect-no-diff` on the staged
+  `SPEC.slcr.toml` and `SPEC.md` when a commit changes either, so a
+  re-rendered `SPEC.md` that isn't staged is refused too. Enable it once
+  per clone with `cargo make install-hooks` (`git config core.hooksPath
+  .githooks`).

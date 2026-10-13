@@ -1,0 +1,41 @@
+# Runs one test of a Rust package's integration test target with
+# `cargo insta test`, so that its insta snapshots are asserted, not
+# written: the validator is green when the test passes and every snapshot
+# it takes matches the committed one.
+formatVersion = "1"
+name = "cargo-insta"
+version = "1.0.0"
+
+[validator.schema]
+type = "object"
+required = ["target", "test"]
+additionalProperties = false
+
+[validator.schema.properties.target]
+type = "string"
+minLength = 1
+description = "The integration test target that holds the test, as `cargo test --test` names it: `cli` for `tests/cli/main.rs`."
+
+[validator.schema.properties.test]
+type = "string"
+minLength = 1
+description = "The test's full path within its target, such as `version::version_prints_the_package_version`. It must match exactly one test."
+
+[invoke]
+# `--check` asserts snapshots without writing `.snap.new` files, so a
+# validator never changes the working tree, and `--unreferenced=ignore`
+# keeps a run of one test from acting on every other test's snapshots,
+# whatever insta's configuration says. Nextest runs the test, since
+# libtest passes when its filter matches nothing; `--exact` and
+# `NEXTEST_NO_TESTS` make a test name that matches no test red. A red
+# validator's report ends with the last lines of its output, so
+# `RUST_BACKTRACE` is off: a backtrace through insta would push out the
+# assertion that failed.
+argv = ["cargo", "insta", "test", "--check", "--unreferenced=ignore",
+        "--test-runner", "nextest", "--no-test-runner-fallback",
+        "--test", "{with.target}", "--", "--exact", "{with.test}"]
+cwd = { nearest = "Cargo.toml" }
+env = { NEXTEST_NO_TESTS = "fail", RUST_BACKTRACE = "0" }
+
+[results]
+pass = [0]

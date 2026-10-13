@@ -1,0 +1,42 @@
+#!/bin/sh
+# Refuses a commit whose SPEC.md is not exactly what its SPEC.slcr.toml
+# renders to, by running `slcr render --expect-no-diff` on the staged copies
+# of both. CI runs the same check on every push.
+#
+# Enable the repository's hooks once per clone with
+# `cargo make install-hooks` (`git config core.hooksPath .githooks`).
+set -eu
+
+spec=SPEC.slcr.toml
+rendering=SPEC.md
+
+# Only a commit that changes the specification or its rendering can make
+# them disagree. (A change to the renderer can too; CI catches that.)
+if git diff --cached --quiet -- "$spec" "$rendering"; then
+    exit 0
+fi
+# Nothing to render once the specification is deleted.
+if ! git cat-file -e ":$spec" 2>/dev/null; then
+    exit 0
+fi
+
+# Check what is being committed, not the working tree, so a re-rendered
+# SPEC.md that was never staged still fails. The staged copies go under
+# target/ so that cargo and rustup, run from there, still find the
+# repository's Cargo.toml and pinned toolchain, and `slcr` names the files
+# by their own names.
+root=$(git rev-parse --show-toplevel)
+mkdir -p "$root/target"
+staged=$(mktemp -d "$root/target/pre-commit.XXXXXX")
+trap 'rm -rf "$staged"' EXIT
+git checkout-index --prefix="$staged/" -- "$spec"
+if git cat-file -e ":$rendering" 2>/dev/null; then
+    git checkout-index --prefix="$staged/" -- "$rendering"
+fi
+
+if ! (cd "$staged" && cargo run --quiet --locked -- render --expect-no-diff "$spec"); then
+    echo >&2
+    echo "pre-commit: the staged $rendering is not what the staged $spec renders to." >&2
+    echo "Render it and stage it: cargo run -- render && git add $rendering" >&2
+    exit 1
+fi
