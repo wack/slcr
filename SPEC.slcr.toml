@@ -1588,6 +1588,71 @@ id = "AC-169"
 title = "Describes itself"
 body = "`slcr tools remove --help` describes NAME as the name the tool is declared under."
 
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-061"
+title = "tools list"
+body = "`slcr tools` MUST have a `list` subcommand that lists the tools the project manifest declares, and whether this machine holds each one's descriptor."
+modality = "MUST"
+refinement = "AND"
+refines = ["REQ-039"]
+usesTerm = ["TERM-014"]
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-062"
+title = "Lists every declared tool"
+body = "`slcr tools list` MUST write a table of every tool the manifest declares: its name, its version, whether the descriptor store holds its descriptor (`installed` or `not installed`), its source, and its pin. It MUST only read the store, never fetching or installing a descriptor. A manifest that declares no tools MUST be reported as such, with help to declare one."
+modality = "MUST"
+refines = ["REQ-061"]
+usesTerm = ["TERM-009", "TERM-010"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-170"
+title = "Lists every declared tool"
+body = "With ast-grep and cargo-nextest declared and only cargo-nextest installed, `slcr tools list` writes both, ast-grep `not installed`, and adds nothing to the store."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-171"
+title = "Reports a manifest without tools"
+body = "With no tools declared, `slcr tools list` says so and suggests `slcr tools add <SOURCE>`."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-063"
+title = "Lists in JSON"
+body = "`slcr tools list --format json` MUST write one JSON document instead: the manifest's path and `tools`, each with its `key`, `version`, `source`, `pin`, and `descriptor` (`installed` or `not-installed`). `--format human` is the default, and any other format MUST be a usage error."
+modality = "MUST"
+refines = ["REQ-061"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-172"
+title = "Lists in JSON"
+body = "`slcr tools list --format json` writes `manifest` and the two tools, with `descriptor` `not-installed` for ast-grep and `installed` for cargo-nextest."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-173"
+title = "Rejects an unknown format"
+body = "`slcr tools list --format yaml` is a usage error listing `human` and `json`."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-064"
+title = "tools list usage"
+body = "`slcr tools list` MUST describe itself and `--format` when given `--help`."
+modality = "MUST"
+refines = ["REQ-061"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-174"
+title = "Describes itself"
+body = "`slcr tools list --help` describes `--format` and its values."
+
 [glossary]
 kind = "section"
 id = "SEC-002"

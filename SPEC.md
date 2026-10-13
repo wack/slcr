@@ -903,6 +903,7 @@ All of the following must hold:
 - [tools update](#REQ-047)
 - [tools install](#REQ-052)
 - [tools remove](#REQ-057)
+- [tools list](#REQ-061)
 
 *Terms:* [Project manifest](#TERM-003), [Tool](#TERM-014)
 
@@ -1319,6 +1320,62 @@ Removing one of two tools from a commented manifest removes that tool's entry an
 <a id="AC-169"></a>**Describes itself**
 
 `slcr tools remove --help` describes NAME as the name the tool is declared under.
+
+<a id="REQ-061"></a>
+#### 1.7.7 tools list
+
+`slcr tools` MUST have a `list` subcommand that lists the tools the project manifest declares, and whether this machine holds each one's descriptor.
+
+All of the following must hold:
+
+- [Lists every declared tool](#REQ-062)
+- [Lists in JSON](#REQ-063)
+- [tools list usage](#REQ-064)
+
+*Terms:* [Tool](#TERM-014)
+
+<a id="REQ-062"></a>
+##### 1.7.7.1 Lists every declared tool
+
+`slcr tools list` MUST write a table of every tool the manifest declares: its name, its version, whether the descriptor store holds its descriptor (`installed` or `not installed`), its source, and its pin. It MUST only read the store, never fetching or installing a descriptor. A manifest that declares no tools MUST be reported as such, with help to declare one.
+
+*Terms:* [Descriptor store](#TERM-009), [Pin](#TERM-010)
+
+*Acceptance criteria:*
+
+<a id="AC-170"></a>**Lists every declared tool**
+
+With ast-grep and cargo-nextest declared and only cargo-nextest installed, `slcr tools list` writes both, ast-grep `not installed`, and adds nothing to the store.
+
+<a id="AC-171"></a>**Reports a manifest without tools**
+
+With no tools declared, `slcr tools list` says so and suggests `slcr tools add <SOURCE>`.
+
+<a id="REQ-063"></a>
+##### 1.7.7.2 Lists in JSON
+
+`slcr tools list --format json` MUST write one JSON document instead: the manifest's path and `tools`, each with its `key`, `version`, `source`, `pin`, and `descriptor` (`installed` or `not-installed`). `--format human` is the default, and any other format MUST be a usage error.
+
+*Acceptance criteria:*
+
+<a id="AC-172"></a>**Lists in JSON**
+
+`slcr tools list --format json` writes `manifest` and the two tools, with `descriptor` `not-installed` for ast-grep and `installed` for cargo-nextest.
+
+<a id="AC-173"></a>**Rejects an unknown format**
+
+`slcr tools list --format yaml` is a usage error listing `human` and `json`.
+
+<a id="REQ-064"></a>
+##### 1.7.7.3 tools list usage
+
+`slcr tools list` MUST describe itself and `--format` when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-174"></a>**Describes itself**
+
+`slcr tools list --help` describes `--format` and its values.
 
 <a id="SEC-002"></a>
 ## 2. Glossary
