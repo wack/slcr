@@ -875,3 +875,89 @@ requirement = "slcr/REQ-041"
 criterion = "AC-125"
 tool = "cargo-insta"
 with = { target = "cli", test = "tools::tools_show_rejects_an_invalid_name" }
+
+# slcr tools add
+
+[[validator]]
+requirement = "slcr/REQ-043"
+criterion = "AC-126"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_declares_and_installs_a_descriptor_kept_in_the_project" }
+
+[[validator]]
+requirement = "slcr/REQ-043"
+criterion = "AC-127"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_takes_a_name" }
+
+[[validator]]
+requirement = "slcr/REQ-043"
+criterion = "AC-128"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_finds_the_project_above_the_working_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-044"
+criterion = "AC-129"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_is_idempotent" }
+
+[[validator]]
+requirement = "slcr/REQ-044"
+criterion = "AC-130"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_never_replaces_another_tool_of_the_same_name" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-131"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_rejects_a_descriptor_outside_the_project" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-132"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_fetches_only_over_https" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-133"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_reports_a_failed_fetch" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-134"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_reports_a_missing_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-135"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_rejects_a_descriptor_that_is_not_utf8" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-136"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_rejects_an_unparsable_descriptor" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-137"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_rejects_a_descriptor_that_breaks_an_invariant" }
+
+[[validator]]
+requirement = "slcr/REQ-045"
+criterion = "AC-138"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_reports_a_descriptor_store_it_cannot_create" }
+
+[[validator]]
+requirement = "slcr/REQ-046"
+criterion = "AC-139"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_help" }

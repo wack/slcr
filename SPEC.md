@@ -899,6 +899,7 @@ All of the following must hold:
 
 - [Works on the project's manifest](#REQ-040)
 - [Names tools](#REQ-041)
+- [tools add](#REQ-042)
 
 *Terms:* [Project manifest](#TERM-003), [Tool](#TERM-014)
 
@@ -947,6 +948,114 @@ A tool's name, the key of its entry in the manifest's `tools`, by which validato
 <a id="AC-125"></a>**Rejects an invalid name**
 
 `Nextest`, given to `slcr tools add --as`, `update`, `remove`, or `show`, is a usage error saying that it is not a valid tool name.
+
+<a id="REQ-042"></a>
+#### 1.7.3 tools add
+
+`slcr tools` MUST have an `add` subcommand that declares a tool in the project manifest from its descriptor's source.
+
+All of the following must hold:
+
+- [Declares and installs a descriptor](#REQ-043)
+- [Never replaces a declared tool](#REQ-044)
+- [Accepts only a sound descriptor from a trusted source](#REQ-045)
+- [tools add usage](#REQ-046)
+
+*Terms:* [Tool descriptor](#TERM-008), [Tool](#TERM-014)
+
+<a id="REQ-043"></a>
+##### 1.7.3.1 Declares and installs a descriptor
+
+`slcr tools add SOURCE` MUST fetch the descriptor at SOURCE, check that it is a valid descriptor, install it in the descriptor store, and only then declare it in the manifest under its `name`, or under NAME given `--as NAME`, with its `version`, its source, and its pin, reporting `SLCR.toml: added tool NAME VERSION`. A path is recorded relative to the project root, wherever the command runs. The manifest MUST be edited in place, keeping the rest of it as it was.
+
+*Terms:* [Project manifest](#TERM-003), [Tool descriptor](#TERM-008), [Descriptor store](#TERM-009), [Pin](#TERM-010)
+
+*Acceptance criteria:*
+
+<a id="AC-126"></a>**Declares and installs a descriptor kept in the project**
+
+`slcr tools add tools/cargo-nextest.toml` adds `[tools.cargo-nextest]` with version `1.0.0`, `source = { path = "tools/cargo-nextest.toml" }`, and the descriptor's pin, and files the descriptor's exact bytes in the store under that pin.
+
+<a id="AC-127"></a>**Takes a name**
+
+`slcr tools add tools/cargo-nextest.toml --as nextest` declares it as `[tools.nextest]`.
+
+<a id="AC-128"></a>**Records a path relative to the project root**
+
+Run in `crates/api`, `slcr tools add ../../tools/cargo-nextest.toml` records `source = { path = "tools/cargo-nextest.toml" }`.
+
+<a id="REQ-044"></a>
+##### 1.7.3.2 Never replaces a declared tool
+
+Adding the descriptor already declared under a name MUST change nothing and say so. Adding a different descriptor under a name already taken MUST fail, installing nothing and changing nothing, with help to choose another name with `--as` or to remove the declared tool first.
+
+*Rationale:* A silent replacement would change what every validator of that tool runs; `slcr tools update` is the deliberate way to change it.
+
+*Terms:* [Tool](#TERM-014)
+
+*Acceptance criteria:*
+
+<a id="AC-129"></a>**Is idempotent**
+
+Adding the same descriptor twice reports `SLCR.toml: tool cargo-nextest 1.0.0 is already declared` the second time, and leaves the manifest's bytes unchanged.
+
+<a id="AC-130"></a>**Never replaces another tool of the same name**
+
+Adding a newer cargo-nextest descriptor while cargo-nextest is declared fails, with help naming `--as` and `slcr tools remove`, leaves the manifest unchanged, and doesn't install the newer descriptor.
+
+<a id="REQ-045"></a>
+##### 1.7.3.3 Accepts only a sound descriptor from a trusted source
+
+SOURCE MUST be either a path inside the project, still inside it after following symlinks, or an `https://` URL; any other URL MUST be a usage error. URLs MUST be fetched over HTTPS only, even across redirects, and a body larger than 1 MiB refused. A source that can't be fetched or doesn't exist, bytes that aren't UTF-8 or TOML, a descriptor that breaks its schema or its invariants, and a descriptor store that can't be created MUST each fail, declaring and installing nothing.
+
+*Rationale:* A descriptor decides which program runs on every machine that checks the project. Accepting it only over a channel that can't be tampered with, and only once it is valid, keeps a typo or an attacker out of the manifest.
+
+*Terms:* [Tool descriptor](#TERM-008), [Descriptor store](#TERM-009)
+
+*Acceptance criteria:*
+
+<a id="AC-131"></a>**Rejects a descriptor outside the project**
+
+`slcr tools add ../cargo-nextest.toml` from a project's root fails, with help to copy it into the project or publish it at an HTTPS URL, and leaves the manifest unchanged.
+
+<a id="AC-132"></a>**Fetches only over HTTPS**
+
+`slcr tools add http://example.com/cargo-nextest.toml` is a usage error saying that it is not an HTTPS URL.
+
+<a id="AC-133"></a>**Reports a failed fetch**
+
+`slcr tools add https://127.0.0.1:1/cargo-nextest.toml`, where nothing listens, fails, saying that it could not fetch the URL and why, and leaves the manifest unchanged.
+
+<a id="AC-134"></a>**Reports a missing descriptor**
+
+`slcr tools add tools/jev.toml`, when no such file exists, fails, saying that it does not exist.
+
+<a id="AC-135"></a>**Rejects a descriptor that is not UTF-8**
+
+A descriptor holding invalid UTF-8 fails, saying that it is not UTF-8 text.
+
+<a id="AC-136"></a>**Rejects a descriptor that breaks its schema**
+
+A descriptor with an unknown field, `invoke.shell`, fails to parse, with the field labeled, and nothing is installed.
+
+<a id="AC-137"></a>**Rejects a descriptor that breaks an invariant**
+
+A descriptor whose argv uses `{with.name}`, which its validator schema doesn't declare, fails as not a valid descriptor, with help to declare the field.
+
+<a id="AC-138"></a>**Reports a descriptor store it cannot create**
+
+When a file stands where the data directory would be, `slcr tools add` fails, saying that it could not create the descriptor store, and leaves the manifest unchanged.
+
+<a id="REQ-046"></a>
+##### 1.7.3.4 tools add usage
+
+`slcr tools add` MUST describe itself, SOURCE, and `--as` when given `--help`.
+
+*Acceptance criteria:*
+
+<a id="AC-139"></a>**Describes itself**
+
+`slcr tools add --help` describes SOURCE, as a path or an HTTPS URL, and `--as`.
 
 <a id="SEC-002"></a>
 ## 2. Glossary
