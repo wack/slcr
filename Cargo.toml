@@ -2,6 +2,11 @@
 name = "slcr"
 version = "0.1.0"
 edition = "2024"
+# `description`, `homepage`, and `license` are the Homebrew formula's
+# `desc`, `homepage`, and `license`, which `dist` generates from them.
+description = "Write requirements as a graph and check them with validators"
+homepage = "https://github.com/wack/slcr"
+license = "MIT"
 repository = "https://github.com/wack/slcr"
 
 [[bin]]
