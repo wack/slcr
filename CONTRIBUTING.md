@@ -4,6 +4,10 @@ Thanks for helping out. SLCR is two things that live in this repository: an
 open format for software requirements, and `slcr`, its reference CLI. Changes
 to each go through a different process, so this guide covers them separately.
 
+Everyone taking part in SLCR is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). Report unacceptable behavior to
+opensource@slcr.dev.
+
 ## Contents
 
 - [Ways to contribute](#ways-to-contribute)
