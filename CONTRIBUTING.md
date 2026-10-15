@@ -34,7 +34,10 @@ opensource@slcr.dev.
 
 ## Reporting a bug
 
-Open an issue that includes:
+If the bug is a security vulnerability, don't open an issue. Follow
+[SECURITY.md](SECURITY.md) instead.
+
+For anything else, open an issue that includes:
 
 - The output of `slcr version`.
 - The command you ran, and what it printed.
