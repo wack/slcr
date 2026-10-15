@@ -261,16 +261,10 @@ validator results and result caching are planned.
 ## Contributing
 
 Issues and pull requests are welcome, especially feedback on the format.
-To build and test locally:
-
-```bash
-cargo build --release
-cargo make clippy
-cargo make test
-```
-
-If you change the CLI's behavior, update `SPEC.slcr.toml`, run
-`slcr render`, and make sure `slcr check` still passes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose format changes,
+set up a development build, and keep the spec in step with the code.
+Everyone taking part is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
