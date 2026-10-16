@@ -246,7 +246,7 @@ The canon example in YAML, abridged. `slcr query` and `slcr slice` work on it
 the same way in any format.
 
 ```yaml
-$schema: https://slcr.io/reference/schemas/spec/v1.schema.json
+$schema: https://slcr.dev/reference/schemas/spec/v1.schema.json
 formatVersion: "1"
 spec:
   name: todo-api

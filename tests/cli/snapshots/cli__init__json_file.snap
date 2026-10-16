@@ -3,7 +3,7 @@ source: tests/cli/init.rs
 expression: workspace.read(file)
 ---
 {
-  "$schema": "https://slcr.io/reference/schemas/spec/v1.schema.json",
+  "$schema": "https://slcr.dev/reference/schemas/spec/v1.schema.json",
   "formatVersion": "1",
   "spec": {
     "name": "todo-api"

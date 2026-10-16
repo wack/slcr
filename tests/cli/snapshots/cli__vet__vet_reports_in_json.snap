@@ -78,7 +78,7 @@ exit_code: 1
             "message": "`SEC-1` is not a valid section ID",
             "line": 8,
             "column": 7,
-            "offset": 204,
+            "offset": 205,
             "length": 5
           }
         ]

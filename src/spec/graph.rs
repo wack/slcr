@@ -9,7 +9,7 @@ use super::vet::{self, Report, Violations, Warning};
 
 /// The `$id` of the specification graph's JSON Schema, which a new document
 /// names in its `$schema` so that editors can validate it.
-pub const SCHEMA_URL: &str = "https://slcr.io/reference/schemas/spec/v1.schema.json";
+pub const SCHEMA_URL: &str = "https://slcr.dev/reference/schemas/spec/v1.schema.json";
 
 /// One SLCR specification: the requirements document, stored as a graph.
 ///
@@ -197,7 +197,7 @@ mod tests {
         let graph: SlcrRequirementsDocument = serde_json::from_str(TODO_API).unwrap();
         assert_eq!(
             graph.schema().as_deref(),
-            Some("https://slcr.io/reference/schemas/spec/v1.schema.json")
+            Some("https://slcr.dev/reference/schemas/spec/v1.schema.json")
         );
         assert_eq!(*graph.format_version(), FormatVersion::V1);
         assert_eq!(graph.spec().name().as_str(), "todo-api");
@@ -430,7 +430,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(new_document()).unwrap(),
             json!({
-                "$schema": "https://slcr.io/reference/schemas/spec/v1.schema.json",
+                "$schema": "https://slcr.dev/reference/schemas/spec/v1.schema.json",
                 "formatVersion": "1",
                 "spec": { "name": "todo-api" },
                 "root": { "kind": "section", "id": "SEC-001", "title": "TodoList API" },
