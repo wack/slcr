@@ -2,7 +2,7 @@
 //! that bind requirements to the tools that check them.
 //!
 //! The format is the validator file JSON Schema on the Notion "Schemas"
-//! page (`https://slcr.io/reference/schemas/validators/v1.schema.json`),
+//! page (`https://slcr.dev/reference/schemas/validators/v1.schema.json`),
 //! and the rules around it are those on "SLCR — Tools: Manifest,
 //! Descriptors, and Invocation". [file] reads one file against the schema;
 //! [vet] checks its `x-vetInvariants`, which need the rest of the project.
