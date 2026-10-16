@@ -446,7 +446,7 @@ mod tests {
 
     /// What `slcr init` writes for `todo-api`, in each format.
     const TODO_API_YAML: &str = "\
-$schema: https://slcr.io/reference/schemas/spec/v1.schema.json
+$schema: https://slcr.dev/reference/schemas/spec/v1.schema.json
 formatVersion: \"1\"
 spec:
   name: todo-api
@@ -461,7 +461,7 @@ glossary:
 ";
 
     const TODO_API_JSON: &str = r#"{
-  "$schema": "https://slcr.io/reference/schemas/spec/v1.schema.json",
+  "$schema": "https://slcr.dev/reference/schemas/spec/v1.schema.json",
   "formatVersion": "1",
   "spec": {
     "name": "todo-api"
@@ -479,7 +479,7 @@ glossary:
 }
 "#;
 
-    const TODO_API_TOML: &str = r#""$schema" = "https://slcr.io/reference/schemas/spec/v1.schema.json"
+    const TODO_API_TOML: &str = r#""$schema" = "https://slcr.dev/reference/schemas/spec/v1.schema.json"
 formatVersion = "1"
 
 [spec]
