@@ -17,7 +17,7 @@ or pull requests.**
 
 Report them privately in one of two ways:
 
-- Email **security@slcr.dev**.
+- Email **security@wack.run**.
 - Use GitHub's
   [private vulnerability reporting](https://github.com/wack/slcr/security/advisories/new).
 
