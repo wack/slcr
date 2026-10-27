@@ -527,7 +527,7 @@ Two layers, both run by `cargo make test`:
   variable, `--enable-colors`) behave the same for every subcommand, so they're
   covered once, in `global.rs`; don't repeat them per subcommand.
   `check.rs`'s validators run `sh`, a bare name found on PATH, never a
-  path, so they run on any Unix; its Ctrl-C test is Linux-only.
+  path, so they run on any Unix, as does its Ctrl-C test.
 - **Nondeterminism.** Redact anything that changes between runs with an
   `insta::Settings` filter scoped to the test (see `without_timestamps` in
   `global.rs` and the `[VERSION]` redaction in `version.rs`). Never redact an
