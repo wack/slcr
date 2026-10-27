@@ -6,7 +6,7 @@ to each go through a different process, so this guide covers them separately.
 
 Everyone taking part in SLCR is expected to follow the
 [Code of Conduct](CODE_OF_CONDUCT.md). Report unacceptable behavior to
-opensource@slcr.dev.
+opensource@wack.run.
 
 ## Contents
 
