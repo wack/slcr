@@ -21,6 +21,6 @@ cargo-nextest: failed
   ├─▶ error sending request for url (https://127.0.0.1:1/cargo-nextest.toml)
   ├─▶ client error (Connect)
   ├─▶ tcp connect error
-  ╰─▶ Connection refused (os error 111)
+  ╰─▶ Connection refused (os error [ERRNO])
 
 Error:   × installing failed for 1 of 1 tool

@@ -88,6 +88,14 @@ fn assert_store_unavailable(workspace: &Workspace, args: &[&str]) {
     );
 }
 
+/// Run `body` with OS error numbers redacted. A refused connection is
+/// `ECONNREFUSED`, which is 111 on Linux and 61 on macOS.
+fn without_errno(body: impl FnOnce()) {
+    let mut settings = insta::Settings::clone_current();
+    settings.add_filter(r"\(os error \d+\)", "(os error [ERRNO])");
+    settings.bind(body);
+}
+
 #[test]
 fn tools_help() {
     assert_cmd_snapshot!(Workspace::new().slcr(&["tools", "--help"]));
@@ -265,7 +273,9 @@ fn tools_add_reports_a_failed_fetch() {
     for proxy in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
         command.env_remove(proxy);
     }
-    assert_cmd_snapshot!(command);
+    without_errno(|| {
+        assert_cmd_snapshot!(command);
+    });
     assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
 }
 
@@ -455,7 +465,9 @@ fn tools_update_reports_a_failed_fetch() {
     for proxy in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
         command.env_remove(proxy);
     }
-    assert_cmd_snapshot!(command);
+    without_errno(|| {
+        assert_cmd_snapshot!(command);
+    });
     assert_eq!(workspace.read("SLCR.toml"), manifest);
 }
 
@@ -831,7 +843,9 @@ fn tools_install_reports_a_failed_fetch() {
     for proxy in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
         command.env_remove(proxy);
     }
-    assert_cmd_snapshot!(command);
+    without_errno(|| {
+        assert_cmd_snapshot!(command);
+    });
     assert_eq!(workspace.read("SLCR.toml"), manifest);
     assert!(store_is_empty(&workspace));
 }

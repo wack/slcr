@@ -7,6 +7,7 @@ info:
     - add
     - "https://127.0.0.1:1/cargo-nextest.toml"
   env:
+    HOME: "[HOME]"
     XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
@@ -18,4 +19,4 @@ Error:   × could not fetch https://127.0.0.1:1/cargo-nextest.toml
   ├─▶ error sending request for url (https://127.0.0.1:1/cargo-nextest.toml)
   ├─▶ client error (Connect)
   ├─▶ tcp connect error
-  ╰─▶ Connection refused (os error 111)
+  ╰─▶ Connection refused (os error [ERRNO])
