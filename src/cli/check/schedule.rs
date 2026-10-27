@@ -182,11 +182,7 @@ pub(super) async fn run_all<E>(
 
 #[cfg(all(test, unix))]
 pub(super) mod tests {
-    use std::{
-        convert::Infallible,
-        path::Path,
-        time::{Duration, Instant},
-    };
+    use std::{convert::Infallible, path::Path};
 
     use tempfile::TempDir;
 
