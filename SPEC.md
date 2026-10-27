@@ -1642,7 +1642,7 @@ When interrupted (Ctrl-C, SIGINT), `slcr check` MUST stop every validator still 
 
 <a id="AC-202"></a>**Stops every validator when interrupted**
 
-On Linux, SIGINT sent while the second of five validators runs `sleep 30` in the background reports four validators `interrupted` and `1 of 5 validators finished`, kills the `sleep`, and never starts the third validator.
+On Unix, SIGINT sent while the second of five validators runs `sleep 30` in the background reports four validators `interrupted` and `1 of 5 validators finished`, kills the `sleep`, and never starts the third validator.
 
 <a id="REQ-079"></a>
 #### 1.8.9 Reports in JSON

@@ -512,9 +512,11 @@ mod tests {
         let project = Project::new();
         let bin = project.root().join("bin");
         std::fs::create_dir(&bin).unwrap();
-        // Executable, but in no format the kernel can run.
+        // Executable, but its interpreter doesn't exist. A file in no format
+        // the kernel can run isn't refused on macOS, whose `posix_spawnp`
+        // (which std uses) retries it with `/bin/sh`, as `execvp` does.
         let tool = bin.join("broken-tool");
-        std::fs::write(&tool, [0x7f, b'E', b'L', b'F', 0, 0, 0, 0]).unwrap();
+        std::fs::write(&tool, "#!/nonexistent/interpreter\n").unwrap();
         std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
         let descriptor = descriptor(
             r#"["broken-tool"]"#,

@@ -182,11 +182,7 @@ pub(super) async fn run_all<E>(
 
 #[cfg(all(test, unix))]
 pub(super) mod tests {
-    use std::{
-        convert::Infallible,
-        path::Path,
-        time::{Duration, Instant},
-    };
+    use std::{convert::Infallible, path::Path};
 
     use tempfile::TempDir;
 
@@ -348,6 +344,8 @@ timeout = 30
     #[cfg(target_os = "linux")]
     #[test]
     fn an_interrupt_kills_every_run_still_going() {
+        use std::time::{Duration, Instant};
+
         // One at a time: the first finishes; the second starts a
         // grandchild, records its PID, and outlives the interrupt; the
         // third never starts.

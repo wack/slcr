@@ -357,7 +357,7 @@ fn check_requires_a_project() {
 
 /// Ctrl-C at a terminal reaches slcr, but not the validators, which run in
 /// process groups of their own; slcr stops them itself.
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[test]
 fn check_stops_every_validator_when_interrupted() {
     use std::time::{Duration, Instant};
@@ -394,15 +394,15 @@ fn check_stops_every_validator_when_interrupted() {
     assert!(!workspace.path("ran").exists());
 
     let pid = workspace.read("pid");
-    let stat = std::path::Path::new("/proc").join(pid.trim()).join("stat");
-    // Killed, it is gone, or a zombie until something reaps it.
+    // Killed, it is gone, or a zombie until something reaps it. `ps` prints
+    // no state for a process that's gone, on Linux and macOS alike.
     let dead = || {
-        std::fs::read_to_string(&stat).map_or(true, |stat| {
-            let state = stat
-                .rsplit_once(") ")
-                .and_then(|(_, rest)| rest.chars().next());
-            matches!(state, Some('Z' | 'X'))
-        })
+        let ps = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", pid.trim()])
+            .output()
+            .unwrap();
+        let state = String::from_utf8_lossy(&ps.stdout);
+        matches!(state.trim_start().chars().next(), None | Some('Z' | 'X'))
     };
     let deadline = Instant::now() + Duration::from_secs(5);
     while !dead() && Instant::now() < deadline {

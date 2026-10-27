@@ -5,7 +5,7 @@ edition = "2024"
 # `description`, `homepage`, and `license` are the Homebrew formula's
 # `desc`, `homepage`, and `license`, which `dist` generates from them.
 description = "Write requirements as a graph and check them with validators"
-homepage = "https://github.com/wack/slcr"
+homepage = "https://slcr.dev"
 license = "MIT"
 repository = "https://github.com/wack/slcr"
 
@@ -23,7 +23,11 @@ globset = "0.4.20"
 ignore = "0.4.33"
 jsonschema = { version = "0.58.6", default-features = false }
 miette = { version = "7", features = ["fancy"] }
-reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "http2", "system-proxy"] }
+reqwest = { version = "0.13.5", default-features = false, features = [
+  "rustls",
+  "http2",
+  "system-proxy",
+] }
 semver = "1.0.28"
 serde = { version = "1.0", features = ["derive"] }
 serde-saphyr = "1.3"
@@ -33,19 +37,35 @@ serde_json = "1.0"
 slcr-gql = { git = "https://github.com/wack/gql-rust", rev = "e505107aced5501c80ee850701dfeff1c5ef079c" }
 tempfile = "3"
 thiserror = "2.0"
-tokio = { version = "1", features = ["io-util", "process", "rt-multi-thread", "signal", "time"] }
+tokio = { version = "1", features = [
+  "io-util",
+  "process",
+  "rt-multi-thread",
+  "signal",
+  "time",
+] }
 toml = { version = "0.8.8", features = ["preserve_order"] }
 toml_edit = "0.22"
 tracing = { version = "0.1.41", features = ["attributes"] }
-tracing-subscriber = { version = "0.3.19", features = ["chrono", "fmt", "env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = [
+  "chrono",
+  "fmt",
+  "env-filter",
+] }
 
 # Killing a timed-out validator's whole process group through a safe API:
 # the crate forbids `unsafe_code`, and std can only kill the direct child.
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1.1.5", default-features = false, features = ["process", "std"] }
+rustix = { version = "1.1.5", default-features = false, features = [
+  "process",
+  "std",
+] }
 
 [dev-dependencies]
-figment = { version = "0.10", default-features = false, features = ["env", "test"] }
+figment = { version = "0.10", default-features = false, features = [
+  "env",
+  "test",
+] }
 insta = { version = "1", features = ["filters", "redactions"] }
 insta-cmd = "0.7"
 pulldown-cmark = { version = "0.13", default-features = false }
