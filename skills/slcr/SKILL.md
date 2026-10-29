@@ -43,9 +43,31 @@ may be older or newer than the binary.
 
 Use `-h` for the short form. Don't guess flags: a typo is a usage error
 (exit status 2) that prints the usage, and that usage is a hint to run
-`--help`. If `slcr` isn't installed, tell the user. The README has install
-instructions, such as `brew install wack/tap/slcr`. Don't try to fake its
-output.
+`--help`. Don't try to fake its output.
+
+For what `--help` doesn't cover, such as concepts, guides, and the schemas,
+read the documentation at <https://slcr.dev/docs>.
+
+## Install `slcr` if it's missing
+
+If `command -v slcr` finds nothing, install it. With
+[Homebrew](https://brew.sh), on macOS or Linux:
+
+```bash
+brew install wack/tap/slcr
+```
+
+Otherwise, on macOS or Linux, use the shell installer from the latest release.
+It puts `slcr` in `$CARGO_HOME/bin` (by default `~/.cargo/bin`), so add that
+to `PATH` if it isn't there:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/wack/slcr/releases/latest/download/slcr-installer.sh | sh
+```
+
+In a disposable sandbox, such as a cloud or CI session, install it yourself.
+On someone's own machine, ask before you install anything. Then run
+`slcr --version` to confirm it works.
 
 Here's an overview so you know what to ask about. Confirm the details with
 `--help`.
