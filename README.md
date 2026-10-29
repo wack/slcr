@@ -2,6 +2,8 @@
 
 # SLCR
 
+**Links**: [Website](https://slcr.dev) | [Docs](https://slcr.dev/docs)
+
 An open standard for agent-native software requirements.
 
 SLCR stores a project's requirements as a graph instead of a document. Agents
