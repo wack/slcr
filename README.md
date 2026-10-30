@@ -254,14 +254,6 @@ the CLI's requirements, [`SPEC.md`](SPEC.md) is its rendering, and
 each acceptance criterion to a snapshot test. `slcr check` in this repo checks
 `slcr`.
 
-## Status
-
-SLCR is pre-release. The only build today is the rolling
-[edge release](https://github.com/wack/slcr/releases/latest) from `trunk`, and
-the formats may still change before 1.0. Validators currently report pass or
-fail by exit code, and every `slcr check` reruns every validator. Structured
-validator results and result caching are planned.
-
 ## Contributing
 
 Issues and pull requests are welcome, especially feedback on the format.
