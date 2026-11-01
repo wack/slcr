@@ -47,11 +47,48 @@ pub(crate) struct Discovery {
 pub(crate) fn discover(root: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Discovery {
     let mut problems = Vec::new();
     let (set, patterns) = compile(specs, &mut problems);
+    let files = walk(root, cwd, &mut problems);
+    classify(root, cwd, files, &set, &patterns, problems)
+}
 
+/// [discover] `specs` among `paths`, the files of a project held in memory,
+/// relative to its root, rather than in a directory: nothing is ignored, and
+/// files are named by these paths. Each path that no pattern matches is
+/// returned too, in order.
+pub(crate) fn discover_among(
+    paths: impl IntoIterator<Item = PathBuf>,
+    specs: &[ProjectGlob],
+) -> (Discovery, Vec<PathBuf>) {
+    let mut problems = Vec::new();
+    let (set, patterns) = compile(specs, &mut problems);
+    let paths: Vec<PathBuf> = paths.into_iter().collect();
+    let mut unmatched: Vec<PathBuf> = paths
+        .iter()
+        .filter(|path| set.matches(path).is_empty())
+        .cloned()
+        .collect();
+    unmatched.sort();
+    // With an empty root and working directory, a file's relative, shown,
+    // and absolute paths are all the path it was given.
+    let root = Path::new("");
+    let discovery = classify(root, root, paths, &set, &patterns, problems);
+    (discovery, unmatched)
+}
+
+/// Sort `files`, relative to `root`, into what [discover] returns, after
+/// `problems`.
+fn classify(
+    root: &Path,
+    cwd: &Path,
+    files: impl IntoIterator<Item = PathBuf>,
+    set: &GlobSet,
+    patterns: &[&ProjectGlob],
+    mut problems: Vec<Problem>,
+) -> Discovery {
     // Each matched file, with the indices of the patterns that match it.
     let mut matches: BTreeMap<PathBuf, Vec<usize>> = BTreeMap::new();
     let mut validators = Vec::new();
-    for relative in walk(root, cwd, &mut problems) {
+    for relative in files {
         let matched = set.matches(&relative);
         if is_validator_file(&relative) {
             validators.push(ProjectFile::new(root, cwd, relative.clone()));
@@ -265,6 +302,40 @@ mod tests {
 
     fn messages(discovery: &Discovery) -> Vec<String> {
         discovery.problems.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn paths_held_in_memory_are_matched_as_files_on_disk_are() {
+        let paths = [
+            "docs/b.slcr.toml",
+            "SPEC.slcr.yaml",
+            "docs/a.slcr.toml",
+            "docs/notes.md",
+            "other/c.slcr.toml",
+        ]
+        .map(PathBuf::from);
+        let (discovery, unmatched) =
+            discover_among(paths, &globs(&["docs/*", "*.slcr.yaml", "missing/*", "["]));
+        assert_eq!(
+            found(&discovery),
+            ["SPEC.slcr.yaml", "docs/a.slcr.toml", "docs/b.slcr.toml"]
+        );
+        // Each file is named by the path it was given.
+        let shown: Vec<_> = discovery.files.iter().map(ProjectFile::shown).collect();
+        assert_eq!(
+            shown,
+            ["SPEC.slcr.yaml", "docs/a.slcr.toml", "docs/b.slcr.toml"].map(Path::new)
+        );
+        assert_eq!(
+            messages(&discovery),
+            [
+                "`specs` pattern `[` is not a valid glob: unclosed character class; missing ']'",
+                "`specs` pattern `docs/*` matches docs/notes.md, which is not a YAML, JSON, or \
+                 TOML file",
+                "`specs` pattern `missing/*` matches no file",
+            ]
+        );
+        assert_eq!(unmatched, [PathBuf::from("other/c.slcr.toml")]);
     }
 
     #[test]

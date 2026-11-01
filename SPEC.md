@@ -224,6 +224,7 @@ All of the following must hold:
 - [Discovers specifications](#REQ-016)
 - [Vets validator files](#REQ-017)
 - [Vets pinned descriptors](#REQ-018)
+- [Reads YAML as the schemas type it](#REQ-084)
 - [vet usage](#REQ-019)
 
 *Terms:* [Finding](#TERM-005)
@@ -419,8 +420,21 @@ When the pinned descriptor's argv names a `with` field its schema lacks, `slcr v
 
 When the manifest declares version 0.9.0 but the pinned descriptor is 1.0.0, `slcr vet` reports both versions, with help naming `slcr tools update`.
 
+<a id="REQ-084"></a>
+#### 1.3.8 Reads YAML as the schemas type it
+
+`slcr` MUST read a YAML file as the JSON data that the SLCR schemas describe: a plain scalar that YAML would read as a number or a boolean, such as `formatVersion: 1` or `title: 2024`, MUST fail to load where the schema expects a string, as the same value does in TOML and JSON. Quoted, the same value is a string, and only `true` and `false` are booleans.
+
+*Rationale:* Read as strings, such values would pass `slcr` but fail the published schema, and the same document sent as JSON would fail `slcr` too.
+
+*Acceptance criteria:*
+
+<a id="AC-214"></a>**Rejects numbers where strings belong**
+
+`slcr vet` given YAML files with `formatVersion: 1` and with `title: 2024` reports that each could not be loaded, labeling the value with help that it must be quoted, while the file with `title: "2024"` is `ok`.
+
 <a id="REQ-019"></a>
-#### 1.3.8 vet usage
+#### 1.3.9 vet usage
 
 `slcr vet` MUST take any number of FILEs, MUST reject a `--format` other than `human` or `json`, and MUST describe itself, its arguments, and its options when given `--help`.
 
@@ -1730,8 +1744,147 @@ What `slcr` does whichever subcommand runs: its top-level help, and the options 
 
 `slcr --enable-colors sometimes version` is a usage error listing `always`, `never`, and `auto`.
 
+<a id="SEC-005"></a>
+## 3. Library
+
+The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them. Through it they read, vet, write, render, slice, and query documents exactly as the CLI does, so that there is one definition of the formats.
+
+<a id="REQ-085"></a>
+### 3.1 Does what the CLI does
+
+The `slcr` crate MUST expose a library through which a program reads, vets, writes, renders, slices, and queries SLCR documents held in memory, producing what the CLI produces for the same documents.
+
+*Rationale:* A program that reimplemented any of these would accept documents `slcr` rejects, or render them differently, the first time the formats change.
+
+All of the following must hold:
+
+- [Reads and writes documents](#REQ-086)
+- [Vets as vet does](#REQ-087)
+- [Renders, slices, and queries as the CLI does](#REQ-088)
+- [Stops a query at a deadline](#REQ-089)
+- [Reads and writes manifests](#REQ-090)
+- [Never fetches descriptors](#REQ-091)
+- [Reads check reports](#REQ-092)
+
+<a id="REQ-086"></a>
+#### 3.1.1 Reads and writes documents
+
+The library MUST read a specification in any of its formats, as `slcr` reads a file in that format, and MUST write it in each format's canonical form, which reads back as the same document.
+
+*Depends on:* [Reads YAML as the schemas type it](#REQ-084)
+
+*Acceptance criteria:*
+
+<a id="AC-215"></a>**Round-trips in every format**
+
+The canon `todo-api` example read as YAML, JSON, and TOML is one document, which written in each format reads back as itself and is written the same way again.
+
+<a id="AC-216"></a>**Rejects YAML scalars that aren't strings**
+
+YAML with `formatVersion: 1`, `title: 2024`, `title: true`, or `title: 1.5` fails to load, while `title: "2024"`, `title: 'true'`, and `title: yes` load.
+
+<a id="REQ-087"></a>
+#### 3.1.2 Vets as vet does
+
+The library MUST vet a specification held in memory, and a project held in memory as its manifest and the paths of its specifications, and MUST report what it finds in the JSON document `slcr vet --format json` writes for the same files on disk. It MUST also report a specification of the project that no `specs` pattern matches, which on disk is not part of the project.
+
+*Depends on:* [Vets requirements files](#REQ-012), [Reports in JSON](#REQ-014), [Vets the project](#REQ-015), [Discovers specifications](#REQ-016)
+
+*Acceptance criteria:*
+
+<a id="AC-217"></a>**Reports files as vet does**
+
+For a clean file, files with a violation and with a warning, one with an unknown field, one with an unquoted `formatVersion`, and one that isn't YAML, the library's report is the bytes `slcr vet --format json FILE` writes.
+
+<a id="AC-218"></a>**Reports projects as vet does**
+
+For projects that are clean, have a pattern that matches nothing, have two specifications with one name, and match JSON and TOML specifications, the library's report is the bytes `slcr vet --format json` writes in the same project on disk.
+
+<a id="AC-219"></a>**Reports a specification no pattern matches**
+
+A project whose only pattern is `docs/*.slcr.toml` and whose one specification is at `SPEC.slcr.yaml` reports that the pattern matches nothing and that no pattern matches the specification, and lists no validator files.
+
+<a id="REQ-088"></a>
+#### 3.1.3 Renders, slices, and queries as the CLI does
+
+The library MUST render a specification, slice one of its requirements, and run a GQL query against it, producing the bytes `slcr render`, `slcr slice`, and `slcr query --format json` write for the same document, and MUST report a query that can't run with the diagnostic `slcr query` reports.
+
+*Depends on:* [render](#REQ-020), [query](#REQ-027), [slice](#REQ-034)
+
+*Acceptance criteria:*
+
+<a id="AC-220"></a>**Renders as render does**
+
+Rendering the canon `todo-api` example gives the bytes of the golden `todo-api.md`.
+
+<a id="AC-221"></a>**Slices as slice does**
+
+The slice of REQ-005 of the canon example is the golden `todo-api.REQ-005.md`, and slicing REQ-999 fails naming it.
+
+<a id="AC-222"></a>**Queries as query does**
+
+A query with no parameters and one with a bound `$id` return the bytes `slcr query --format json` writes for them, and a query with a syntax error fails with a diagnostic that labels where it is.
+
+<a id="REQ-089"></a>
+#### 3.1.4 Stops a query at a deadline
+
+The library MUST let its caller give a query a deadline, and MUST stop a query still running when it passes and report that the deadline was reached, rather than leave it running.
+
+*Rationale:* Queries can be exponential on graphs with diamonds, and a server runs queries its users write.
+
+*Acceptance criteria:*
+
+<a id="AC-223"></a>**Stops at the deadline**
+
+A query whose deadline has passed fails, saying the deadline was reached, while with time to spare it returns the rows it returns without one.
+
+<a id="REQ-090"></a>
+#### 3.1.5 Reads and writes manifests
+
+The library MUST read a project manifest as `slcr` reads `SLCR.toml`, reporting where an invalid one breaks the schema, and MUST write it as TOML in the layout `slcr tools add` writes, which reads back as an equal manifest.
+
+*Terms:* [Project manifest](#TERM-003)
+
+*Acceptance criteria:*
+
+<a id="AC-224"></a>**Writes a manifest that reads back equal**
+
+A manifest with two `specs` patterns and two tools, one with a URL source and one with a path source, is written with its patterns in order and a `[tools.<key>]` table per tool in key order, and reads back equal; as JSON it has `formatVersion`, `specs`, then `tools`, which is omitted when empty.
+
+<a id="AC-225"></a>**Rejects an invalid manifest**
+
+A manifest with an unknown key, one without `specs`, and one whose pin isn't `blake3:` and 64 lowercase hexadecimal digits each fail to be read as `SLCR.toml`.
+
+<a id="REQ-091"></a>
+#### 3.1.6 Never fetches descriptors
+
+The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project held in memory.
+
+*Rationale:* A program that stores manifests holds sources its users wrote. Fetching them would let a user make it request any URL it can reach, or read any path.
+
+*Terms:* [Project manifest](#TERM-003)
+
+*Acceptance criteria:*
+
+<a id="AC-226"></a>**Requests no URL and reads no path**
+
+Reading, writing, and vetting a project whose manifest's tools are sourced from a URL on a local server and from a path that exists nowhere sends that server no connection and reports no problem with either tool.
+
+<a id="REQ-092"></a>
+#### 3.1.7 Reads check reports
+
+The library MUST read back the JSON document `slcr check --format json` writes, field for field, and MUST reject a document of any other shape.
+
+*Depends on:* [Reports in JSON](#REQ-079)
+
+*Acceptance criteria:*
+
+<a id="AC-227"></a>**Reads what check writes**
+
+What `slcr check --format json` writes for a project with red and green validators, and for one that fails vetting, reads back with each validator and requirement status, and serializes back to the same JSON, while an empty object, an unknown field, an unknown status, and an unqualified requirement are rejected.
+
 <a id="SEC-002"></a>
-## 3. Glossary
+## 4. Glossary
 
 <dl>
 <dt><a id="TERM-017"></a>Absorbed failure</dt>

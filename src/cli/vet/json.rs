@@ -121,7 +121,7 @@ use crate::validators::{Finding as ValidatorFinding, Problem as ValidatorProblem
 
 /// The JSON document describing `project`, if `vet` vetted one, and
 /// `outcomes`.
-pub(super) fn document(
+pub(crate) fn document(
     project: Option<&ProjectOutcome>,
     outcomes: &[Outcome],
     deny_warnings: bool,
@@ -133,7 +133,7 @@ pub(super) fn document(
 /// The JSON document `slcr vet` writes, which `slcr check --format json`
 /// embeds.
 #[derive(Serialize)]
-pub(in crate::cli) struct Document<'a> {
+pub struct Document<'a> {
     /// Whether the project, if any, and every file passed.
     passed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -147,7 +147,7 @@ pub(in crate::cli) struct Document<'a> {
 impl<'a> Document<'a> {
     /// The document describing `project`, if `vet` vetted one, and
     /// `outcomes`.
-    pub(in crate::cli) fn new(
+    pub(crate) fn new(
         project: Option<&'a ProjectOutcome>,
         outcomes: &'a [Outcome],
         deny_warnings: bool,
@@ -172,6 +172,11 @@ impl<'a> Document<'a> {
             files,
             validators,
         }
+    }
+
+    /// Whether the project, if any, and every file passed.
+    pub fn passed(&self) -> bool {
+        self.passed
     }
 }
 
@@ -376,7 +381,7 @@ enum Severity {
 
 /// Why a file couldn't be loaded, or any other error, as JSON.
 #[derive(Serialize)]
-pub(in crate::cli) struct ErrorJson {
+pub struct ErrorJson {
     message: String,
     /// The errors that caused this one, outermost first.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -388,12 +393,12 @@ pub(in crate::cli) struct ErrorJson {
 }
 
 impl ErrorJson {
-    pub(in crate::cli) fn new(error: &ErrorReport) -> Self {
+    pub fn new(error: &ErrorReport) -> Self {
         Self::of(error.as_ref())
     }
 
     /// `diagnostic`, with the errors that caused it.
-    pub(in crate::cli) fn of(diagnostic: &dyn Diagnostic) -> Self {
+    pub fn of(diagnostic: &dyn Diagnostic) -> Self {
         let labels = diagnostic
             .labels()
             .into_iter()

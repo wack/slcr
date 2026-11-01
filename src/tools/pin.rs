@@ -15,7 +15,7 @@ const PREFIX: &str = "blake3:";
 /// the descriptor store files each descriptor under it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub(crate) struct Pin(blake3::Hash);
+pub struct Pin(blake3::Hash);
 
 /// The error returned when a string is not a valid [Pin].
 #[derive(Debug, Error, Diagnostic, PartialEq, Eq)]
@@ -24,13 +24,14 @@ pub(crate) struct Pin(blake3::Hash);
 pub struct InvalidPin(String);
 
 impl Pin {
-    /// The pin of `bytes`.
-    pub(crate) fn of(bytes: &[u8]) -> Self {
+    /// The pin of `bytes`: `blake3:` and the 64 lowercase hexadecimal
+    /// digits of their BLAKE3 hash.
+    pub fn of(bytes: &[u8]) -> Self {
         Self(blake3::hash(bytes))
     }
 
     /// Whether `bytes` hash to this pin.
-    pub(crate) fn matches(&self, bytes: &[u8]) -> bool {
+    pub fn matches(&self, bytes: &[u8]) -> bool {
         // `blake3::Hash`'s equality is constant-time.
         Self::of(bytes) == *self
     }

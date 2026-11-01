@@ -364,6 +364,12 @@ criterion = "AC-056"
 tool = "cargo-insta"
 with = { target = "cli", test = "vet::vet_rejects_an_unknown_format" }
 
+[[validator]]
+requirement = "slcr/REQ-084"
+criterion = "AC-214"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_rejects_yaml_scalars_that_are_not_strings" }
+
 # slcr render
 
 [[validator]]

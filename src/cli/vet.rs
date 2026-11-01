@@ -21,7 +21,7 @@ use crate::tools::{ToolKey, pinned, store::DescriptorStore};
 use crate::validators::vet::{Context, vet as vet_validators};
 use crate::validators::{Finding, ValidatorFile};
 
-pub(super) mod json;
+pub(crate) mod json;
 
 /// The arguments to `slcr vet`.
 #[derive(Args, Clone, Debug)]
@@ -310,7 +310,7 @@ pub(super) fn vet_project(
 
 /// What vetting the project as a whole found.
 #[derive(Debug)]
-pub(super) struct ProjectOutcome {
+pub struct ProjectOutcome {
     /// The manifest, relative to the working directory.
     manifest: PathBuf,
     /// Every problem with the project, or why the manifest couldn't be
@@ -323,7 +323,7 @@ pub(super) struct ProjectOutcome {
 
 /// What vetting one validator file found.
 #[derive(Debug)]
-pub(super) struct ValidatorOutcome {
+pub struct ValidatorOutcome {
     /// The file, relative to the working directory.
     path: PathBuf,
     /// Every problem with its validators, or why it couldn't be loaded.
@@ -358,8 +358,24 @@ impl Display for ValidatorStatus<'_> {
 }
 
 impl ProjectOutcome {
+    /// The outcome of vetting a project whose manifest is `manifest`, and
+    /// has `problems` or couldn't be loaded, with no validator files.
+    pub(crate) fn new(manifest: PathBuf, result: Result<Vec<Problem>, ErrorReport>) -> Self {
+        Self {
+            manifest,
+            result,
+            validators: Vec::new(),
+        }
+    }
+
+    /// Every problem with the project, or why its manifest couldn't be
+    /// loaded.
+    pub fn result(&self) -> Result<&[Problem], &ErrorReport> {
+        self.result.as_deref()
+    }
+
     /// Whether the project passes. Its problems are never warnings.
-    fn passes(&self) -> bool {
+    pub fn passes(&self) -> bool {
         self.result.as_ref().is_ok_and(Vec::is_empty)
     }
 
@@ -388,7 +404,7 @@ impl Display for ProjectStatus<'_> {
 
 /// What vetting one file found.
 #[derive(Debug)]
-pub(super) struct Outcome {
+pub struct Outcome {
     /// The file, as given on the command line.
     path: PathBuf,
     /// Every finding, or why the file couldn't be loaded.
@@ -396,8 +412,20 @@ pub(super) struct Outcome {
 }
 
 impl Outcome {
-    /// Whether the file passes.
-    fn passes(&self, deny_warnings: bool) -> bool {
+    /// The outcome of vetting the file at `path`: what its report found,
+    /// or why it couldn't be loaded.
+    pub(crate) fn new(path: PathBuf, result: Result<Report, ErrorReport>) -> Self {
+        Self { path, result }
+    }
+
+    /// Every finding, or why the file couldn't be loaded.
+    pub fn result(&self) -> Result<&Report, &ErrorReport> {
+        self.result.as_ref()
+    }
+
+    /// Whether the file passes: it loaded and breaks no invariant, and,
+    /// if `deny_warnings`, has no warning.
+    pub fn passes(&self, deny_warnings: bool) -> bool {
         match &self.result {
             Ok(report) => passes(report, deny_warnings),
             Err(_) => false,

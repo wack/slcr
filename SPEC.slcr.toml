@@ -510,6 +510,21 @@ body = "When the manifest declares version 0.9.0 but the pinned descriptor is 1.
 
 [[root.children.children.children]]
 kind = "requirement"
+id = "REQ-084"
+title = "Reads YAML as the schemas type it"
+body = "`slcr` MUST read a YAML file as the JSON data that the SLCR schemas describe: a plain scalar that YAML would read as a number or a boolean, such as `formatVersion: 1` or `title: 2024`, MUST fail to load where the schema expects a string, as the same value does in TOML and JSON. Quoted, the same value is a string, and only `true` and `false` are booleans."
+rationale = "Read as strings, such values would pass `slcr` but fail the published schema, and the same document sent as JSON would fail `slcr` too."
+modality = "MUST"
+refines = ["REQ-011"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-214"
+title = "Rejects numbers where strings belong"
+body = "`slcr vet` given YAML files with `formatVersion: 1` and with `title: 2024` reports that each could not be loaded, labeling the value with help that it must be quoted, while the file with `title: \"2024\"` is `ok`."
+
+[[root.children.children.children]]
+kind = "requirement"
 id = "REQ-019"
 title = "vet usage"
 body = "`slcr vet` MUST take any number of FILEs, MUST reject a `--format` other than `human` or `json`, and MUST describe itself, its arguments, and its options when given `--help`."
@@ -2063,6 +2078,163 @@ kind = "acceptanceCriterion"
 id = "AC-213"
 title = "Rejects an unknown preference"
 body = "`slcr --enable-colors sometimes version` is a usage error listing `always`, `never`, and `auto`."
+
+[[root.children]]
+kind = "section"
+id = "SEC-005"
+title = "Library"
+body = "The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them. Through it they read, vet, write, render, slice, and query documents exactly as the CLI does, so that there is one definition of the formats."
+
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-085"
+title = "Does what the CLI does"
+body = "The `slcr` crate MUST expose a library through which a program reads, vets, writes, renders, slices, and queries SLCR documents held in memory, producing what the CLI produces for the same documents."
+rationale = "A program that reimplemented any of these would accept documents `slcr` rejects, or render them differently, the first time the formats change."
+modality = "MUST"
+refinement = "AND"
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-086"
+title = "Reads and writes documents"
+body = "The library MUST read a specification in any of its formats, as `slcr` reads a file in that format, and MUST write it in each format's canonical form, which reads back as the same document."
+modality = "MUST"
+refines = ["REQ-085"]
+dependsOn = ["REQ-084"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-215"
+title = "Round-trips in every format"
+body = "The canon `todo-api` example read as YAML, JSON, and TOML is one document, which written in each format reads back as itself and is written the same way again."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-216"
+title = "Rejects YAML scalars that aren't strings"
+body = "YAML with `formatVersion: 1`, `title: 2024`, `title: true`, or `title: 1.5` fails to load, while `title: \"2024\"`, `title: 'true'`, and `title: yes` load."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-087"
+title = "Vets as vet does"
+body = "The library MUST vet a specification held in memory, and a project held in memory as its manifest and the paths of its specifications, and MUST report what it finds in the JSON document `slcr vet --format json` writes for the same files on disk. It MUST also report a specification of the project that no `specs` pattern matches, which on disk is not part of the project."
+modality = "MUST"
+refines = ["REQ-085"]
+dependsOn = ["REQ-012", "REQ-014", "REQ-015", "REQ-016"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-217"
+title = "Reports files as vet does"
+body = "For a clean file, files with a violation and with a warning, one with an unknown field, one with an unquoted `formatVersion`, and one that isn't YAML, the library's report is the bytes `slcr vet --format json FILE` writes."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-218"
+title = "Reports projects as vet does"
+body = "For projects that are clean, have a pattern that matches nothing, have two specifications with one name, and match JSON and TOML specifications, the library's report is the bytes `slcr vet --format json` writes in the same project on disk."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-219"
+title = "Reports a specification no pattern matches"
+body = "A project whose only pattern is `docs/*.slcr.toml` and whose one specification is at `SPEC.slcr.yaml` reports that the pattern matches nothing and that no pattern matches the specification, and lists no validator files."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-088"
+title = "Renders, slices, and queries as the CLI does"
+body = "The library MUST render a specification, slice one of its requirements, and run a GQL query against it, producing the bytes `slcr render`, `slcr slice`, and `slcr query --format json` write for the same document, and MUST report a query that can't run with the diagnostic `slcr query` reports."
+modality = "MUST"
+refines = ["REQ-085"]
+dependsOn = ["REQ-020", "REQ-027", "REQ-034"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-220"
+title = "Renders as render does"
+body = "Rendering the canon `todo-api` example gives the bytes of the golden `todo-api.md`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-221"
+title = "Slices as slice does"
+body = "The slice of REQ-005 of the canon example is the golden `todo-api.REQ-005.md`, and slicing REQ-999 fails naming it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-222"
+title = "Queries as query does"
+body = "A query with no parameters and one with a bound `$id` return the bytes `slcr query --format json` writes for them, and a query with a syntax error fails with a diagnostic that labels where it is."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-089"
+title = "Stops a query at a deadline"
+body = "The library MUST let its caller give a query a deadline, and MUST stop a query still running when it passes and report that the deadline was reached, rather than leave it running."
+rationale = "Queries can be exponential on graphs with diamonds, and a server runs queries its users write."
+modality = "MUST"
+refines = ["REQ-085"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-223"
+title = "Stops at the deadline"
+body = "A query whose deadline has passed fails, saying the deadline was reached, while with time to spare it returns the rows it returns without one."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-090"
+title = "Reads and writes manifests"
+body = "The library MUST read a project manifest as `slcr` reads `SLCR.toml`, reporting where an invalid one breaks the schema, and MUST write it as TOML in the layout `slcr tools add` writes, which reads back as an equal manifest."
+modality = "MUST"
+refines = ["REQ-085"]
+usesTerm = ["TERM-003"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-224"
+title = "Writes a manifest that reads back equal"
+body = "A manifest with two `specs` patterns and two tools, one with a URL source and one with a path source, is written with its patterns in order and a `[tools.<key>]` table per tool in key order, and reads back equal; as JSON it has `formatVersion`, `specs`, then `tools`, which is omitted when empty."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-225"
+title = "Rejects an invalid manifest"
+body = "A manifest with an unknown key, one without `specs`, and one whose pin isn't `blake3:` and 64 lowercase hexadecimal digits each fail to be read as `SLCR.toml`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-091"
+title = "Never fetches descriptors"
+body = "The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project held in memory."
+rationale = "A program that stores manifests holds sources its users wrote. Fetching them would let a user make it request any URL it can reach, or read any path."
+modality = "MUST NOT"
+refines = ["REQ-085"]
+usesTerm = ["TERM-003"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-226"
+title = "Requests no URL and reads no path"
+body = "Reading, writing, and vetting a project whose manifest's tools are sourced from a URL on a local server and from a path that exists nowhere sends that server no connection and reports no problem with either tool."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-092"
+title = "Reads check reports"
+body = "The library MUST read back the JSON document `slcr check --format json` writes, field for field, and MUST reject a document of any other shape."
+modality = "MUST"
+refines = ["REQ-085"]
+dependsOn = ["REQ-079"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-227"
+title = "Reads what check writes"
+body = "What `slcr check --format json` writes for a project with red and green validators, and for one that fails vetting, reads back with each validator and requirement status, and serializes back to the same JSON, while an empty object, an unknown field, an unknown status, and an unqualified requirement are rejected."
 
 [glossary]
 kind = "section"

@@ -7,7 +7,6 @@
 //! cell can be read back exactly.
 
 use console::measure_text_width;
-use serde::Serialize;
 
 use crate::query::Rows;
 
@@ -78,36 +77,6 @@ pub(super) fn tsv(rows: &Rows) -> String {
         ));
     }
     tsv
-}
-
-/// The rows as one JSON document:
-///
-/// ```json
-/// {
-///   "columns": ["r", "e"],
-///   "rows": [
-///     ["REQ-004", {"label": "REFINES", "source": "REQ-004", "target": "REQ-002"}]
-///   ]
-/// }
-/// ```
-///
-/// Nodes are their IDs, edges are objects naming their label and endpoints,
-/// and a float that isn't finite is `null`.
-pub(super) fn json(rows: &Rows) -> String {
-    #[derive(Serialize)]
-    struct Document<'a> {
-        columns: &'a [String],
-        rows: &'a [Vec<crate::query::Cell>],
-    }
-
-    let document = Document {
-        columns: &rows.columns,
-        rows: &rows.rows,
-    };
-    let mut json =
-        serde_json::to_string_pretty(&document).expect("query results serialize to JSON");
-    json.push('\n');
-    json
 }
 
 /// `text`, with line breaks and tabs escaped, and backslashes too if
@@ -183,7 +152,7 @@ REQ-1000  Héllo
 
     #[test]
     fn json_has_the_columns_and_the_rows() {
-        let document: serde_json::Value = serde_json::from_str(&json(&rows())).unwrap();
+        let document: serde_json::Value = serde_json::from_str(&rows().to_json()).unwrap();
         assert_eq!(
             document,
             serde_json::json!({

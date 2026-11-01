@@ -12,12 +12,12 @@ use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
 use super::source::{Source, is_project_relative};
 use super::{DescriptorVersion, ToolKey, pin::Pin};
-use crate::fs::{FileSystem, ReadError, format::Format};
+use crate::fs::{FileSystem, ReadError, format::Format, format::ParseError};
 use crate::project::problem::display;
 use crate::spec::graph::FormatVersion;
 
 /// The project manifest's name. Its directory is the project root.
-pub(crate) const MANIFEST: &str = "SLCR.toml";
+pub const MANIFEST: &str = "SLCR.toml";
 
 /// An SLCR project: the directory that holds `SLCR.toml`, found by walking
 /// up from the working directory, the way Cargo finds `Cargo.toml`.
@@ -121,24 +121,93 @@ fn manifest_in(dir: &Path) -> Lookup {
 }
 
 /// The contents of `SLCR.toml`, validated against the manifest schema.
-#[derive(Clone, Debug, PartialEq, Getters, Deserialize)]
+///
+/// It serializes in its canonical form: `formatVersion`, `specs`, then
+/// `tools`, omitted when empty, in key order, each with its `version`,
+/// `source`, and `pin`. [Manifest::to_toml] writes that form as the TOML
+/// `slcr tools add` writes.
+#[derive(Clone, Debug, PartialEq, Getters, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct Manifest {
-    #[getter(skip)]
-    #[allow(dead_code)]
+pub struct Manifest {
     format_version: FormatVersion,
     /// The specification files the project consumes, as globs.
     #[serde(deserialize_with = "non_empty_set")]
     specs: Vec<ProjectGlob>,
     /// The declared descriptors, by manifest key.
-    #[serde(default, deserialize_with = "non_empty_map")]
+    #[serde(
+        default,
+        deserialize_with = "non_empty_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     tools: BTreeMap<ToolKey, ToolEntry>,
 }
 
+impl Manifest {
+    /// Read `source` as the contents of `SLCR.toml`. An error names the
+    /// file `SLCR.toml` and labels where in `source` the problem is, as
+    /// `slcr vet` reports a manifest it can't load.
+    pub fn parse(source: &str) -> Result<Self, ParseError> {
+        Format::Toml.parse(Path::new(MANIFEST), source.to_owned())
+    }
+
+    /// The manifest as TOML: `formatVersion` and `specs`, then a
+    /// `[tools.<key>]` table for each tool in key order, with its `source`
+    /// inline, as `slcr tools add` writes one. Comments and formatting of
+    /// the TOML the manifest was read from are not kept, but it reads back
+    /// as an equal manifest.
+    pub fn to_toml(&self) -> String {
+        let mut document = DocumentMut::new();
+        document.insert(
+            "formatVersion",
+            toml_edit::value(self.format_version.as_str()),
+        );
+        let specs: toml_edit::Array = self.specs.iter().map(ProjectGlob::as_str).collect();
+        document.insert("specs", toml_edit::value(specs));
+        for (key, entry) in &self.tools {
+            insert_tool(&mut document, key, entry);
+        }
+        document.to_string()
+    }
+}
+
+/// Declare `entry` under `key` in `document`, replacing any entry already
+/// there: as a `[tools.<key>]` table, or as an entry of an inline `tools`
+/// table if the document has one, with its `source` inline.
+fn insert_tool(document: &mut DocumentMut, key: &ToolKey, entry: &ToolEntry) {
+    let tools = document.entry("tools").or_insert_with(|| {
+        // `[tools.<key>]` headers, with no bare `[tools]` above them.
+        let mut tools = Table::new();
+        tools.set_implicit(true);
+        Item::Table(tools)
+    });
+    let (field, location) = entry.source().field();
+    let mut source = InlineTable::new();
+    source.insert(field, location.into());
+    let version = entry.version().to_string();
+    let pin = entry.pin().to_string();
+    match tools {
+        Item::Table(tools) => {
+            let mut table = Table::new();
+            table.insert("version", toml_edit::value(version));
+            table.insert("source", toml_edit::value(source));
+            table.insert("pin", toml_edit::value(pin));
+            tools.insert(key.as_str(), Item::Table(table));
+        }
+        Item::Value(Value::InlineTable(tools)) => {
+            let mut table = InlineTable::new();
+            table.insert("version", version.into());
+            table.insert("source", Value::InlineTable(source));
+            table.insert("pin", pin.into());
+            tools.insert(key.as_str(), Value::InlineTable(table));
+        }
+        _ => unreachable!("a manifest that deserialized has a `tools` table"),
+    }
+}
+
 /// One `[tools]` entry: a descriptor, where to fetch it, and its pin.
-#[derive(Clone, Debug, PartialEq, Eq, Getters, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ToolEntry {
+pub struct ToolEntry {
     /// The descriptor's version, copied from it.
     version: DescriptorVersion,
     source: Source,
@@ -203,7 +272,7 @@ where
 /// A glob relative to the project root, such as `docs/**/*.slcr.toml`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub(crate) struct ProjectGlob(String);
+pub struct ProjectGlob(String);
 
 impl TryFrom<String> for ProjectGlob {
     type Error = String;
@@ -221,7 +290,7 @@ impl TryFrom<String> for ProjectGlob {
 }
 
 impl ProjectGlob {
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -322,34 +391,7 @@ impl ManifestFile {
 
     /// Declare `entry` under `key`, replacing any entry already there.
     pub(crate) fn set_tool(&mut self, key: &ToolKey, entry: ToolEntry) {
-        let tools = self.document.entry("tools").or_insert_with(|| {
-            // `[tools.<key>]` headers, with no bare `[tools]` above them.
-            let mut tools = Table::new();
-            tools.set_implicit(true);
-            Item::Table(tools)
-        });
-        let (field, location) = entry.source().field();
-        let mut source = InlineTable::new();
-        source.insert(field, location.into());
-        let version = entry.version().to_string();
-        let pin = entry.pin().to_string();
-        match tools {
-            Item::Table(tools) => {
-                let mut table = Table::new();
-                table.insert("version", toml_edit::value(version));
-                table.insert("source", toml_edit::value(source));
-                table.insert("pin", toml_edit::value(pin));
-                tools.insert(key.as_str(), Item::Table(table));
-            }
-            Item::Value(Value::InlineTable(tools)) => {
-                let mut table = InlineTable::new();
-                table.insert("version", version.into());
-                table.insert("source", Value::InlineTable(source));
-                table.insert("pin", pin.into());
-                tools.insert(key.as_str(), Value::InlineTable(table));
-            }
-            _ => unreachable!("a manifest that deserialized has a `tools` table"),
-        }
+        insert_tool(&mut self.document, key, &entry);
         self.manifest.tools.insert(key.clone(), entry);
     }
 

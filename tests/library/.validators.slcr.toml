@@ -1,0 +1,111 @@
+# Each validator proves one acceptance criterion of the library (the
+# "Library" section of SPEC.slcr.toml) by running one test of this suite,
+# the `library` integration target, with `cargo insta test`.
+formatVersion = "1"
+
+[[validator]]
+requirement = "slcr/REQ-086"
+criterion = "AC-215"
+tool = "cargo-insta"
+with = { target = "library", test = "documents_round_trip_in_their_canonical_form" }
+
+[[validator]]
+requirement = "slcr/REQ-086"
+criterion = "AC-216"
+tool = "cargo-insta"
+with = { target = "library", test = "yaml_scalars_that_are_not_strings_are_rejected" }
+
+[[validator]]
+requirement = "slcr/REQ-087"
+criterion = "AC-217"
+tool = "cargo-insta"
+with = { target = "library", test = "files_vet_as_slcr_vet_reports_them" }
+
+[[validator]]
+requirement = "slcr/REQ-087"
+criterion = "AC-217"
+tool = "cargo-insta"
+with = { target = "library", test = "a_document_already_read_vets_as_its_source_does" }
+
+[[validator]]
+requirement = "slcr/REQ-087"
+criterion = "AC-218"
+tool = "cargo-insta"
+with = { target = "library", test = "projects_vet_as_slcr_vet_reports_their_files" }
+
+[[validator]]
+requirement = "slcr/REQ-087"
+criterion = "AC-219"
+tool = "cargo-insta"
+with = { target = "library", test = "a_specification_no_pattern_matches_is_reported" }
+
+[[validator]]
+requirement = "slcr/REQ-087"
+tool = "cargo-insta"
+with = { target = "library", test = "a_project_without_a_manifest_is_reported_as_unloadable" }
+
+[[validator]]
+requirement = "slcr/REQ-088"
+criterion = "AC-220"
+tool = "cargo-insta"
+with = { target = "library", test = "documents_render_as_slcr_render_writes_them" }
+
+[[validator]]
+requirement = "slcr/REQ-088"
+criterion = "AC-221"
+tool = "cargo-insta"
+with = { target = "library", test = "requirements_slice_as_slcr_slice_writes_them" }
+
+[[validator]]
+requirement = "slcr/REQ-088"
+criterion = "AC-221"
+tool = "cargo-insta"
+with = { target = "library", test = "slicing_a_requirement_the_document_lacks_fails" }
+
+[[validator]]
+requirement = "slcr/REQ-088"
+criterion = "AC-222"
+tool = "cargo-insta"
+with = { target = "library", test = "queries_return_rows_as_slcr_query_writes_them" }
+
+[[validator]]
+requirement = "slcr/REQ-088"
+criterion = "AC-222"
+tool = "cargo-insta"
+with = { target = "library", test = "a_query_that_cant_run_reports_where_its_error_is" }
+
+[[validator]]
+requirement = "slcr/REQ-089"
+criterion = "AC-223"
+tool = "cargo-insta"
+with = { target = "library", test = "a_query_still_running_at_its_deadline_is_stopped" }
+
+[[validator]]
+requirement = "slcr/REQ-090"
+criterion = "AC-224"
+tool = "cargo-insta"
+with = { target = "library", test = "manifests_are_written_as_slcr_tools_add_writes_them" }
+
+[[validator]]
+requirement = "slcr/REQ-090"
+criterion = "AC-224"
+tool = "cargo-insta"
+with = { target = "library", test = "manifests_serialize_in_their_canonical_form" }
+
+[[validator]]
+requirement = "slcr/REQ-090"
+criterion = "AC-225"
+tool = "cargo-insta"
+with = { target = "library", test = "invalid_manifests_are_rejected_with_where_the_problem_is" }
+
+[[validator]]
+requirement = "slcr/REQ-091"
+criterion = "AC-226"
+tool = "cargo-insta"
+with = { target = "library", test = "manifests_and_projects_never_fetch_descriptors" }
+
+[[validator]]
+requirement = "slcr/REQ-092"
+criterion = "AC-227"
+tool = "cargo-insta"
+with = { target = "library", test = "check_reports_read_back_as_check_wrote_them" }

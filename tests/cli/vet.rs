@@ -485,3 +485,15 @@ fn vet_reports_descriptor_problems_in_json() {
     workspace.install(NEXTEST_DESCRIPTOR);
     assert_cmd_snapshot!(workspace.slcr(&["vet", "--format", "json"]));
 }
+
+#[test]
+fn vet_rejects_yaml_scalars_that_are_not_strings() {
+    let workspace = Workspace::new();
+    let untyped = TODO_API_YAML.replacen("formatVersion: \"1\"", "formatVersion: 1", 1);
+    workspace.file("version.yaml", &untyped);
+    let titled = TODO_API_YAML.replacen("title: TodoList API", "title: 2024", 1);
+    workspace.file("title.yaml", &titled);
+    let quoted = TODO_API_YAML.replacen("title: TodoList API", "title: \"2024\"", 1);
+    workspace.file("quoted.yaml", &quoted);
+    assert_cmd_snapshot!(workspace.slcr(&["vet", "version.yaml", "title.yaml", "quoted.yaml"]));
+}
