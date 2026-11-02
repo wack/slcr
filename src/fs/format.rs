@@ -9,7 +9,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 /// A serialization format, chosen by a file's extension.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Format {
+pub enum Format {
     Json,
     Toml,
     Yaml,
@@ -18,7 +18,7 @@ pub(crate) enum Format {
 impl Format {
     /// The format a file extension names, without its dot: `json`, `toml`,
     /// `yaml`, or `yml`.
-    pub(crate) fn from_extension(extension: &str) -> Option<Self> {
+    pub fn from_extension(extension: &str) -> Option<Self> {
         match extension {
             "json" => Some(Self::Json),
             "toml" => Some(Self::Toml),
@@ -28,11 +28,7 @@ impl Format {
     }
 
     /// Deserialize `source`, the contents of the file at `path`.
-    pub(crate) fn parse<T: DeserializeOwned>(
-        self,
-        path: &Path,
-        source: String,
-    ) -> Result<T, ParseError> {
+    pub fn parse<T: DeserializeOwned>(self, path: &Path, source: String) -> Result<T, ParseError> {
         let (message, span) = match self {
             Self::Json => match serde_json::from_str(&source) {
                 Ok(data) => return Ok(data),
@@ -42,7 +38,7 @@ impl Format {
                 Ok(data) => return Ok(data),
                 Err(err) => (err.message().to_owned(), err.span().map(SourceSpan::from)),
             },
-            Self::Yaml => match serde_saphyr::from_str(&source) {
+            Self::Yaml => match serde_saphyr::from_str_with_options(&source, yaml_options()) {
                 Ok(data) => return Ok(data),
                 Err(err) => yaml_error(&source, &err),
             },
@@ -60,7 +56,7 @@ impl Format {
     }
 
     /// Serialize `data` in this format, ending in a single newline.
-    pub(crate) fn serialize<T: Serialize>(self, data: &T) -> miette::Result<String> {
+    pub fn serialize<T: Serialize>(self, data: &T) -> miette::Result<String> {
         match self {
             // The YAML and TOML serializers end with a newline; this one
             // doesn't.
@@ -80,6 +76,19 @@ impl Display for Format {
             Self::Toml => "TOML",
             Self::Yaml => "YAML",
         })
+    }
+}
+
+/// How YAML is read: as the JSON data model the schemas describe, not as
+/// YAML's own types. A plain (unquoted) scalar that YAML reads as a number
+/// or a boolean is an error where a string is expected, so `title: 2024`
+/// and `formatVersion: 1` fail as they would in TOML and JSON, rather than
+/// being read as the strings `"2024"` and `"1"`. Only `true` and `false`
+/// are booleans: YAML 1.2 reads `yes`, `no`, `on`, and `off` as strings.
+fn yaml_options() -> serde_saphyr::Options {
+    serde_saphyr::options! {
+        no_schema: true,
+        strict_booleans: true,
     }
 }
 

@@ -68,6 +68,16 @@ pub enum Problem {
     ))]
     NoMatch { pattern: String },
 
+    /// A specification of a project held in memory, such as one a server
+    /// stores, that no pattern matches. On disk, such a file is not a
+    /// specification of the project, so `slcr vet` can't report it.
+    #[error("no `specs` pattern matches the specification {}", .path.display())]
+    #[diagnostic(help("add a pattern that matches it to `specs`, or delete the specification"))]
+    Unlisted {
+        #[serde(serialize_with = "display")]
+        path: PathBuf,
+    },
+
     #[error(
         "{} and {} both name their specification `{name}`",
         .first.display(),

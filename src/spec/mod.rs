@@ -7,16 +7,16 @@
 /// Loading and saving a graph through [crate::fs::FileSystem].
 pub(crate) mod file;
 /// The top-level document.
-pub(crate) mod graph;
+pub mod graph;
 /// Kind-prefixed node identifiers.
-pub(crate) mod id;
+pub mod id;
 /// The four node kinds and the Glossary.
-pub(crate) mod node;
+pub mod node;
 /// Deserializers for fields that canonical form omits when empty.
 pub(crate) mod optional;
 /// Deserializing tagged nodes without losing the location of errors.
 mod tagged;
 /// Validated strings: titles, Markdown prose, and specification names.
-pub(crate) mod text;
+pub mod text;
 /// Invariants beyond the schema's grammar, vetted on every load.
-pub(crate) mod vet;
+pub mod vet;

@@ -23,7 +23,7 @@ const MAX_DESCRIPTOR_BYTES: usize = 1 << 20;
 /// project.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "RawSource")]
-pub(crate) enum Source {
+pub enum Source {
     Url(HttpsUrl),
     Path(ProjectPath),
 }
@@ -53,7 +53,7 @@ impl TryFrom<RawSource> for Source {
 impl Source {
     /// The source's single field, as `cargo add` writes it: the name of the
     /// field and its value.
-    pub(crate) fn field(&self) -> (&'static str, &str) {
+    pub fn field(&self) -> (&'static str, &str) {
         match self {
             Self::Url(url) => ("url", url.as_str()),
             Self::Path(path) => ("path", path.as_str()),
@@ -113,10 +113,10 @@ fn read_descriptor(fs: &FileSystem, file: &Path, shown: &Path) -> Result<Vec<u8>
 /// An HTTPS URL, from which a published descriptor is fetched.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "String")]
-pub(crate) struct HttpsUrl(String);
+pub struct HttpsUrl(String);
 
 impl HttpsUrl {
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -212,10 +212,10 @@ impl Display for HttpsUrl {
 /// descriptor kept in the project.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "String")]
-pub(crate) struct ProjectPath(String);
+pub struct ProjectPath(String);
 
 impl ProjectPath {
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 

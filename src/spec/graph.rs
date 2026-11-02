@@ -168,6 +168,15 @@ pub enum FormatVersion {
     V1,
 }
 
+impl FormatVersion {
+    /// The version as documents spell it: `"1"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::V1 => "1",
+        }
+    }
+}
+
 /// Facts about the specification as a whole.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

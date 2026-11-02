@@ -24,7 +24,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use miette::Diagnostic;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::spec::graph::SlcrRequirementsDocument;
@@ -80,7 +80,7 @@ impl FromIterator<(RequirementId, Outcome)> for Verdicts {
 }
 
 /// Whether a requirement holds, as far as its validators tell.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     Satisfied,
@@ -141,7 +141,7 @@ impl Status {
 }
 
 /// How much an unsatisfied requirement matters, from least to most.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Never fails anything.

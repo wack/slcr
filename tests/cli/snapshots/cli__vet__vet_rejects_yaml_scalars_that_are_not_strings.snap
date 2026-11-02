@@ -1,0 +1,40 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - version.yaml
+    - title.yaml
+    - quoted.yaml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+version.yaml: could not be loaded
+title.yaml: could not be loaded
+quoted.yaml: ok
+
+----- stderr -----
+  × could not parse version.yaml as YAML
+   ╭─[version.yaml:3:16]
+ 2 │ $schema: https://slcr.dev/reference/schemas/spec/v1.schema.json
+ 3 │ formatVersion: 1
+   ·                ┬
+   ·                ╰── The string value [1] must be quoted
+ 4 │ spec:
+   ╰────
+
+  × could not parse title.yaml as YAML
+    ╭─[title.yaml:9:10]
+  8 │   id: SEC-001
+  9 │   title: 2024
+    ·          ──┬─
+    ·            ╰── The string value [2024] must be quoted
+ 10 │   body: A REST web application in MVC layout with one resource.
+    ╰────
+
+Error:   × vetting failed for 2 of 3 files

@@ -17,4 +17,4 @@ mod runtime;
 mod slice;
 mod tools;
 mod version;
-mod vet;
+pub(crate) mod vet;

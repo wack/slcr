@@ -72,7 +72,7 @@ impl FromStr for Param {
         })?;
         Ok(Self {
             name: name.to_owned(),
-            value: value(json),
+            value: crate::query::value(json),
         })
     }
 }
@@ -87,27 +87,6 @@ fn is_param_name(name: &str) -> bool {
             chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
         }
         _ => false,
-    }
-}
-
-/// The query value of `json`. An integer that doesn't fit an INT64 is a
-/// FLOAT64.
-fn value(json: serde_json::Value) -> Value {
-    match json {
-        serde_json::Value::Null => Value::Null,
-        serde_json::Value::Bool(value) => Value::Bool(value),
-        serde_json::Value::Number(number) => match number.as_i64() {
-            Some(value) => Value::Int(value),
-            None => Value::Float(number.as_f64().unwrap_or(f64::NAN)),
-        },
-        serde_json::Value::String(value) => Value::String(value),
-        serde_json::Value::Array(values) => Value::List(values.into_iter().map(value).collect()),
-        serde_json::Value::Object(entries) => Value::Map(
-            entries
-                .into_iter()
-                .map(|(key, json)| (key, value(json)))
-                .collect(),
-        ),
     }
 }
 
@@ -158,7 +137,7 @@ impl Query {
         let output = match format {
             OutputFormat::Table => format::table(&rows),
             OutputFormat::Tsv => format::tsv(&rows),
-            OutputFormat::Json => format::json(&rows),
+            OutputFormat::Json => rows.to_json(),
         };
         self.terminal.write_stdout(&output)
     }

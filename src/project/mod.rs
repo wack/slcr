@@ -16,7 +16,7 @@ use crate::spec::graph::UnvettedDocument;
 
 pub(crate) use discover::discover;
 pub(crate) use index::{IndexedSpec, SpecIndex};
-pub(crate) use problem::Problem;
+pub use problem::Problem;
 pub(crate) use qualified::QualifiedRequirementId;
 
 /// Expanding the `specs` patterns into the project's specification files.

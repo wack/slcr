@@ -37,10 +37,42 @@ forbids `unsafe_code`.
 `slcr` is a CLI for SLCR specifications: requirements documents stored as a graph
 and serialized as YAML, JSON, or TOML. A single crate exposes a library
 (`src/lib.rs`) and a thin binary (`src/bin/main.rs`). Unit tests are inline
-`#[cfg(test)]` modules; the only integration test is the CLI's end-to-end
-snapshot suite in `tests/cli/` (see Testing). `tests/fixtures/` holds data only
+`#[cfg(test)]` modules; the integration tests are the CLI's end-to-end
+snapshot suite in `tests/cli/` and the library's suite in `tests/library/`
+(see Testing). `tests/fixtures/` holds data only
 (the canonical `todo-api` spec in all three formats, its rendering, and the
 slice of its controller, loaded via `include_str!`).
+
+## Library (`src/lib.rs`)
+
+The library is public API for programs that keep SLCR documents somewhere
+other than files beside the code, such as a server that stores them (spec
+section "Library"). It does what the CLI does, through the same code, and
+never anything of its own: a change to how the CLI reads, vets, renders,
+slices, or queries changes the library with it. `src/lib.rs` documents the
+surface; keep it small, and re-export what it needs rather than making
+modules public wholesale (`spec` and `query` are public because their types
+are the data model).
+
+- `Format` (`parse`, `serialize`), `SlcrRequirementsDocument`,
+  `UnvettedDocument`, and the `spec` types read and write documents.
+- `vet` (`src/vet.rs`) vets a document from its source (`vet::source`) or
+  already read (`vet::document`), and a project held in memory
+  (`vet::project`): its `Manifest` and each specification's path, matched by
+  `project::discover::discover_among`, the same matching `discover` does on
+  disk. It reports a specification no pattern matches as `Problem::Unlisted`,
+  which only a project in memory can have, and never reads descriptors.
+  `vet::json`/`vet::report` are `slcr vet --format json`'s document, from
+  `cli::vet::json`.
+- `render`, `slice`, and `query` produce what `slcr render`, `slcr slice`,
+  and `slcr query --format json` (`Rows::to_json`) write; `query` takes an
+  optional deadline (`SpecGraph::query_until`, see Queries).
+- `Manifest::parse` reads `SLCR.toml` text; `Manifest::to_toml` writes it as
+  `slcr tools add` writes entries (`insert_tool`). `Source::fetch` stays
+  crate-private: nothing public fetches a descriptor.
+- `check::Report` (`src/check.rs`) reads back `slcr check --format json`,
+  field for field with `deny_unknown_fields`; keep it in step with
+  `src/cli/check/json.rs`, which its tests read back from the CLI snapshots.
 
 ## Command flow
 
@@ -463,14 +495,23 @@ language and the graph a specification maps to.
   fail.
 - `mod.rs` — `SpecGraph`: a document materialized into an in-memory
   `PetgraphStore`, which runs parsed queries and resolves results into
-  `Cell`s (`cell.rs`) that name nodes by SLCR ID.
+  `Cell`s (`cell.rs`) that name nodes by SLCR ID. `query_until` runs one
+  against a deadline.
+- `deadline.rs` — `Bounded`, a store that fails every read once its
+  deadline has passed. The in-memory store never yields, so an executor's
+  timeout can't interrupt a query; failing its reads stops the engine where
+  it is, since matching reads the store at every step.
 - `error.rs` — `InvalidQuery`, the miette diagnostic for any query error.
 
 ## Filesystem (`src/fs/`)
 
 `FileSystem` wraps XDG project dirs and does all serde I/O, dispatching on
-`File::extension()` to TOML / JSON / YAML (`serde-saphyr`). A file that can't be
-read fails with a `ReadError` naming its path; one that can't be deserialized
+`File::extension()` to TOML / JSON / YAML (`serde-saphyr`). `Format::parse`
+reads YAML as the JSON data model the schemas describe (`no_schema` and
+`strict_booleans`): an unquoted scalar YAML would type as a number or a
+boolean fails where a string is expected, as it does in TOML and JSON.
+A file that can't be read fails with a `ReadError` naming its path; one that
+can't be deserialized
 fails with a `ParseError` that labels the problem in the file's source when the
 deserializer reports a location; `load_file_at` reads a file from one path,
 such as an absolute one, while errors name it by the `File`'s own path.
@@ -482,7 +523,7 @@ files at dynamic paths, or `StaticFile` for fixed-name files under a
 
 # Testing
 
-Two layers, both run by `cargo make test`:
+Three layers, all run by `cargo make test`:
 
 - **Unit tests**, inline in `#[cfg(test)]` modules, test the library directly:
   exact strings, error types via `downcast_ref`, and `figment::Jail` for
@@ -491,6 +532,11 @@ Two layers, both run by `cargo make test`:
   snapshot what a user sees with [`insta`](https://insta.rs) and `insta-cmd`.
   They live outside `src/` because only integration tests get the built
   binary (`env!("CARGO_BIN_EXE_slcr")`).
+- **Library tests**, in `tests/library/`, use the public API alone, so they
+  break when something a program embedding SLCR relies on stops being
+  exported. Where the CLI's output defines the answer, they run the real
+  binary on the same files and compare bytes. Their validators are in
+  `tests/library/.validators.slcr.toml`, with target `library`.
 
 ## CLI snapshot tests (`tests/cli/`)
 
