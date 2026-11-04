@@ -1,3 +1,8 @@
+<div align="center">
+  
+  **SLCR is live on DevHunt this week! [Check out our listing.](https://devhunt.org/tool/slcr)**
+</div>
+
 <img width="1229" height="307" alt="slcr-banner" src="https://github.com/user-attachments/assets/a3c143f4-d97a-4e9e-b689-0a0267398292" />
 
 # SLCR
