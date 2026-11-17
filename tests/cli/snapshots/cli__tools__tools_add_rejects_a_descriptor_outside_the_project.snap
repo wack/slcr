@@ -7,6 +7,7 @@ info:
     - add
     - "../cargo-nextest.toml"
   env:
+    HOME: "[HOME]"
     XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
@@ -14,5 +15,5 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-Error:   × ../cargo-nextest.toml is outside the project
+Error:   × ../cargo-nextest.toml is outside the directory of SLCR.toml
   help: a descriptor kept in the project must be inside the directory that holds SLCR.toml; copy it there, or publish it at an HTTPS URL

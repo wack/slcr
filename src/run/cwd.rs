@@ -139,7 +139,7 @@ mod tests {
         let err = resolve(&nearest("Cargo.toml"), &ws.root(), ws.dir.path()).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "the validator file's directory, `..`, is outside the project root"
+            "the directory the validator file checks, `..`, is outside the project root"
         );
     }
 

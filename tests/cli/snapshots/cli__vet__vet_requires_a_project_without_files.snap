@@ -14,4 +14,4 @@ exit_code: 1
 
 ----- stderr -----
 Error:   × could not find SLCR.toml in the working directory or any parent directory
-  help: create SLCR.toml at the project root, with `formatVersion = "1"` and the specification files the project consumes, e.g. `specs = ["SPEC.slcr.toml"]`
+  help: create SLCR.toml beside the project's specifications, with `formatVersion = "1"` and the specification files the project consumes, e.g. `specs = ["SPEC.slcr.toml"]`

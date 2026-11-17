@@ -269,7 +269,6 @@ impl Display for ToolInstall {
 mod tests {
     use super::*;
     use crate::cli::block_on;
-    use crate::project::Layout;
     use crate::tools::fixture::{Fixture, NEXTEST};
     use crate::tools::https_server::{HttpsServer, Reply};
     use crate::tools::manifest::Project;
@@ -716,17 +715,19 @@ mod tests {
         fixture.declare(manifest(&[nextest()]));
         // A project root elsewhere, holding another descriptor at the same
         // path, which doesn't hash to the pin.
-        let repo = fixture.project().with_file_name("repo");
+        // Canonical, as the working directory is when slcr runs.
+        let repo = fixture
+            .project()
+            .canonicalize()
+            .unwrap()
+            .with_file_name("repo");
         std::fs::create_dir_all(repo.join("tools")).unwrap();
         std::fs::write(repo.join("tools/cargo-nextest.toml"), jev()).unwrap();
         let fetcher = Fetcher::new();
         let slcr_dir = fixture.project();
         let env = Environment {
             cwd: &repo,
-            project: Project::new(
-                Layout::new(slcr_dir.clone(), repo.clone()),
-                PathBuf::from("../project/SLCR.toml"),
-            ),
+            project: Project::at(Path::new("../project"), Some(Path::new(".")), &repo).unwrap(),
             ..fixture.env(&fetcher, &slcr_dir)
         };
         let installed = block_on(install(&env)).unwrap().unwrap();

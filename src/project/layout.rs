@@ -53,18 +53,33 @@ impl Layout {
     /// directory, under the project root. It is `{slcr.validator_dir}`,
     /// the `validator-dir` working directory, and where a `nearest` search
     /// starts.
+    ///
+    /// A validator file at the top of the SLCR directory checks the project
+    /// root itself, spelled exactly as it is, never with a trailing
+    /// separator: joining an empty path would add one.
     pub(crate) fn validator_dir(&self, file: &ProjectFile) -> PathBuf {
-        let relative = file.relative().parent().unwrap_or(Path::new(""));
-        self.project_root.join(relative)
+        match file.relative().parent() {
+            Some(relative) if !relative.as_os_str().is_empty() => self.project_root.join(relative),
+            _ => self.project_root.clone(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+
     use super::*;
 
     fn validator_file(slcr_dir: &str, relative: &str) -> ProjectFile {
         ProjectFile::new(Path::new(slcr_dir), Path::new(slcr_dir), relative.into())
+    }
+
+    /// The directory `relative` checks in `layout`, spelled exactly: `Path`'s
+    /// `==` compares components, which ignores a trailing separator.
+    fn checked(layout: &Layout, slcr_dir: &str, relative: &str) -> OsString {
+        let file = validator_file(slcr_dir, relative);
+        layout.validator_dir(&file).into_os_string()
     }
 
     #[test]
@@ -72,8 +87,11 @@ mod tests {
         let layout = Layout::single(PathBuf::from("/repo"));
         assert_eq!(layout.slcr_dir(), Path::new("/repo"));
         assert_eq!(layout.project_root(), Path::new("/repo"));
-        let file = validator_file("/repo", "src/api/.validators.slcr.toml");
-        assert_eq!(layout.validator_dir(&file), Path::new("/repo/src/api"));
+        assert_eq!(
+            checked(&layout, "/repo", "src/api/.validators.slcr.toml"),
+            "/repo/src/api"
+        );
+        assert_eq!(checked(&layout, "/repo", ".validators.slcr.toml"), "/repo");
     }
 
     #[test]
@@ -83,12 +101,17 @@ mod tests {
         assert_eq!(layout.project_root(), Path::new("/repo"));
         let file = validator_file("/data/app", "src/api/.validators.slcr.toml");
         assert_eq!(
-            file.absolute(),
-            Path::new("/data/app/src/api/.validators.slcr.toml")
+            file.absolute().as_os_str(),
+            "/data/app/src/api/.validators.slcr.toml"
         );
-        assert_eq!(layout.validator_dir(&file), Path::new("/repo/src/api"));
+        assert_eq!(
+            checked(&layout, "/data/app", "src/api/.validators.slcr.toml"),
+            "/repo/src/api"
+        );
         // One at the top of the SLCR directory checks the project root.
-        let top = validator_file("/data/app", ".validators.slcr.yaml");
-        assert_eq!(layout.validator_dir(&top), Path::new("/repo"));
+        assert_eq!(
+            checked(&layout, "/data/app", ".validators.slcr.yaml"),
+            "/repo"
+        );
     }
 }

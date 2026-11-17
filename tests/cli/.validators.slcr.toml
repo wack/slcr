@@ -370,6 +370,48 @@ criterion = "AC-214"
 tool = "cargo-insta"
 with = { target = "cli", test = "vet::vet_rejects_yaml_scalars_that_are_not_strings" }
 
+[[validator]]
+requirement = "slcr/REQ-093"
+criterion = "AC-228"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_vets_a_project_kept_outside_its_root" }
+
+[[validator]]
+requirement = "slcr/REQ-093"
+criterion = "AC-229"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_ignores_validator_files_under_the_project_root" }
+
+[[validator]]
+requirement = "slcr/REQ-093"
+criterion = "AC-230"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_reports_a_validator_file_with_no_counterpart" }
+
+[[validator]]
+requirement = "slcr/REQ-093"
+criterion = "AC-231"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_searches_no_parent_of_the_slcr_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-093"
+criterion = "AC-232"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_rejects_a_directory_that_does_not_exist" }
+
+[[validator]]
+requirement = "slcr/REQ-093"
+criterion = "AC-233"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_takes_the_directories_only_in_project_mode" }
+
+[[validator]]
+requirement = "slcr/REQ-093"
+criterion = "AC-234"
+tool = "cargo-insta"
+with = { target = "cli", test = "vet::vet_help" }
+
 # slcr render
 
 [[validator]]
@@ -857,6 +899,30 @@ requirement = "slcr/REQ-040"
 criterion = "AC-124"
 tool = "cargo-insta"
 with = { target = "cli", test = "tools::tools_remove_rejects_an_invalid_manifest" }
+
+[[validator]]
+requirement = "slcr/REQ-095"
+criterion = "AC-235"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_install_installs_from_a_path_in_the_slcr_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-095"
+criterion = "AC-236"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_subcommands_take_the_slcr_directory_but_not_the_project_root" }
+
+[[validator]]
+requirement = "slcr/REQ-095"
+criterion = "AC-253"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_add_declares_a_tool_in_the_slcr_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-095"
+criterion = "AC-254"
+tool = "cargo-insta"
+with = { target = "cli", test = "tools::tools_subcommands_work_on_the_manifest_in_the_slcr_directory" }
 
 [[validator]]
 requirement = "slcr/REQ-041"
@@ -1373,6 +1439,18 @@ with = { target = "cli", test = "check::check_reports_a_vetting_failure_in_json"
 [[validator]]
 requirement = "slcr/REQ-080"
 criterion = "AC-205"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_help" }
+
+[[validator]]
+requirement = "slcr/REQ-094"
+criterion = "AC-237"
+tool = "cargo-insta"
+with = { target = "cli", test = "check::check_runs_validators_in_the_project_root" }
+
+[[validator]]
+requirement = "slcr/REQ-094"
+criterion = "AC-238"
 tool = "cargo-insta"
 with = { target = "cli", test = "check::check_help" }
 

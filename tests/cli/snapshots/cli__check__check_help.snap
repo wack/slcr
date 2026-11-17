@@ -20,6 +20,12 @@ Options:
   -j, --jobs <N>
           Run at most N validators at once [default: the number of CPUs]. With 1, they run one at a time, in the order they are reported
 
+      --slcr-dir <DIR>
+          The directory that holds SLCR.toml, the specifications, and the validator files. Only it is searched for SLCR.toml, never its parents [default: the nearest directory, from the working directory up, that holds SLCR.toml]
+
+      --project-root <DIR>
+          The directory the validators check. A validator file checks the directory at its own path, relative to the directory of SLCR.toml, under it [default: the directory of SLCR.toml]
+
       --offline
           Never fetch a descriptor: one the descriptor store lacks fails vetting, as it does `slcr vet`
 

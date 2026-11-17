@@ -21,6 +21,12 @@ Arguments:
           The requirements files to vet: `.yaml`, `.yml`, `.json`, or `.toml`. Without any, vet the project: SLCR.toml and the descriptors its tools pin, every specification file its `specs` patterns match, and every validator file
 
 Options:
+      --slcr-dir <DIR>
+          The directory that holds SLCR.toml, the specifications, and the validator files. Only it is searched for SLCR.toml, never its parents [default: the nearest directory, from the working directory up, that holds SLCR.toml]
+
+      --project-root <DIR>
+          The directory the validators check. A validator file checks the directory at its own path, relative to the directory of SLCR.toml, under it [default: the directory of SLCR.toml]
+
       --deny-warnings
           Fail when a file has warnings, too
 

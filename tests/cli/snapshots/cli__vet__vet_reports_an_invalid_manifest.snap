@@ -19,7 +19,7 @@ SLCR.toml: could not be loaded
  1 │ formatVersion = "1"
  2 │ specs = ["../SPEC.slcr.yml"]
    ·         ──────────┬─────────
-   ·                   ╰── "../SPEC.slcr.yml" is not a glob relative to the project root, which uses forward slashes, with no leading `/` and no `..` segment
+   ·                   ╰── "../SPEC.slcr.yml" is not a glob relative to the directory of SLCR.toml, which uses forward slashes, with no leading `/` and no `..` segment
    ╰────
 
 Error:   × vetting failed for 1 of 1 file

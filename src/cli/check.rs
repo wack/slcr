@@ -3,14 +3,12 @@ use std::{num::NonZeroUsize, sync::Arc};
 use clap::{Args, ValueEnum};
 use miette::{IntoDiagnostic, Result};
 
-use super::block_on;
 use super::vet::{self, VettedProject, json::Document as VetDocument, vet_project};
+use super::{ProjectArgs, block_on};
 use crate::Terminal;
 use crate::fs::FileSystem;
 use crate::run::process::Outcome;
-use crate::tools::{
-    Environment, install::install, manifest::Project, source::Fetcher, store::DescriptorStore,
-};
+use crate::tools::{Environment, install::install, source::Fetcher, store::DescriptorStore};
 
 mod json;
 mod report;
@@ -28,6 +26,9 @@ pub struct CheckArgs {
     /// With 1, they run one at a time, in the order they are reported.
     #[arg(short, long, value_name = "N", value_parser = parse_jobs)]
     jobs: Option<NonZeroUsize>,
+
+    #[command(flatten)]
+    project: ProjectArgs,
 
     /// Never fetch a descriptor: one the descriptor store lacks fails
     /// vetting, as it does `slcr vet`.
@@ -71,6 +72,10 @@ fn parse_jobs(value: &str) -> Result<NonZeroUsize, String> {
 /// aside. Then it runs every validator, `--jobs` at a time, and evaluates
 /// each specification from their results.
 ///
+/// The project is the one in `--slcr-dir`, or else the one that holds the
+/// working directory, and its validators run against `--project-root`,
+/// which defaults to the directory of `SLCR.toml`.
+///
 /// It fails if a validator can't be run, if Ctrl-C interrupts it, if an
 /// unsatisfied MUST or MUST NOT requirement isn't absorbed, or, with
 /// `--deny-warnings`, on any warning. Unknown requirements never fail it.
@@ -89,7 +94,7 @@ impl Check {
         let store = DescriptorStore::new(&fs);
         let fetcher = Fetcher::new();
         let cwd = std::env::current_dir().into_diagnostic()?;
-        let project = Project::find_from(&cwd)?;
+        let project = self.args.project.locate(&cwd)?;
         let env = Environment {
             fs: &fs,
             store: &store,

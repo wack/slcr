@@ -13,8 +13,8 @@ use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 use super::source::{Source, is_project_relative};
 use super::{DescriptorVersion, ToolKey, pin::Pin};
 use crate::fs::{FileSystem, ReadError, format::Format, format::ParseError};
-use crate::project::Layout;
 use crate::project::problem::display;
+use crate::project::{Layout, relative_to};
 use crate::spec::graph::FormatVersion;
 
 /// The project manifest's name. Its directory is the SLCR directory.
@@ -35,23 +35,151 @@ pub(crate) struct Project {
 pub enum ProjectError {
     #[error("could not find {MANIFEST} in the working directory or any parent directory")]
     #[diagnostic(help(
-        "create {MANIFEST} at the project root, with `formatVersion = \"1\"` and the \
-         specification files the project consumes, e.g. `specs = [\"SPEC.slcr.toml\"]`"
+        "create {MANIFEST} beside the project's specifications, with `formatVersion = \"1\"` \
+         and the specification files the project consumes, e.g. \
+         `specs = [\"SPEC.slcr.toml\"]`"
     ))]
     NotFound,
+
+    /// The directory named as the one that holds the manifest doesn't.
+    #[error("{} holds no {MANIFEST}", .dir.display())]
+    #[diagnostic(help(
+        "name the directory of {MANIFEST} itself: its parent directories are not searched"
+    ))]
+    NoManifest {
+        /// As it was given.
+        dir: PathBuf,
+    },
 
     /// A near miss, such as `slcr.toml`, which a case-insensitive
     /// filesystem would find and Linux CI wouldn't.
     #[error("{} is not named {MANIFEST}", .path.display())]
     #[diagnostic(help("the manifest's name is case-sensitive: rename it to {MANIFEST}"))]
     Misnamed { path: PathBuf },
+
+    /// A directory given for the project that isn't one.
+    #[error("{given}, {}, {problem}", .dir.display())]
+    #[diagnostic(help("{given} must be an existing directory"))]
+    UnusableDirectory {
+        given: Given,
+        /// As it was given.
+        dir: PathBuf,
+        problem: DirectoryProblem,
+    },
+}
+
+/// Which of a project's directories a caller named.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Given {
+    /// The directory that holds `SLCR.toml`.
+    SlcrDir,
+    /// The directory the validators check.
+    ProjectRoot,
+}
+
+impl Display for Given {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::SlcrDir => "the directory given for SLCR.toml",
+            Self::ProjectRoot => "the project root",
+        })
+    }
+}
+
+/// Why a directory given for a project can't be used.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DirectoryProblem {
+    Missing,
+    NotADirectory,
+    /// It couldn't be resolved, for this reason.
+    Unreadable(String),
+}
+
+impl Display for DirectoryProblem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Missing => f.write_str("does not exist"),
+            Self::NotADirectory => f.write_str("is not a directory"),
+            Self::Unreadable(reason) => write!(f, "can't be read: {reason}"),
+        }
+    }
 }
 
 impl Project {
     /// The project laid out as `layout`, whose manifest messages name
     /// `shown`, its path relative to the working directory.
-    pub(crate) fn new(layout: Layout, shown: PathBuf) -> Self {
+    fn new(layout: Layout, shown: PathBuf) -> Self {
         Self { layout, shown }
+    }
+
+    /// The project a command works on, from the directories it was given,
+    /// each relative to `cwd`, the working directory, an absolute path:
+    /// the one whose manifest is in `slcr_dir`, if given, or else the one
+    /// that holds `cwd`; and whose project root is `project_root`, if
+    /// given, or else its SLCR directory.
+    pub(crate) fn locate(
+        slcr_dir: Option<&Path>,
+        project_root: Option<&Path>,
+        cwd: &Path,
+    ) -> Result<Self, ProjectError> {
+        match slcr_dir {
+            Some(slcr_dir) => Self::at(slcr_dir, project_root, cwd),
+            None => {
+                let project_root = project_root
+                    .map(|root| directory(Given::ProjectRoot, root, cwd))
+                    .transpose()?;
+                let project = Self::find_from(cwd)?;
+                Ok(match project_root {
+                    Some(root) => project.with_project_root(root),
+                    None => project,
+                })
+            }
+        }
+    }
+
+    /// The project whose manifest is in `slcr_dir`, and whose project root
+    /// is `project_root`, if given, or else `slcr_dir`. Both are relative
+    /// to `cwd`, the working directory, an absolute path, and are resolved
+    /// to canonical absolute paths. Only `slcr_dir` itself is searched for
+    /// the manifest, never its parents.
+    pub(crate) fn at(
+        slcr_dir: &Path,
+        project_root: Option<&Path>,
+        cwd: &Path,
+    ) -> Result<Self, ProjectError> {
+        let resolved = directory(Given::SlcrDir, slcr_dir, cwd)?;
+        let project_root = project_root
+            .map(|root| directory(Given::ProjectRoot, root, cwd))
+            .transpose()?;
+        match manifest_in(&resolved) {
+            Lookup::Found => {}
+            Lookup::Misnamed(name) => {
+                return Err(ProjectError::Misnamed {
+                    path: slcr_dir.join(name),
+                });
+            }
+            Lookup::Absent => {
+                return Err(ProjectError::NoManifest {
+                    dir: slcr_dir.to_path_buf(),
+                });
+            }
+        }
+        let shown = relative_to(&resolved.join(MANIFEST), cwd);
+        let project = Self::new(Layout::single(resolved), shown);
+        Ok(match project_root {
+            Some(root) => project.with_project_root(root),
+            None => project,
+        })
+    }
+
+    /// This project, with its project root at `project_root`, an absolute
+    /// path.
+    fn with_project_root(self, project_root: PathBuf) -> Self {
+        let slcr_dir = self.layout.slcr_dir().to_path_buf();
+        Self {
+            layout: Layout::new(slcr_dir, project_root),
+            ..self
+        }
     }
 
     /// The project that holds `dir`, an absolute path, found by walking up
@@ -96,6 +224,25 @@ impl Project {
     /// The manifest's path relative to the working directory.
     pub(crate) fn shown_manifest(&self) -> &Path {
         &self.shown
+    }
+}
+
+/// `given`, a directory relative to `cwd` that a caller named as `role`,
+/// as a canonical absolute path: symlinks followed, so that it compares
+/// with the paths under it as they are found.
+fn directory(role: Given, given: &Path, cwd: &Path) -> Result<PathBuf, ProjectError> {
+    let invalid = |problem| ProjectError::UnusableDirectory {
+        given: role,
+        dir: given.to_path_buf(),
+        problem,
+    };
+    match std::fs::canonicalize(cwd.join(given)) {
+        Ok(resolved) if resolved.is_dir() => Ok(resolved),
+        Ok(_) => Err(invalid(DirectoryProblem::NotADirectory)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(invalid(DirectoryProblem::Missing))
+        }
+        Err(err) => Err(invalid(DirectoryProblem::Unreadable(err.to_string()))),
     }
 }
 
@@ -296,8 +443,8 @@ impl TryFrom<String> for ProjectGlob {
             Ok(Self(value))
         } else {
             Err(format!(
-                "{value:?} is not a glob relative to the project root, which uses forward \
-                 slashes, with no leading `/` and no `..` segment"
+                "{value:?} is not a glob relative to the directory of SLCR.toml, which uses \
+                 forward slashes, with no leading `/` and no `..` segment"
             ))
         }
     }
@@ -815,5 +962,96 @@ pin = "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b"
         std::fs::write(dir.path().join("slcr.toml"), "").unwrap();
         let err = Project::find_from(&nested).unwrap_err();
         assert_eq!(err.to_string(), "../slcr.toml is not named SLCR.toml");
+    }
+
+    /// A workspace, canonical as a working directory is, holding
+    /// `app/SLCR.toml`, `app/src`, and `repo/src`.
+    fn workspace() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().canonicalize().unwrap();
+        std::fs::create_dir_all(cwd.join("app/src")).unwrap();
+        std::fs::create_dir_all(cwd.join("repo/src")).unwrap();
+        std::fs::write(cwd.join("app").join(MANIFEST), "").unwrap();
+        (dir, cwd)
+    }
+
+    #[test]
+    fn a_named_slcr_directory_is_the_project_s() {
+        let (_dir, cwd) = workspace();
+        let project = Project::at(Path::new("app"), None, &cwd).unwrap();
+        assert_eq!(*project.layout(), Layout::single(cwd.join("app")));
+        assert_eq!(project.shown_manifest(), Path::new("app/SLCR.toml"));
+
+        let project = Project::at(Path::new("../app"), Some(Path::new(".")), &cwd.join("repo"));
+        let project = project.unwrap();
+        assert_eq!(
+            *project.layout(),
+            Layout::new(cwd.join("app"), cwd.join("repo"))
+        );
+        assert_eq!(project.shown_manifest(), Path::new("../app/SLCR.toml"));
+    }
+
+    #[test]
+    fn a_named_slcr_directory_is_never_searched_above() {
+        let (_dir, cwd) = workspace();
+        let err = Project::at(Path::new("app/src"), None, &cwd).unwrap_err();
+        assert_eq!(err.to_string(), "app/src holds no SLCR.toml");
+        std::fs::write(cwd.join("app/src/slcr.toml"), "").unwrap();
+        let err = Project::at(Path::new("app/src"), None, &cwd).unwrap_err();
+        assert_eq!(err.to_string(), "app/src/slcr.toml is not named SLCR.toml");
+    }
+
+    #[test]
+    fn a_named_directory_must_be_one() {
+        let (_dir, cwd) = workspace();
+        let message = |slcr_dir: Option<&str>, root: Option<&str>| {
+            Project::locate(
+                slcr_dir.map(Path::new),
+                root.map(Path::new),
+                &cwd.join("app"),
+            )
+            .unwrap_err()
+            .to_string()
+        };
+        assert_eq!(
+            message(Some("missing"), None),
+            "the directory given for SLCR.toml, missing, does not exist"
+        );
+        assert_eq!(
+            message(Some("SLCR.toml"), None),
+            "the directory given for SLCR.toml, SLCR.toml, is not a directory"
+        );
+        assert_eq!(
+            message(None, Some("../missing")),
+            "the project root, ../missing, does not exist"
+        );
+        assert_eq!(
+            message(Some("."), Some("SLCR.toml")),
+            "the project root, SLCR.toml, is not a directory"
+        );
+    }
+
+    #[test]
+    fn a_project_root_can_be_named_for_the_project_found() {
+        let (_dir, cwd) = workspace();
+        let project = Project::locate(None, Some(Path::new("../../repo")), &cwd.join("app/src"));
+        let project = project.unwrap();
+        assert_eq!(
+            *project.layout(),
+            Layout::new(cwd.join("app"), cwd.join("repo"))
+        );
+        assert_eq!(project.shown_manifest(), Path::new("../SLCR.toml"));
+        // Without either, the project is found as before.
+        let found = Project::locate(None, None, &cwd.join("app/src")).unwrap();
+        assert_eq!(found, Project::find_from(&cwd.join("app/src")).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn named_directories_are_resolved_through_symlinks() {
+        let (_dir, cwd) = workspace();
+        std::os::unix::fs::symlink(cwd.join("repo"), cwd.join("link")).unwrap();
+        let project = Project::at(Path::new("app"), Some(Path::new("link")), &cwd).unwrap();
+        assert_eq!(project.layout().project_root(), cwd.join("repo"));
     }
 }

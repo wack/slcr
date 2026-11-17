@@ -20,6 +20,6 @@ Error:   × could not parse SLCR.toml as TOML
  6 │ version = "1.0.0"
  7 │ source = { path = "../cargo-nextest.toml" }
    ·                   ───────────┬───────────
-   ·                              ╰── "../cargo-nextest.toml" is not a path relative to the project root
+   ·                              ╰── "../cargo-nextest.toml" is not a path relative to the directory of SLCR.toml
  8 │ pin = "blake3:3aa337b9c338f5f5e93e6664416047b687e73343e4d92158aab2e6329f1e6e92"
    ╰────

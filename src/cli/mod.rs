@@ -1,5 +1,6 @@
 pub use check::{Check, CheckArgs};
 pub use init::{Init, InitArgs};
+pub use project::{ProjectArgs, SlcrDirArg};
 pub use query::{Query, QueryArgs};
 pub use render::{Render, RenderArgs};
 pub(crate) use runtime::block_on;
@@ -11,6 +12,7 @@ pub use vet::{Vet, VetArgs};
 mod check;
 mod findings;
 mod init;
+mod project;
 mod query;
 mod render;
 mod runtime;

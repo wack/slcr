@@ -1,0 +1,20 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - "../app/tools/sh.toml"
+    - "--slcr-dir"
+    - "../app"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+../app/SLCR.toml: added tool sh 1.0.0
+
+----- stderr -----

@@ -8,10 +8,11 @@ use clap::{Args, ValueEnum};
 use miette::{Diagnostic, IntoDiagnostic, Report as ErrorReport, Result};
 use thiserror::Error;
 
+use super::ProjectArgs;
 use super::findings::{FileFindings, ValidatorFindings, counted, passes, tally};
 use crate::Terminal;
 use crate::fs::FileSystem;
-use crate::project::{IndexedSpec, Layout, Problem, ProjectFile, SpecIndex, discover};
+use crate::project::{IndexedSpec, Layout, Problem, ProjectFile, SpecIndex, discover, relative_to};
 use crate::spec::file::RequirementsFile;
 use crate::spec::graph::UnvettedDocument;
 use crate::spec::vet::Report;
@@ -30,8 +31,11 @@ pub struct VetArgs {
     /// Without any, vet the project: SLCR.toml and the descriptors its
     /// tools pin, every specification file its `specs` patterns match, and
     /// every validator file.
-    #[arg(value_name = "FILE")]
+    #[arg(value_name = "FILE", conflicts_with_all = ["slcr_dir", "project_root"])]
     files: Vec<PathBuf>,
+
+    #[command(flatten)]
+    project: ProjectArgs,
 
     /// Fail when a file has warnings, too.
     #[arg(long)]
@@ -60,12 +64,15 @@ pub enum OutputFormat {
 /// command fails if any file can't be loaded or breaks an invariant, or,
 /// with `--deny-warnings`, has a warning.
 ///
-/// Given no files, it vets the project that holds the working directory:
-/// its manifest, which counts as one more file, every specification file
-/// the manifest's `specs` patterns match, and every validator file. A
-/// problem with the project as a whole, such as a pattern that matches
-/// nothing, two specifications with the same name, or a declared tool
-/// whose pinned descriptor isn't installed, fails the manifest. Either
+/// Given no files, it vets the project in `--slcr-dir`, or else the one
+/// that holds the working directory: its manifest, which counts as one
+/// more file, every specification file the manifest's `specs` patterns
+/// match, and every validator file, all read from the directory of
+/// `SLCR.toml`. A problem with the project as a whole, such as a pattern
+/// that matches nothing, two specifications with the same name, a
+/// validator file whose counterpart under `--project-root` isn't a
+/// directory, or a declared tool whose pinned descriptor isn't installed,
+/// fails the manifest. Either
 /// way, nothing is run and the network is never used: descriptors are read
 /// from the descriptor store only.
 pub struct Vet {
@@ -83,7 +90,7 @@ impl Vet {
         let (project, outcomes) = if self.args.files.is_empty() {
             let cwd = std::env::current_dir().into_diagnostic()?;
             let store = DescriptorStore::new(&fs);
-            let project = Project::find_from(&cwd)?;
+            let project = self.args.project.locate(&cwd)?;
             let vetted = vet_project(&fs, &store, &project, &cwd);
             (Some(vetted.project), vetted.outcomes)
         } else {
@@ -237,6 +244,13 @@ pub(super) fn vet_project(
     };
     let discovery = discover(layout.slcr_dir(), cwd, file.manifest().specs());
     let mut problems = discovery.problems;
+    problems.extend(discovery.validators.iter().filter_map(|file| {
+        let counterpart = layout.validator_dir(file);
+        (!counterpart.is_dir()).then(|| Problem::MissingCounterpart {
+            path: file.shown().to_path_buf(),
+            counterpart: relative_to(&counterpart, cwd),
+        })
+    }));
     let loaded: Vec<_> = discovery
         .files
         .into_iter()
@@ -1161,9 +1175,12 @@ mod tests {
         let store = DescriptorStore::at(store_dir.path().join("blake3"));
         let fs = FileSystem::new().unwrap();
         store.install(&fs, NEXTEST).unwrap();
-        let layout = Layout::new(dir.path().join("app"), dir.path().join("repo"));
-        let project = Project::new(layout.clone(), PathBuf::from("app/SLCR.toml"));
-        let vetted = vet_project(&fs, &store, &project, dir.path());
+        // Canonical, as the working directory is when slcr runs.
+        let cwd = dir.path().canonicalize().unwrap();
+        let project = Project::at(Path::new("app"), Some(Path::new("repo")), &cwd).unwrap();
+        let layout = Layout::new(cwd.join("app"), cwd.join("repo"));
+        assert_eq!(*project.layout(), layout);
+        let vetted = vet_project(&fs, &store, &project, &cwd);
         let project = vetted.project;
         assert_eq!(project.manifest, PathBuf::from("app/SLCR.toml"));
         assert_eq!(problems(&project), [] as [&str; 0]);

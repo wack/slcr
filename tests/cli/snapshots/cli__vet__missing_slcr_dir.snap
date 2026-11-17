@@ -1,0 +1,19 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--slcr-dir"
+    - missing
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the directory given for SLCR.toml, missing, does not exist
+  help: the directory given for SLCR.toml must be an existing directory

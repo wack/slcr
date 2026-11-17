@@ -18,6 +18,9 @@ Install every descriptor SLCR.toml pins that isn't installed yet: fetch it from 
 Usage: slcr tools install [OPTIONS]
 
 Options:
+      --slcr-dir <DIR>
+          The directory that holds SLCR.toml. Only it is searched for SLCR.toml, never its parents, and path sources are relative to it [default: the nearest directory, from the working directory up, that holds SLCR.toml]
+
       --enable-colors <ENABLE_COLORS>
           Whether to color the output
 

@@ -881,3 +881,153 @@ fn tools_install_installs_what_vet_reports_missing() {
     assert_cmd_snapshot!("fresh_clone_vet_again", workspace.slcr(&["vet"]));
     assert_eq!(workspace.read("SLCR.toml"), manifest);
 }
+
+/// A descriptor named sh, which runs `with.script` with `sh -c`.
+const SH: &str = r#"formatVersion = "1"
+name = "sh"
+version = "1.0.0"
+
+[validator.schema]
+type = "object"
+required = ["script"]
+properties.script = { type = "string" }
+
+[invoke]
+argv = ["sh", "-c", "{with.script}"]
+cwd = "project"
+"#;
+
+/// A project kept in `app`, outside `repo`, the code it describes, with
+/// [SH] kept in `app/tools/sh.toml`, declaring no tools.
+fn kept_outside() -> Workspace {
+    let workspace = Workspace::new();
+    workspace
+        .file("app/SLCR.toml", MANIFEST)
+        .file("app/tools/sh.toml", SH)
+        .dir("repo");
+    workspace
+}
+
+/// [kept_outside], declaring sh from `app/tools/sh.toml`, pinned to [SH],
+/// whose descriptor isn't installed.
+fn sh_declared_outside() -> Workspace {
+    let workspace = kept_outside();
+    workspace.file(
+        "app/SLCR.toml",
+        format!(
+            "{MANIFEST}\n[tools.sh]\nversion = \"1.0.0\"\nsource = {{ path = \"tools/sh.toml\" }}\n\
+             pin = \"{}\"\n",
+            pin(SH)
+        ),
+    );
+    workspace
+}
+
+#[test]
+fn tools_install_installs_from_a_path_in_the_slcr_directory() {
+    let workspace = sh_declared_outside();
+    // Another descriptor at the same path in the working directory, which
+    // doesn't hash to the pin.
+    workspace.file("tools/sh.toml", SH.replace("1.0.0", "1.1.0"));
+    let manifest = workspace.read("app/SLCR.toml");
+    assert_cmd_snapshot!(workspace.slcr(&["tools", "install", "--slcr-dir", "app"]));
+    assert_eq!(workspace.read(&stored(SH)), SH);
+    assert_eq!(workspace.read("app/SLCR.toml"), manifest);
+}
+
+#[test]
+fn tools_subcommands_take_the_slcr_directory_but_not_the_project_root() {
+    let workspace = sh_declared_outside();
+    let subcommands: [&[&str]; 6] = [
+        &["add", "app/tools/sh.toml"],
+        &["update", "sh"],
+        &["install"],
+        &["remove", "sh"],
+        &["list"],
+        &["show", "sh"],
+    ];
+    for args in subcommands {
+        let name = args[0];
+        let help = workspace
+            .slcr(&[&["tools", name, "--help"][..]].concat())
+            .output()
+            .unwrap();
+        let help = String::from_utf8(help.stdout).unwrap();
+        assert!(help.contains("--slcr-dir <DIR>"), "{name}: {help}");
+        assert!(
+            help.contains("[default: the nearest directory, from the working directory up, that holds SLCR.toml]"),
+            "{name}: {help}"
+        );
+        assert_cmd_snapshot!(
+            format!("{name}_rejects_a_project_root"),
+            workspace.slcr(
+                &[
+                    &["tools"],
+                    args,
+                    &["--slcr-dir", "app", "--project-root", "repo"]
+                ]
+                .concat()
+            )
+        );
+    }
+    // Nothing was changed or installed.
+    assert!(store_is_empty(&workspace));
+}
+
+#[test]
+fn tools_add_declares_a_tool_in_the_slcr_directory() {
+    let workspace = kept_outside();
+    // A descriptor in `repo` is outside the directory of SLCR.toml.
+    workspace.file("repo/sh.toml", SH);
+    assert_cmd_snapshot!(
+        "outside_the_slcr_directory",
+        workspace.slcr_in("repo", &["tools", "add", "sh.toml", "--slcr-dir", "../app"])
+    );
+    assert_eq!(workspace.read("app/SLCR.toml"), MANIFEST);
+    assert!(store_is_empty(&workspace));
+
+    assert_cmd_snapshot!(
+        "inside_the_slcr_directory",
+        workspace.slcr_in(
+            "repo",
+            &[
+                "tools",
+                "add",
+                "../app/tools/sh.toml",
+                "--slcr-dir",
+                "../app"
+            ]
+        )
+    );
+    assert_snapshot!(
+        "declared_in_the_slcr_directory",
+        workspace.read("app/SLCR.toml")
+    );
+    assert_eq!(workspace.read(&stored(SH)), SH);
+}
+
+#[test]
+fn tools_subcommands_work_on_the_manifest_in_the_slcr_directory() {
+    let workspace = sh_declared_outside();
+    workspace.install(SH);
+    let newer = SH.replace("version = \"1.0.0\"", "version = \"1.1.0\"");
+    workspace.file("app/tools/sh.toml", &newer);
+    assert_cmd_snapshot!(
+        "update_in_the_slcr_directory",
+        workspace.slcr(&["tools", "update", "sh", "--slcr-dir", "app"])
+    );
+    assert!(workspace.read("app/SLCR.toml").contains(&pin(&newer)));
+    assert_cmd_snapshot!(
+        "list_in_the_slcr_directory",
+        workspace.slcr(&["tools", "list", "--slcr-dir", "app"])
+    );
+    assert_cmd_snapshot!(
+        "show_in_the_slcr_directory",
+        workspace.slcr(&["tools", "show", "sh", "--slcr-dir", "app"])
+    );
+    assert_cmd_snapshot!(
+        "remove_in_the_slcr_directory",
+        workspace.slcr(&["tools", "remove", "sh", "--slcr-dir", "app"])
+    );
+    assert_eq!(workspace.read("app/SLCR.toml"), MANIFEST);
+}

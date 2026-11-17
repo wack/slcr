@@ -26,6 +26,9 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
+      --slcr-dir <DIR>
+          The directory that holds SLCR.toml. Only it is searched for SLCR.toml, never its parents, and path sources are relative to it [default: the nearest directory, from the working directory up, that holds SLCR.toml]
+
       --enable-colors <ENABLE_COLORS>
           Whether to color the output
 

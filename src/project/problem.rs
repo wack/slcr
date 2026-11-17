@@ -10,7 +10,8 @@ use crate::tools::pinned::DescriptorProblem;
 /// Something wrong with the project as a whole, rather than inside one
 /// of its files: a `specs` pattern that can't be honored, two
 /// specifications with the same name, two validator files in one
-/// directory, or a declared tool whose descriptor can't be used. Paths are
+/// directory, a validator file with nothing to check, or a declared tool
+/// whose descriptor can't be used. Paths are
 /// relative to the working directory.
 ///
 /// It serializes like a [crate::spec::vet::Violation]: an object whose
@@ -109,6 +110,25 @@ pub enum Problem {
         first: PathBuf,
         #[serde(serialize_with = "display")]
         second: PathBuf,
+    },
+
+    /// A validator file whose counterpart, the directory at its path under
+    /// the project root, isn't a directory. Only a project root other than
+    /// the directory of `SLCR.toml` can lack one.
+    #[error(
+        "the validator file {} checks {}, which is not a directory",
+        .path.display(),
+        .counterpart.display()
+    )]
+    #[diagnostic(help(
+        "a validator file checks the directory at its own path, relative to the directory of \
+         SLCR.toml, under the project root: move it to mirror the code it checks, or delete it"
+    ))]
+    MissingCounterpart {
+        #[serde(serialize_with = "display")]
+        path: PathBuf,
+        #[serde(serialize_with = "display")]
+        counterpart: PathBuf,
     },
 
     /// It serializes with a code of its own.

@@ -410,3 +410,101 @@ fn check_stops_every_validator_when_interrupted() {
     }
     assert!(dead(), "the grandchild, {}, is still running", pid.trim());
 }
+
+/// A tool that runs `with.script` with `sh -c`, in the working directory
+/// `cwd` (a TOML value), with the project root and the directory the
+/// validator file checks as `$1` and `$2`.
+fn located(name: &str, cwd: &str) -> String {
+    format!(
+        r#"formatVersion = "1"
+name = "{name}"
+version = "1.0.0"
+
+[validator.schema]
+type = "object"
+required = ["script"]
+properties.script = {{ type = "string" }}
+
+[invoke]
+argv = ["sh", "-c", "{{with.script}}", "sh", "{{slcr.project_root}}", "{{slcr.validator_dir}}"]
+cwd = {cwd}
+
+[results]
+pass = [0]
+"#
+    )
+}
+
+#[test]
+fn check_runs_validators_in_the_project_root() {
+    // Three tools, one per kind of working directory, kept in `app`.
+    let tools = [
+        (
+            "in-validator-dir",
+            located("in-validator-dir", "\"validator-dir\""),
+        ),
+        ("in-project", located("in-project", "\"project\"")),
+        (
+            "in-nearest",
+            located("in-nearest", "{ nearest = \"Cargo.toml\" }"),
+        ),
+    ];
+    let workspace = Workspace::new();
+    let entries: String = tools.iter().map(|(key, text)| entry(key, text)).collect();
+    workspace.file(
+        "app/SLCR.toml",
+        format!("formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n{entries}"),
+    );
+    for (key, text) in &tools {
+        workspace.file(&format!("app/tools/{key}.toml"), text);
+    }
+    // Each validator passes only if `$1` is `repo`, `$2` is `repo/src`,
+    // and it runs where its tool says; then it leaves a mark there. Only
+    // `repo` holds the Cargo.toml a `nearest` search finds.
+    let check = |key: &str, cwd: &str| {
+        format!(
+            "\n[[validator]]\nrequirement = \"shop/REQ-002\"\ntool = \"{key}\"\n\
+             with = {{ script = {:?} }}\n",
+            format!(
+                "[ \"$(basename \"$1\")\" = repo ] && [ \"$2\" = \"$1/src\" ] && \
+                 [ \"$(pwd -P)\" = \"{cwd}\" ] && touch {key}.ran"
+            )
+        )
+    };
+    workspace
+        .file("app/SPEC.slcr.yml", SPEC)
+        .file(
+            "app/src/.validators.slcr.toml",
+            format!(
+                "formatVersion = \"1\"\n{}{}{}",
+                check("in-validator-dir", "$2"),
+                check("in-project", "$1"),
+                check("in-nearest", "$1"),
+            ),
+        )
+        .file("app/src/Cargo.toml", "")
+        .file("repo/Cargo.toml", "")
+        .dir("repo/src");
+    assert_cmd_snapshot!(workspace.slcr(&[
+        "check",
+        "--slcr-dir",
+        "app",
+        "--project-root",
+        "repo",
+        "-j",
+        "1"
+    ]));
+    let ran: Vec<String> = workspace
+        .files()
+        .into_iter()
+        .filter(|file| file.ends_with(".ran"))
+        .collect();
+    assert_eq!(
+        ran,
+        [
+            "repo/in-nearest.ran",
+            "repo/in-project.ran",
+            "repo/src/in-validator-dir.ran",
+        ]
+    );
+}

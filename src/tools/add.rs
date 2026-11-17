@@ -125,7 +125,6 @@ impl Display for Added {
 mod tests {
     use super::*;
     use crate::cli::block_on;
-    use crate::project::Layout;
     use crate::tools::fixture::{Fixture, MANIFEST, NEXTEST};
     use crate::tools::https_server::{HttpsServer, Reply};
     use crate::tools::manifest::Project;
@@ -301,17 +300,24 @@ mod tests {
     #[test]
     fn a_path_is_recorded_relative_to_the_slcr_directory_never_the_project_root() {
         let fixture = Fixture::new();
-        let repo = fixture.project().with_file_name("repo");
+        // Canonical, as the working directory is when slcr runs.
+        let repo = fixture
+            .project()
+            .canonicalize()
+            .unwrap()
+            .with_file_name("repo");
         std::fs::create_dir_all(repo.join("tools")).unwrap();
         std::fs::write(repo.join("tools/cargo-nextest.toml"), NEXTEST).unwrap();
         let fetcher = Fetcher::new();
         let slcr_dir = fixture.project();
         let env = || Environment {
             cwd: &repo,
-            project: Project::new(
-                Layout::new(slcr_dir.clone(), repo.clone()),
-                PathBuf::from("../project/SLCR.toml"),
-            ),
+            project: Project::at(
+                std::path::Path::new("../project"),
+                Some(std::path::Path::new(".")),
+                &repo,
+            )
+            .unwrap(),
             ..fixture.env(&fetcher, &slcr_dir)
         };
         // A descriptor in the project root is outside the SLCR directory.

@@ -188,7 +188,7 @@ pub(super) async fn run_all<E>(
 
 #[cfg(all(test, unix))]
 pub(super) mod tests {
-    use std::{convert::Infallible, path::Path};
+    use std::{convert::Infallible, ffi::OsString, path::Path};
 
     use tempfile::TempDir;
 
@@ -255,21 +255,26 @@ timeout = 30
         // Only the project root's Cargo.toml is in a `nearest` search.
         std::fs::write(repo.join("Cargo.toml"), "").unwrap();
         std::fs::write(slcr_dir.join("src/Cargo.toml"), "").unwrap();
-        let relative = Path::new("src/.validators.slcr.toml");
         let tools = ["in-validator-dir", "in-project", "in-nearest"];
-        let validators: String = tools
-            .iter()
-            .map(|tool| {
-                format!("\n[[validator]]\nrequirement = \"todo-api/REQ-001\"\ntool = \"{tool}\"\n")
-            })
-            .collect();
-        std::fs::write(
-            slcr_dir.join(relative),
-            format!("formatVersion = \"1\"\n{validators}"),
-        )
-        .unwrap();
-        let file = ProjectFile::new(&slcr_dir, dir.path(), relative.to_path_buf());
-        let file = ValidatorFile::load(file).unwrap();
+        // A validator file at the top of the SLCR directory, and one in
+        // `src`, each running every tool.
+        let files = [".validators.slcr.toml", "src/.validators.slcr.toml"].map(|relative| {
+            let validators: String = tools
+                .iter()
+                .map(|tool| {
+                    format!(
+                        "\n[[validator]]\nrequirement = \"todo-api/REQ-001\"\ntool = \"{tool}\"\n"
+                    )
+                })
+                .collect();
+            std::fs::write(
+                slcr_dir.join(relative),
+                format!("formatVersion = \"1\"\n{validators}"),
+            )
+            .unwrap();
+            let file = ProjectFile::new(&slcr_dir, dir.path(), relative.into());
+            ValidatorFile::load(file).unwrap()
+        });
         let descriptors = tools
             .iter()
             .zip([
@@ -288,18 +293,37 @@ timeout = 30
                 (ToolKey::try_from((*tool).to_owned()).unwrap(), descriptor)
             })
             .collect();
-        let plan = Plan::new(Layout::new(slcr_dir, repo.clone()), vec![file], descriptors);
-        let invocations: Vec<Invocation> = (0..plan.len())
-            .map(|i| plan.invocation(i).unwrap())
+        let plan = Plan::new(
+            Layout::new(slcr_dir, repo.clone()),
+            files.into(),
+            descriptors,
+        );
+        // Each argument and working directory, spelled exactly: `Path`'s
+        // `==` would ignore a trailing separator.
+        let spelled: Vec<(Vec<OsString>, OsString)> = (0..plan.len())
+            .map(|i| {
+                let invocation = plan.invocation(i).unwrap();
+                let cwd = invocation.cwd().clone().into_os_string();
+                (invocation.args().clone(), cwd)
+            })
             .collect();
-        for invocation in &invocations {
-            assert_eq!(
-                invocation.args(),
-                &[repo.as_os_str(), repo.join("src").as_os_str()]
-            );
-        }
-        let cwds: Vec<&Path> = invocations.iter().map(|i| i.cwd().as_path()).collect();
-        assert_eq!(cwds, [repo.join("src").as_path(), &repo, &repo]);
+        let (root, src) = (
+            repo.into_os_string(),
+            dir.path().join("repo/src").into_os_string(),
+        );
+        let top = vec![root.clone(), root.clone()];
+        let nested = vec![root.clone(), src.clone()];
+        assert_eq!(
+            spelled,
+            [
+                (top.clone(), root.clone()),
+                (top.clone(), root.clone()),
+                (top, root.clone()),
+                (nested.clone(), src),
+                (nested.clone(), root.clone()),
+                (nested, root),
+            ]
+        );
     }
 
     /// Run `plan` `jobs` at a time until `interrupt`; also return the

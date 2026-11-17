@@ -138,16 +138,17 @@ pub(crate) enum SpawnFailure {
     #[error("{} holds `{file}`", searched(.start))]
     #[diagnostic(help(
         "the tool runs in the nearest directory that holds `{file}`, searching up from the \
-         validator file's directory and stopping at the project root, the directory of \
-         `SLCR.toml`"
+         directory the validator file checks, at the validator file's own path under the \
+         project root, and stopping at the project root"
     ))]
     NoNearest {
         file: String,
-        /// The validator file's directory, relative to the project root.
+        /// The directory the validator file checks, relative to the
+        /// project root.
         start: PathBuf,
     },
 
-    #[error("the validator file's directory, {}, is outside the project root", shown(.dir))]
+    #[error("the directory the validator file checks, {}, is outside the project root", shown(.dir))]
     OutsideProject {
         /// Relative to the project root.
         dir: PathBuf,

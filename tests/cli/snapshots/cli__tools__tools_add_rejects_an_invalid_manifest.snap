@@ -7,6 +7,7 @@ info:
     - add
     - tools/cargo-nextest.toml
   env:
+    HOME: "[HOME]"
     XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
@@ -19,5 +20,5 @@ Error:   × could not parse SLCR.toml as TOML
  2 │ formatVersion = "1"
  3 │ specs = ["../SPEC.slcr.yml"]
    ·         ──────────┬─────────
-   ·                   ╰── "../SPEC.slcr.yml" is not a glob relative to the project root, which uses forward slashes, with no leading `/` and no `..` segment
+   ·                   ╰── "../SPEC.slcr.yml" is not a glob relative to the directory of SLCR.toml, which uses forward slashes, with no leading `/` and no `..` segment
    ╰────

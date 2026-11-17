@@ -373,7 +373,7 @@ pub enum SourceError {
     ))]
     NotHttps { url: String },
 
-    #[error("{path:?} is not a path relative to the project root")]
+    #[error("{path:?} is not a path relative to the directory of SLCR.toml")]
     #[diagnostic(help(
         "a path source uses forward slashes, with no leading `/` and no `..` segment"
     ))]
@@ -386,7 +386,7 @@ pub enum SourceError {
     #[diagnostic(transparent)]
     Unreadable(ReadError),
 
-    #[error("{} is outside the project", .path.display())]
+    #[error("{} is outside the directory of SLCR.toml", .path.display())]
     #[diagnostic(help(
         "a descriptor kept in the project must be inside the directory that holds SLCR.toml; \
          copy it there, or publish it at an HTTPS URL"

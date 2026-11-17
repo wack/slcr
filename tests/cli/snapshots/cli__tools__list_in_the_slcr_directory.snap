@@ -1,0 +1,21 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - list
+    - "--slcr-dir"
+    - app
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+name  version  descriptor  source         pin
+----  -------  ----------  -------------  -----------------------------------------------------------------------
+sh    1.1.0    installed   tools/sh.toml  blake3:4a1896d2fed9d8b4c1e653ea2afbe36f617e8d45788be6b6ac4536893c820d19
+
+----- stderr -----

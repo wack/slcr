@@ -15,5 +15,5 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-Error:   × tools/cargo-nextest.toml is outside the project
+Error:   × tools/cargo-nextest.toml is outside the directory of SLCR.toml
   help: a descriptor kept in the project must be inside the directory that holds SLCR.toml; copy it there, or publish it at an HTTPS URL

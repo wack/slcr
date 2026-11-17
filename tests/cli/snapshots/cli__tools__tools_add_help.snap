@@ -7,6 +7,7 @@ info:
     - add
     - "--help"
   env:
+    HOME: "[HOME]"
     XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: true
@@ -18,11 +19,14 @@ Usage: slcr tools add [OPTIONS] <SOURCE>
 
 Arguments:
   <SOURCE>
-          Where to fetch the descriptor from: an `https://` URL, or the path to a file inside the project
+          Where to fetch the descriptor from: an `https://` URL, or the path to a file inside the directory of SLCR.toml
 
 Options:
       --as <NAME>
           The name to declare the tool under, which validators refer to it by. Defaults to the descriptor's own name
+
+      --slcr-dir <DIR>
+          The directory that holds SLCR.toml. Only it is searched for SLCR.toml, never its parents, and path sources are relative to it [default: the nearest directory, from the working directory up, that holds SLCR.toml]
 
       --enable-colors <ENABLE_COLORS>
           Whether to color the output

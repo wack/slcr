@@ -2,7 +2,7 @@ use clap::{Args, Subcommand, ValueEnum};
 use miette::{IntoDiagnostic, Result};
 use serde::Serialize;
 
-use super::block_on;
+use super::{SlcrDirArg, block_on};
 use crate::Terminal;
 use crate::fs::FileSystem;
 use crate::tools::{
@@ -10,7 +10,6 @@ use crate::tools::{
     add::add,
     install::install,
     list::list,
-    manifest::Project,
     remove::remove,
     show::show,
     source::{Fetcher, SourceArg},
@@ -23,6 +22,9 @@ use crate::tools::{
 pub struct ToolsArgs {
     #[command(subcommand)]
     command: ToolsCommand,
+
+    #[command(flatten)]
+    slcr_dir: SlcrDirArg,
 }
 
 /// The subcommands of `slcr tools`, which edit and read the `[tools]`
@@ -53,7 +55,7 @@ pub enum ToolsCommand {
 #[derive(Args, Clone, Debug)]
 pub struct AddArgs {
     /// Where to fetch the descriptor from: an `https://` URL, or the path to
-    /// a file inside the project.
+    /// a file inside the directory of SLCR.toml.
     #[arg(value_name = "SOURCE")]
     source: SourceArg,
 
@@ -134,7 +136,7 @@ impl Tools {
         let store = DescriptorStore::new(&fs);
         let fetcher = Fetcher::new();
         let cwd = std::env::current_dir().into_diagnostic()?;
-        let project = Project::find_from(&cwd)?;
+        let project = self.args.slcr_dir.locate(&cwd)?;
         let env = Environment {
             fs: &fs,
             store: &store,
