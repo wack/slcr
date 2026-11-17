@@ -381,7 +381,7 @@ body = "`slcr vet` beside `slcr.toml` fails, saying that the manifest's name is 
 kind = "requirement"
 id = "REQ-016"
 title = "Discovers specifications"
-body = "`slcr vet` MUST expand each `specs` pattern as a glob relative to the project root, in which `*` and `?` never cross a `/` and `**` does, seeing hidden files but skipping `.git` and whatever git ignores. A pattern that is invalid or matches nothing, a match that is a validator file or has no supported format's extension, and two files whose specifications share a name MUST each be a problem of the manifest, as MUST a manifest that breaks its schema, such as a pattern that leaves the project."
+body = "`slcr vet` MUST expand each `specs` pattern as a glob relative to the SLCR directory, in which `*` and `?` never cross a `/` and `**` does, seeing hidden files but skipping `.git` and whatever git ignores. A pattern that is invalid or matches nothing, a match that is a validator file or has no supported format's extension, and two files whose specifications share a name MUST each be a problem of the manifest, as MUST a manifest that breaks its schema, such as a pattern that leaves the project."
 rationale = "A pattern that silently matches nothing would leave a specification unvetted and unchecked while every command passes."
 modality = "MUST"
 refines = ["REQ-011"]
@@ -433,7 +433,7 @@ body = "A manifest whose `specs` holds `../SPEC.slcr.yml` can't be loaded, and t
 kind = "requirement"
 id = "REQ-017"
 title = "Vets validator files"
-body = "In project mode, `slcr vet` MUST find every validator file in the project, however `specs` reads, by the same walk that finds specifications, and report each with a status line. Each problem MUST be labeled at its validator in the file's source: a requirement that doesn't resolve to a specification and a requirement in it, an acceptance criterion that isn't the requirement's own, a tool the manifest doesn't declare, a `with` that the tool's validator schema rejects (one problem per schema error), and a validator identical to an earlier one. Two validator files in one directory MUST be a problem of the manifest."
+body = "In project mode, `slcr vet` MUST find every validator file in the SLCR directory, however `specs` reads, by the same walk that finds specifications, and report each with a status line. Each problem MUST be labeled at its validator in the file's source: a requirement that doesn't resolve to a specification and a requirement in it, an acceptance criterion that isn't the requirement's own, a tool the manifest doesn't declare, a `with` that the tool's validator schema rejects (one problem per schema error), and a validator identical to an earlier one. Two validator files in one directory MUST be a problem of the manifest."
 modality = "MUST"
 refines = ["REQ-011"]
 usesTerm = ["TERM-006", "TERM-007"]
@@ -507,6 +507,59 @@ kind = "acceptanceCriterion"
 id = "AC-054"
 title = "Reports an undeclared version"
 body = "When the manifest declares version 0.9.0 but the pinned descriptor is 1.0.0, `slcr vet` reports both versions, with help naming `slcr tools update`."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-093"
+title = "Takes the SLCR directory and the project root"
+body = "In project mode, `slcr vet` MUST take the project's SLCR directory from `--slcr-dir DIR`, which must hold `SLCR.toml` itself, without searching its parents, and its project root from `--project-root DIR`. Without them, the SLCR directory is found by walking up from the working directory, and the project root is the SLCR directory. It MUST read the manifest, the requirements files, and the validator files from the SLCR directory alone, never from the project root, and MUST report a validator file whose directory, at the same path under the project root, is not a directory there as a problem of the manifest. A directory that doesn't exist MUST fail the command, naming it, and either option given with a FILE MUST be a usage error."
+rationale = "A desktop application that tracks a user's repositories keeps each one's SLCR files in its own data directory, yet their validators must run against the repository as if the files were in it. A validator file's path names the code it checks, so the SLCR directory mirrors the project root's layout, and a validator file without its counterpart would fail only when `check` tried to run it."
+modality = "MUST"
+refines = ["REQ-011"]
+dependsOn = ["REQ-015"]
+usesTerm = ["TERM-018", "TERM-019", "TERM-007"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-228"
+title = "Vets a project kept outside its root"
+body = "With `SLCR.toml`, a specification, and `src/.validators.slcr.toml` in `app`, and a `src` directory in `repo`, `slcr vet --slcr-dir app --project-root repo` reports each file `ok`, named relative to the working directory, and exits with status 0."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-229"
+title = "Ignores validator files under the project root"
+body = "With a validator file in `repo/src` that names an undeclared tool, `slcr vet --slcr-dir app --project-root repo` neither lists nor vets it."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-230"
+title = "Reports a validator file with no counterpart"
+body = "With `app/lib/.validators.slcr.toml` and no `repo/lib`, `slcr vet --slcr-dir app --project-root repo` reports a problem of the manifest naming `lib` and fails."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-231"
+title = "Searches no parent of the SLCR directory"
+body = "`slcr vet --slcr-dir app/src`, where only `app` holds `SLCR.toml`, fails, saying that `app/src` holds no `SLCR.toml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-232"
+title = "Rejects a directory that doesn't exist"
+body = "`slcr vet --project-root missing` fails, naming `missing`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-233"
+title = "Takes the directories only in project mode"
+body = "`slcr vet --project-root repo SPEC.slcr.toml` is a usage error."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-234"
+title = "Describes the directories"
+body = "`slcr vet --help` describes `--slcr-dir` and `--project-root`, and what each defaults to."
 
 [[root.children.children.children]]
 kind = "requirement"
@@ -1177,7 +1230,7 @@ usesTerm = ["TERM-008", "TERM-014"]
 kind = "requirement"
 id = "REQ-043"
 title = "Declares and installs a descriptor"
-body = "`slcr tools add SOURCE` MUST fetch the descriptor at SOURCE, check that it is a valid descriptor, install it in the descriptor store, and only then declare it in the manifest under its `name`, or under NAME given `--as NAME`, with its `version`, its source, and its pin, reporting `SLCR.toml: added tool NAME VERSION`. A path is recorded relative to the project root, wherever the command runs. The manifest MUST be edited in place, keeping the rest of it as it was."
+body = "`slcr tools add SOURCE` MUST fetch the descriptor at SOURCE, check that it is a valid descriptor, install it in the descriptor store, and only then declare it in the manifest under its `name`, or under NAME given `--as NAME`, with its `version`, its source, and its pin, reporting `SLCR.toml: added tool NAME VERSION`. A path is recorded relative to the SLCR directory, wherever the command runs. The manifest MUST be edited in place, keeping the rest of it as it was."
 modality = "MUST"
 refines = ["REQ-042"]
 usesTerm = ["TERM-003", "TERM-008", "TERM-009", "TERM-010"]
@@ -1197,7 +1250,7 @@ body = "`slcr tools add tools/cargo-nextest.toml --as nextest` declares it as `[
 [[root.children.children.children.children.acceptanceCriteria]]
 kind = "acceptanceCriterion"
 id = "AC-128"
-title = "Records a path relative to the project root"
+title = "Records a path relative to the SLCR directory"
 body = "Run in `crates/api`, `slcr tools add ../../tools/cargo-nextest.toml` records `source = { path = \"tools/cargo-nextest.toml\" }`."
 
 [[root.children.children.children.children]]
@@ -1523,6 +1576,29 @@ kind = "acceptanceCriterion"
 id = "AC-163"
 title = "Reports a failed fetch"
 body = "When a tool's `url` can't be reached, the tool fails, saying why, and neither the manifest nor the store changes."
+
+[[root.children.children.children.children]]
+kind = "requirement"
+id = "REQ-095"
+title = "Installs for an SLCR directory"
+body = "`slcr tools install` MUST take the project's SLCR directory from `--slcr-dir DIR`, as `slcr vet` does, reading the manifest there and resolving each path source relative to it, wherever the command runs."
+rationale = "An application that keeps a project's SLCR files outside the project installs its descriptors before it checks it, and decides when that may use the network."
+modality = "MUST"
+refines = ["REQ-052"]
+dependsOn = ["REQ-093"]
+usesTerm = ["TERM-018"]
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-235"
+title = "Installs from a path in the SLCR directory"
+body = "Run outside `app`, `slcr tools install --slcr-dir app` installs the descriptor that `source = { path = \"tools/sh.toml\" }` names from `app/tools/sh.toml`."
+
+[[root.children.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-236"
+title = "Describes the SLCR directory"
+body = "`slcr tools install --help` describes `--slcr-dir` and what it defaults to."
 
 [[root.children.children.children.children]]
 kind = "requirement"
@@ -1992,6 +2068,29 @@ body = "When vetting fails, `slcr check --format json` writes vet's report and n
 
 [[root.children.children.children]]
 kind = "requirement"
+id = "REQ-094"
+title = "Runs validators against the project root"
+body = "`slcr check` MUST take `--slcr-dir` and `--project-root` as `slcr vet` does, and install, vet, and check the project they name. It MUST run each validator against the project root: `{slcr.project_root}`, the `project` working directory, and the top of a `nearest` search MUST be the project root, and `{slcr.validator_dir}`, the `validator-dir` working directory, and the start of a `nearest` search MUST be the directory at the validator file's path, relative to the SLCR directory, under the project root."
+rationale = "Validators check the code, wherever the SLCR files that name them are kept, so a project checks the same whether its SLCR directory is its root or kept elsewhere."
+modality = "MUST"
+refines = ["REQ-070"]
+dependsOn = ["REQ-093"]
+usesTerm = ["TERM-018", "TERM-019"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-237"
+title = "Runs validators in the project root"
+body = "In the project of AC-228, `slcr check --slcr-dir app --project-root repo` runs green validators that see `{slcr.project_root}` as `repo`, `{slcr.validator_dir}` as `repo/src`, and their working directory as `repo/src` under `validator-dir`, as `repo` under `project`, and as `repo` under a `nearest` search for a `Cargo.toml` that only `repo` holds."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-238"
+title = "Describes the directories"
+body = "`slcr check --help` describes `--slcr-dir` and `--project-root`, and what each defaults to."
+
+[[root.children.children.children]]
+kind = "requirement"
 id = "REQ-080"
 title = "check usage"
 body = "`slcr check` MUST describe itself and its options, `--jobs`, `--offline`, `--deny-warnings`, and `--format`, when given `--help`."
@@ -2083,7 +2182,7 @@ body = "`slcr --enable-colors sometimes version` is a usage error listing `alway
 kind = "section"
 id = "SEC-005"
 title = "Library"
-body = "The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them. Through it they read, vet, write, render, slice, and query documents exactly as the CLI does, so that there is one definition of the formats."
+body = "The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them, or a desktop application that keeps a repository's SLCR files in its own data directory and checks the repository with them. Through it they read, vet, write, render, slice, and query documents, and install and check projects, exactly as the CLI does, so that there is one definition of the formats."
 
 [[root.children.children]]
 kind = "requirement"
@@ -2209,7 +2308,7 @@ body = "A manifest with an unknown key, one without `specs`, and one whose pin i
 kind = "requirement"
 id = "REQ-091"
 title = "Never fetches descriptors"
-body = "The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project held in memory."
+body = "The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project, in memory or on disk, or when it checks a project. Only installing a project's descriptors, when its caller asks, fetches them."
 rationale = "A program that stores manifests holds sources its users wrote. Fetching them would let a user make it request any URL it can reach, or read any path."
 modality = "MUST NOT"
 refines = ["REQ-085"]
@@ -2236,6 +2335,125 @@ id = "AC-227"
 title = "Reads what check writes"
 body = "What `slcr check --format json` writes for a project with red and green validators, and for one that fails vetting, reads back with each validator and requirement status, and serializes back to the same JSON, while an empty object, an unknown field, an unknown status, and an unqualified requirement are rejected."
 
+[[root.children.children]]
+kind = "requirement"
+id = "REQ-096"
+title = "Works on a project kept anywhere"
+body = "The `slcr` crate MUST let a program vet, install, and check a project on disk whose SLCR directory and project root it names, and whose descriptor store it names, producing what `slcr vet`, `slcr tools install`, and `slcr check` produce for the same project."
+rationale = "A desktop application that tracks a user's repositories keeps each one's SLCR files in its own data directory, and runs SLCR in its own process, alongside other projects' checks, rather than through the CLI."
+modality = "MUST"
+refinement = "AND"
+usesTerm = ["TERM-018", "TERM-019", "TERM-009"]
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-097"
+title = "Vets a project kept anywhere"
+body = "The library MUST vet a project given its SLCR directory, its project root, and a descriptor store, including its validator files and the descriptors its tools pin, and MUST report what it finds in the JSON document `slcr vet --format json --project-root ROOT` writes when run in the SLCR directory."
+modality = "MUST"
+refines = ["REQ-096"]
+dependsOn = ["REQ-093", "REQ-014", "REQ-017", "REQ-018"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-239"
+title = "Reports a project kept anywhere as vet does"
+body = "For the project of AC-228, one with a validator file whose directory the project root lacks, and one whose store lacks a pinned descriptor, the library's report is the bytes `slcr vet --format json --project-root ../repo` writes in `app` with the same store."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-098"
+title = "Installs descriptors only when asked"
+body = "The library MUST install every descriptor a project's manifest pins that a descriptor store its caller names lacks, as `slcr tools install --slcr-dir` does, and report each tool's outcome as `slcr tools install` does, and it MUST NOT fetch a descriptor while doing anything else."
+rationale = "A program decides when it may use the network; a check that fetched would make every check a possible network request."
+modality = "MUST"
+refines = ["REQ-096"]
+dependsOn = ["REQ-053", "REQ-095"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-240"
+title = "Installs into the store it is given"
+body = "Installing a project whose named store lacks a descriptor sourced from a URL on a local server fetches it into that store, reports it `installed` with its pin, and leaves the store `slcr` uses by default untouched."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-099"
+title = "Checks as check does"
+body = "The library MUST check a project given its SLCR directory, its project root, a descriptor store, how many validators may run at once, and whether warnings are denied, as `slcr check --offline` does, never installing a descriptor, and MUST return the report `slcr check --format json` writes. It MUST run on its caller's asynchronous runtime rather than start one of its own, and MUST give its caller each validator's status as soon as `slcr check` would write it, in the same order."
+modality = "MUST"
+refines = ["REQ-096"]
+dependsOn = ["REQ-076", "REQ-077", "REQ-079", "REQ-094"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-241"
+title = "Reports a check as check does"
+body = "For a project kept outside its root with green and red validators, the library's report is what `slcr check --offline --format json --project-root ../repo` writes in `app`, apart from each run's duration."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-242"
+title = "Runs on its caller's runtime"
+body = "A check started from a task on a running multi-threaded tokio runtime completes, without starting a runtime of its own."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-243"
+title = "Reports statuses as they finish"
+body = "The statuses the caller receives during a check are, in order, the status lines `slcr check` writes for the same project."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-244"
+title = "Never installs"
+body = "When the store lacks a pinned descriptor, the check reports vet's problem, runs nothing, and sends its source no connection."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-100"
+title = "Stops when its caller cancels"
+body = "The library MUST let its caller cancel a check, and on cancellation MUST do what `slcr check` does when interrupted: stop every validator still running, together with every process it started, start no other, and report the check interrupted. It MUST NOT listen for Ctrl-C itself."
+rationale = "In an application, the user cancels with a button; a library that took over the process's SIGINT would take it from the application too."
+modality = "MUST"
+refines = ["REQ-096"]
+dependsOn = ["REQ-078"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-245"
+title = "Stops every validator when cancelled"
+body = "On Unix, cancelling while the second of five validators runs `sleep 30` in the background returns an interrupted report with one validator finished, kills the `sleep`, and never starts the third validator."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-101"
+title = "Runs tools on its caller's PATH"
+body = "The library MUST let its caller name the `PATH` on which a check finds each tool's program and which each validator inherits, in place of the process's own, and MUST otherwise use the process's own, as `slcr check` does."
+rationale = "An application started from the macOS Finder or Dock inherits a minimal `PATH` that lacks the tools a developer's shell finds, such as `cargo`."
+modality = "MUST"
+refines = ["REQ-096"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-246"
+title = "Finds tools on the given PATH"
+body = "With a tool's program in a directory the process's `PATH` lacks, a check given a `PATH` that holds it runs the validator green and the validator sees that `PATH`, while one given none reports that the program was not found on PATH."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-102"
+title = "Shares nothing between projects"
+body = "The library MUST NOT read or change the process's working directory, its environment apart from the `PATH` a check falls back to, or its signal handlers while it vets, installs, or checks a project, so that a program can work on several projects at once."
+modality = "MUST NOT"
+refines = ["REQ-096"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-247"
+title = "Checks two projects at once"
+body = "Two projects checked at once, from a working directory inside neither, each return the report checking it alone returns."
+
 [glossary]
 kind = "section"
 id = "SEC-002"
@@ -2258,13 +2476,13 @@ kind = "term"
 id = "TERM-003"
 title = "Project manifest"
 aliases = ["SLCR.toml"]
-definition = "The file `SLCR.toml`, whose directory is a project's root. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run."
+definition = "The file `SLCR.toml`, whose directory is a project's SLCR directory. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run."
 
 [[glossary.terms]]
 kind = "term"
 id = "TERM-004"
 title = "Project"
-definition = "The directory tree under a project manifest. A command that works on a project finds it by walking up from the working directory to the nearest `SLCR.toml`, and names files relative to the working directory."
+definition = "A project manifest and what it describes: the SLCR files in its SLCR directory, and the code under its project root, which is the same directory unless a command is given `--project-root`. A command that works on a project finds it by walking up from the working directory to the nearest `SLCR.toml`, unless given `--slcr-dir`, and names files relative to the working directory."
 
 [[glossary.terms]]
 kind = "term"
@@ -2282,7 +2500,7 @@ definition = "One entry of a validator file: a qualified requirement, such as `s
 kind = "term"
 id = "TERM-007"
 title = "Validator file"
-definition = "A file named `.validators.slcr.toml`, `.validators.slcr.json`, `.validators.slcr.yaml`, or `.validators.slcr.yml`, holding a list of validators. A directory holds at most one, and commands find every one in the project, so validators can sit beside the code they check."
+definition = "A file named `.validators.slcr.toml`, `.validators.slcr.json`, `.validators.slcr.yaml`, or `.validators.slcr.yml`, holding a list of validators. A directory holds at most one, and commands find every one in the SLCR directory. Its path there names the code its validators check, at the same path under the project root, so validators sit beside that code, or mirror its place when the SLCR directory is kept elsewhere."
 
 [[glossary.terms]]
 kind = "term"
@@ -2295,7 +2513,7 @@ definition = "A declarative TOML file that tells SLCR how to run one tool: its a
 kind = "term"
 id = "TERM-009"
 title = "Descriptor store"
-definition = "A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine. Only `slcr tools add`, `update`, and `install`, and `slcr check`, ever fill it."
+definition = "A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine; a program using the library may name a store of its own. Only `slcr tools add`, `update`, and `install`, `slcr check`, and the library's install ever fill it."
 
 [[glossary.terms]]
 kind = "term"
@@ -2345,3 +2563,15 @@ kind = "term"
 id = "TERM-017"
 title = "Absorbed failure"
 definition = "An unsatisfied requirement that refines at least one requirement, every one of which is satisfied anyway, as when one alternative of an OR fails and another passes. It is reported as a warning rather than as a violation."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-018"
+title = "SLCR directory"
+definition = "The directory that holds a project's manifest, and with it the project's SLCR files: its requirements files, its validator files, and the descriptors it keeps as `{ path }` sources. `specs` patterns and `{ path }` sources are relative to it, and commands find validator files by walking it. Commands find it by walking up from the working directory to the nearest `SLCR.toml`, unless given `--slcr-dir`, and it is the project root unless they are given `--project-root`."
+
+[[glossary.terms]]
+kind = "term"
+id = "TERM-019"
+title = "Project root"
+definition = "The directory a project's validators check: the root of the code its specifications describe. A descriptor names it `{slcr.project_root}` and `cwd = \"project\"`, and a `nearest` search stops there, and a validator file checks the directory at its own path, relative to the SLCR directory, under the project root. It is the SLCR directory unless a command is given `--project-root`, as when a desktop application keeps a repository's SLCR files in its own data directory."
