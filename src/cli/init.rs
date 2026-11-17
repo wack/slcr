@@ -438,29 +438,33 @@ fn listed(
     ProjectGlob::try_from(listed).map_err(|_| outside())
 }
 
-/// `path` relative to `cwd`, an absolute directory, if it is inside it.
-///
-/// `.` and `..` are resolved without the filesystem first, which keeps the
-/// path's own spelling. Failing that, the directory that would hold the
-/// file is resolved, for a path that reaches `cwd` through a symlink.
+/// `path` relative to `cwd`, a canonical absolute directory, if it is
+/// inside it once the directory that would hold it is resolved, symlinks
+/// and `..` included, as the path is written to: a path through a symlink
+/// that leaves `cwd`, or a `link/..` that does, is outside it, and one
+/// through a symlink into `cwd` is named by where it lands. Only if that
+/// directory doesn't exist, which creating the file then fails on, are
+/// `.` and `..` resolved without the filesystem.
 fn relative_to(path: &Path, cwd: &Path) -> Option<PathBuf> {
     let joined = cwd.join(path);
-    let mut lexical = PathBuf::new();
-    for component in joined.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                lexical.pop();
+    let name = joined.file_name()?;
+    let parent = joined.parent()?;
+    match std::fs::canonicalize(parent) {
+        Ok(resolved) => Some(resolved.strip_prefix(cwd).ok()?.join(name)),
+        Err(_) => {
+            let mut lexical = PathBuf::new();
+            for component in joined.components() {
+                match component {
+                    Component::CurDir => {}
+                    Component::ParentDir => {
+                        lexical.pop();
+                    }
+                    component => lexical.push(component),
+                }
             }
-            component => lexical.push(component),
+            lexical.strip_prefix(cwd).ok().map(Path::to_path_buf)
         }
     }
-    if let Ok(relative) = lexical.strip_prefix(cwd) {
-        return Some(relative.to_path_buf());
-    }
-    let resolved = std::fs::canonicalize(joined.parent()?).ok()?;
-    let relative = resolved.strip_prefix(cwd).ok()?;
-    Some(relative.join(joined.file_name()?))
 }
 
 /// The error returned when `slcr init` can't create a specification at a
@@ -1034,6 +1038,43 @@ title = "Glossary"
             let path = link.join("specs/api.toml");
             let glob = listed(&path, &path, &cwd, None).unwrap();
             assert_eq!(glob.as_str(), "specs/api.toml");
+            Ok(())
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_new_project_never_lists_a_path_that_leaves_through_a_symlink() {
+        Jail::expect_with(|jail| {
+            jail.create_dir("app")?;
+            jail.create_dir("repo")?;
+            let repo = jail.directory().join("repo");
+            std::os::unix::fs::symlink(&repo, jail.directory().join("app/link")).unwrap();
+            for file in ["app/link/evil.slcr.toml", "app/link/../evil.slcr.toml"] {
+                let err = run(&["--slcr-dir", "app", file, "--name", "evil"]).unwrap_err();
+                assert!(
+                    matches!(
+                        err.downcast_ref::<InvalidSpecPath>(),
+                        Some(InvalidSpecPath::OutsideSlcrDir { .. })
+                    ),
+                    "{file}: {err}"
+                );
+            }
+            // Nor in the working directory, without `--slcr-dir`.
+            jail.change_dir("app")?;
+            for file in ["link/evil.slcr.toml", "link/../evil.slcr.toml"] {
+                let err = run(&[file, "--name", "evil"]).unwrap_err();
+                assert!(
+                    matches!(
+                        err.downcast_ref::<InvalidSpecPath>(),
+                        Some(InvalidSpecPath::Outside { .. })
+                    ),
+                    "{file}: {err}"
+                );
+            }
+            assert!(entries(jail, "repo").is_empty());
+            assert_eq!(entries(jail, "app"), ["link"]);
+            assert_eq!(entries(jail, "."), ["app", "repo"]);
             Ok(())
         });
     }

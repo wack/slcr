@@ -25,6 +25,7 @@ dependencies = [
   "docs",
   "post-docs",
   "test-flow",
+  "test-doc",
 ]
 
 # Canonical clippy command — the single source of truth shared by CI
@@ -61,6 +62,7 @@ dependencies = [
   "docs",
   "post-docs",
   "test-flow",
+  "test-doc",
   "coverage-flow",
   "post-ci-flow",
 ]
@@ -76,6 +78,15 @@ args = [
   "@@remove-empty(CARGO_MAKE_CARGO_VERBOSE_FLAGS)",
   "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
 ]
+
+# Nextest doesn't run doctests, so the crate's documented examples are
+# compiled here, in CI's flow after the suite, to keep them compiling.
+[tasks.test-doc]
+description = "Compile and run the documentation's examples."
+category = "Test"
+workspace = false
+command = "cargo"
+args = ["test", "--doc", "--locked"]
 
 # The repository's own specification (see "Self-hosting" in CLAUDE.md).
 # Both tasks run the checked-out `slcr`, never an installed one, so the

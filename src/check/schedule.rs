@@ -444,7 +444,6 @@ timeout = 30
         assert!(ran.results.is_empty() && reported.is_empty() && !ran.interrupted);
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn an_interrupt_kills_every_run_still_going() {
         use std::time::{Duration, Instant};
@@ -475,26 +474,20 @@ timeout = 30
         assert!(!dir.path().join("third").exists());
 
         let pid = std::fs::read_to_string(pid_file).unwrap();
-        let stat = Path::new("/proc").join(pid.trim()).join("stat");
-        // Killed, it is gone, or a zombie until something reaps it.
-        let dead = || {
-            std::fs::read_to_string(&stat).map_or(true, |stat| {
-                matches!(
-                    stat.rsplit_once(") ")
-                        .and_then(|(_, rest)| rest.chars().next()),
-                    Some('Z' | 'X')
-                )
-            })
-        };
         let deadline = Instant::now() + Duration::from_secs(5);
-        while !dead() && Instant::now() < deadline {
+        while !dead(&pid) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert!(dead(), "the grandchild, {}, is still running", pid.trim());
+        assert!(
+            dead(&pid),
+            "the grandchild, {}, is still running",
+            pid.trim()
+        );
     }
 
     /// Whether the process `pid` is gone, or a zombie until something
-    /// reaps it.
+    /// reaps it. `ps` prints no state for a process that's gone, on Linux
+    /// and macOS alike.
     fn dead(pid: &str) -> bool {
         let ps = std::process::Command::new("ps")
             .args(["-o", "stat=", "-p", pid.trim()])

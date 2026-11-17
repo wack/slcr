@@ -31,7 +31,7 @@ cwd = "validator-dir"
 timeout = 60
 "#;
 
-/// Where `slcr`'s data directory is in a [Kept] workspace, given its
+/// Where `slcr`'s data directory is in a [Workspace], given its
 /// `XDG_DATA_HOME` and `HOME`.
 #[cfg(target_os = "macos")]
 const DATA_DIR: &str = ".home/Library/Application Support/slcr";
@@ -68,22 +68,27 @@ fn validators(tool: &str, scripts: &[&str]) -> String {
     format!("formatVersion = \"1\"\n{validators}")
 }
 
-/// A workspace holding a project kept outside its root: `app`, its SLCR
-/// directory, with the canon specification and [SH] kept in it, and
-/// `repo`, its project root, with a `src` directory. Its descriptor
-/// store is in the workspace, where `slcr` run in it keeps its own.
-struct Kept {
+/// A scratch directory, canonical as a working directory is, that `slcr`
+/// runs in with its data directory, and so its descriptor store, there.
+struct Workspace {
     /// Deleted when the workspace is dropped.
     _dir: TempDir,
     /// The workspace, canonical, as a working directory is.
     root: PathBuf,
 }
 
-impl Kept {
+impl Workspace {
     fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
-        let kept = Self { _dir: dir, root };
+        Self { _dir: dir, root }
+    }
+
+    /// A workspace holding a project kept outside its root: `app`, its
+    /// SLCR directory, with the canon specification and [SH] kept in it,
+    /// and `repo`, its project root, with a `src` directory.
+    fn kept() -> Self {
+        let kept = Self::new();
         kept.file(
             "app/SLCR.toml",
             &declaring("sh", SH, "{ path = \"tools/sh.toml\" }"),
@@ -94,10 +99,10 @@ impl Kept {
         kept
     }
 
-    /// [Kept::new], with validators in `app/src` running `scripts`, and
-    /// [SH] installed.
+    /// [Workspace::kept], with validators in `app/src` running `scripts`,
+    /// and [SH] installed.
     fn validated(scripts: &[&str]) -> Self {
-        let kept = Self::new();
+        let kept = Self::kept();
         kept.file("app/src/.validators.slcr.toml", &validators("sh", scripts))
             .install(SH);
         kept
@@ -119,7 +124,28 @@ impl Kept {
         DescriptorStore::at(self.path(DATA_DIR).join("descriptors/blake3"))
     }
 
-    /// File `descriptor` in [Kept::store], as installing it would.
+    fn read(&self, path: &str) -> String {
+        std::fs::read_to_string(self.path(path)).unwrap()
+    }
+
+    /// Each file the store holds, and its contents.
+    fn stored(&self) -> Vec<(String, String)> {
+        let dir = self.path(DATA_DIR).join("descriptors/blake3");
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return Vec::new();
+        };
+        let mut stored: Vec<(String, String)> = entries
+            .map(|entry| {
+                let path = entry.unwrap().path();
+                let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                (name, std::fs::read_to_string(path).unwrap())
+            })
+            .collect();
+        stored.sort();
+        stored
+    }
+
+    /// File `descriptor` in [Workspace::store], as installing it would.
     fn install(&self, descriptor: &str) -> &Self {
         self.file(
             &format!("{DATA_DIR}/descriptors/blake3/{}.toml", hex(descriptor)),
@@ -131,25 +157,40 @@ impl Kept {
         Project::open(self.path("app"), self.path("repo")).unwrap()
     }
 
-    /// The stdout of `slcr` with `args`, run in `app`, with the
-    /// workspace's data directory.
-    fn slcr(&self, args: &[&str]) -> String {
-        let output = Command::new(env!("CARGO_BIN_EXE_slcr"))
+    /// `slcr` with `args`, run in the workspace's directory `dir`, with
+    /// the workspace's data directory, and trusting `authority`, a PEM
+    /// certificate authority, if given, where `slcr` lets the environment
+    /// name one.
+    fn slcr(&self, dir: &str, args: &[&str], authority: Option<&Path>) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_slcr"));
+        command
             .args(args)
-            .current_dir(self.path("app"))
+            .current_dir(self.path(dir))
             .env_remove("LOG_LEVEL")
             .env("NO_COLOR", "1")
             .env("XDG_DATA_HOME", self.path(".data"))
-            .env("HOME", self.path(".home"))
-            .output()
-            .unwrap();
+            .env("HOME", self.path(".home"));
+        if let Some(authority) = authority {
+            command.env("SSL_CERT_FILE", authority);
+        }
+        command
+    }
+
+    /// The stdout of `slcr` with `args`, run in `app`.
+    fn written_in_app(&self, args: &[&str]) -> String {
+        let output = self.slcr("app", args, None).output().unwrap();
         String::from_utf8(output.stdout).unwrap()
+    }
+
+    /// Whether `slcr` with `args`, run in the workspace, succeeds.
+    fn succeeds(&self, args: &[&str], authority: Option<&Path>) -> bool {
+        self.slcr(".", args, authority).status().unwrap().success()
     }
 
     /// What `slcr check --offline --format json --project-root ../repo`
     /// writes, without durations.
     fn checked_by_slcr(&self) -> Value {
-        let written = self.slcr(&[
+        let written = self.written_in_app(&[
             "check",
             "--offline",
             "--format",
@@ -195,13 +236,13 @@ fn jobs(jobs: usize) -> Options {
 
 #[test]
 fn projects_kept_anywhere_vet_as_slcr_vet_reports_them() {
-    let ok = Kept::validated(&["true"]);
-    let no_counterpart = Kept::validated(&["true"]);
+    let ok = Workspace::validated(&["true"]);
+    let no_counterpart = Workspace::validated(&["true"]);
     no_counterpart.file(
         "app/lib/.validators.slcr.toml",
         &validators("sh", &["true"]),
     );
-    let uninstalled = Kept::new();
+    let uninstalled = Workspace::kept();
     uninstalled.file(
         "app/src/.validators.slcr.toml",
         &validators("sh", &["true"]),
@@ -212,7 +253,8 @@ fn projects_kept_anywhere_vet_as_slcr_vet_reports_them() {
         ("uninstalled", &uninstalled),
     ] {
         let (project, outcomes) = kept.project().vet(&kept.store());
-        let written = kept.slcr(&["vet", "--format", "json", "--project-root", "../repo"]);
+        let written =
+            kept.written_in_app(&["vet", "--format", "json", "--project-root", "../repo"]);
         let report = slcr::vet::json(Some(&project), &outcomes, false);
         assert_eq!(format!("{report}\n"), written, "{name}");
         assert_eq!(project.passes(), name == "ok", "{name}");
@@ -223,7 +265,7 @@ fn projects_kept_anywhere_vet_as_slcr_vet_reports_them() {
 fn installing_fills_the_store_it_is_given() {
     // Unique, so that nothing could have filed it before.
     let descriptor = format!("# {:?}\n{SH}", Instant::now());
-    let kept = Kept::new();
+    let kept = Workspace::kept();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let (installed, manifest) = runtime.block_on(async {
         let server = HttpsServer::start(&descriptor).await;
@@ -258,13 +300,13 @@ fn installing_fills_the_store_it_is_given() {
     });
     assert!(!default.is_some_and(|path| path.exists()));
     // Nor did the project's manifest change.
-    let after = std::fs::read_to_string(kept.path("app/SLCR.toml")).unwrap();
+    let after = kept.read("app/SLCR.toml");
     assert_eq!(after, manifest);
 }
 
 #[test]
 fn checks_report_as_slcr_check_does() {
-    let kept = Kept::validated(&["true", "echo out; echo err >&2; exit 3", "exit 0"]);
+    let kept = Workspace::validated(&["true", "echo out; echo err >&2; exit 3", "exit 0"]);
     let report = kept.check(&jobs(2));
     assert!(!report.passed);
     let outcomes: Vec<RunOutcome> = report
@@ -282,7 +324,7 @@ fn checks_report_as_slcr_check_does() {
 
 #[test]
 fn checks_run_on_their_caller_s_runtime() {
-    let kept = Kept::validated(&["true", "exit 0"]);
+    let kept = Workspace::validated(&["true", "exit 0"]);
     let (project, store) = (kept.project(), kept.store());
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -307,7 +349,7 @@ fn checks_run_on_their_caller_s_runtime() {
 
 #[test]
 fn checks_report_statuses_as_slcr_check_writes_them() {
-    let kept = Kept::validated(&["sleep 0.3", "exit 1", "true", "sleep 0.1; true"]);
+    let kept = Workspace::validated(&["sleep 0.3", "exit 1", "true", "sleep 0.1; true"]);
     let mut statuses = Vec::new();
     super::block_on(kept.project().check(
         &kept.store(),
@@ -315,7 +357,8 @@ fn checks_report_statuses_as_slcr_check_writes_them() {
         |status| statuses.push(status.to_string()),
         std::future::pending(),
     ));
-    let written = kept.slcr(&["check", "--offline", "--project-root", "../repo", "-j", "4"]);
+    let written =
+        kept.written_in_app(&["check", "--offline", "--project-root", "../repo", "-j", "4"]);
     let lines: Vec<&str> = written.lines().collect();
     assert_eq!(statuses.len(), 4);
     assert_eq!(statuses, lines[..4]);
@@ -330,7 +373,7 @@ fn checks_never_install() {
     let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     server.set_nonblocking(true).unwrap();
     let port = server.local_addr().unwrap().port();
-    let kept = Kept::new();
+    let kept = Workspace::kept();
     let source = format!("{{ url = \"https://127.0.0.1:{port}/sh.toml\" }}");
     kept.file("app/SLCR.toml", &declaring("sh", SH, &source))
         .file(
@@ -366,7 +409,7 @@ fn checks_stop_every_validator_when_cancelled() {
     // One at a time: the first finishes; the second starts a grandchild,
     // records its PID, and outlives the cancellation; the rest never
     // start.
-    let kept = Kept::validated(&[
+    let kept = Workspace::validated(&[
         "true",
         "sleep 30 & echo $! > pid.tmp; mv pid.tmp pid; wait",
         "touch third",
@@ -423,7 +466,7 @@ fn checks_stop_every_validator_when_cancelled() {
 fn checks_stop_every_validator_when_dropped() {
     // An application drops a check it no longer wants, and may never poll
     // its runtime again.
-    let kept = Kept::validated(&["sleep 30 & echo $! > pid.tmp; mv pid.tmp pid; wait"]);
+    let kept = Workspace::validated(&["sleep 30 & echo $! > pid.tmp; mv pid.tmp pid; wait"]);
     let pid_file = kept.path("repo/src/pid");
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -469,7 +512,7 @@ fn dead(pid: &str) -> bool {
 fn checks_find_tools_on_the_path_they_are_given() {
     use std::os::unix::fs::PermissionsExt;
 
-    let kept = Kept::new();
+    let kept = Workspace::kept();
     let bin = kept.path("bin");
     // Green only if the PATH it sees is exactly the one given.
     let program = format!("#!/bin/sh\n[ \"$PATH\" = '{}' ]\n", bin.display());
@@ -527,9 +570,11 @@ fn projects_are_checked_at_once_as_they_are_alone() {
     };
     // Each project's validators see their own project root: one finds
     // its own file there, and one looks for the other's.
-    let first = Kept::validated(&["test -f first", "test -f second", &meet("first", "second")]);
+    let first =
+        Workspace::validated(&["test -f first", "test -f second", &meet("first", "second")]);
     first.file("repo/src/first", "");
-    let second = Kept::validated(&["test -f second", "test -f first", &meet("second", "first")]);
+    let second =
+        Workspace::validated(&["test -f second", "test -f first", &meet("second", "first")]);
     second.file("repo/src/second", "");
     let cwd = std::env::current_dir().unwrap();
     for kept in [&first, &second] {
@@ -546,7 +591,7 @@ fn projects_are_checked_at_once_as_they_are_alone() {
     }
 
     // Both on one runtime, as tasks that run at the same time.
-    let check = |kept: &Kept| {
+    let check = |kept: &Workspace| {
         let (project, store) = (kept.project(), kept.store());
         async move {
             project
@@ -584,76 +629,6 @@ fn projects_are_checked_at_once_as_they_are_alone() {
     assert!(!Path::new("first").exists() && !Path::new("second").exists());
 }
 
-/// A workspace for `slcr`, run in it with its data directory there, and
-/// trusting `authority`, a PEM certificate authority, if given, where
-/// `slcr` lets the environment name one.
-struct Workspace {
-    _dir: TempDir,
-    root: PathBuf,
-}
-
-impl Workspace {
-    fn new() -> Self {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().canonicalize().unwrap();
-        Self { _dir: dir, root }
-    }
-
-    fn path(&self, path: &str) -> PathBuf {
-        self.root.join(path)
-    }
-
-    fn file(&self, path: &str, contents: &str) -> &Self {
-        let path = self.path(path);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, contents).unwrap();
-        self
-    }
-
-    fn read(&self, path: &str) -> String {
-        std::fs::read_to_string(self.path(path)).unwrap()
-    }
-
-    /// The descriptor store `slcr` uses when run in the workspace.
-    fn store(&self) -> DescriptorStore {
-        DescriptorStore::at(self.path(DATA_DIR).join("descriptors/blake3"))
-    }
-
-    /// Each file the store holds, and its contents.
-    fn stored(&self) -> Vec<(String, String)> {
-        let dir = self.path(DATA_DIR).join("descriptors/blake3");
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            return Vec::new();
-        };
-        let mut stored: Vec<(String, String)> = entries
-            .map(|entry| {
-                let path = entry.unwrap().path();
-                let name = path.file_name().unwrap().to_string_lossy().into_owned();
-                (name, std::fs::read_to_string(path).unwrap())
-            })
-            .collect();
-        stored.sort();
-        stored
-    }
-
-    /// Run `slcr` with `args` in the workspace, and return whether it
-    /// succeeded.
-    fn slcr(&self, args: &[&str], authority: Option<&Path>) -> bool {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_slcr"));
-        command
-            .args(args)
-            .current_dir(&self.root)
-            .env_remove("LOG_LEVEL")
-            .env("NO_COLOR", "1")
-            .env("XDG_DATA_HOME", self.path(".data"))
-            .env("HOME", self.path(".home"));
-        if let Some(authority) = authority {
-            command.env("SSL_CERT_FILE", authority);
-        }
-        command.status().unwrap().success()
-    }
-}
-
 #[test]
 fn creating_a_project_writes_what_slcr_init_writes() {
     let (library, cli) = (Workspace::new(), Workspace::new());
@@ -670,7 +645,7 @@ fn creating_a_project_writes_what_slcr_init_writes() {
         None,
     )
     .unwrap();
-    assert!(cli.slcr(&["init", "--slcr-dir", "app", "--name", "shop"], None));
+    assert!(cli.succeeds(&["init", "--slcr-dir", "app", "--name", "shop"], None));
     for file in ["app/SLCR.toml", "app/SPEC.slcr.toml"] {
         assert_eq!(library.read(file), cli.read(file), "{file}");
     }
@@ -708,11 +683,24 @@ fn creating_a_project_writes_what_slcr_init_writes() {
     let outside = Workspace::new();
     std::fs::create_dir_all(outside.path("new")).unwrap();
     std::fs::create_dir_all(outside.path("repo")).unwrap();
-    for (slcr_dir, file) in [
+    #[allow(unused_mut)]
+    let mut refused = vec![
         (library.path("app"), PathBuf::from("../repo/evil.slcr.toml")),
         (library.path("app"), outside.path("repo/evil.slcr.toml")),
         (outside.path("new"), PathBuf::from("../repo/evil.slcr.toml")),
-    ] {
+    ];
+    // A symlink inside the SLCR directory that leads out of it, written
+    // through or climbed out of with `..`, is outside it too.
+    #[cfg(unix)]
+    {
+        for slcr_dir in [library.path("app"), outside.path("new")] {
+            let repo = slcr_dir.parent().unwrap().join("repo");
+            std::os::unix::fs::symlink(&repo, slcr_dir.join("link")).unwrap();
+            refused.push((slcr_dir.clone(), PathBuf::from("link/evil.slcr.toml")));
+            refused.push((slcr_dir, PathBuf::from("link/../evil.slcr.toml")));
+        }
+    }
+    for (slcr_dir, file) in refused {
         let name = slcr::SpecName::try_from("evil".to_owned()).unwrap();
         let created = Project::create(&slcr_dir, library.path("repo"), &file, name, None);
         let error = created
@@ -726,8 +714,19 @@ fn creating_a_project_writes_what_slcr_init_writes() {
     }
     assert_eq!(std::fs::read_dir(library.path("repo")).unwrap().count(), 0);
     assert_eq!(std::fs::read_dir(outside.path("repo")).unwrap().count(), 0);
-    assert_eq!(std::fs::read_dir(outside.path("new")).unwrap().count(), 0);
-    assert_eq!(std::fs::read_dir(library.path("app")).unwrap().count(), 2);
+    // Beside the symlinks, nothing in either SLCR directory or above them.
+    let links = usize::from(cfg!(unix));
+    assert_eq!(
+        std::fs::read_dir(outside.path("new")).unwrap().count(),
+        links
+    );
+    assert_eq!(
+        std::fs::read_dir(library.path("app")).unwrap().count(),
+        2 + links
+    );
+    for root in [&library.root, &outside.root] {
+        assert!(!root.join("evil.slcr.toml").exists());
+    }
 }
 
 #[test]
@@ -791,7 +790,7 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
         assert_eq!(library.stored(), filed(&[SH]));
         if compare {
             let args = ["tools", "add", &url, "--slcr-dir", "app"];
-            assert!(cli.slcr(&args, Some(&authority)));
+            assert!(cli.succeeds(&args, Some(&authority)));
             same("add");
         }
 
@@ -805,7 +804,7 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
         assert_eq!(library.stored(), filed(&[SH, &newer]));
         if compare {
             let args = ["tools", "update", "sh", "--slcr-dir", "app"];
-            assert!(cli.slcr(&args, Some(&authority)));
+            assert!(cli.succeeds(&args, Some(&authority)));
             same("update");
         }
 
@@ -817,7 +816,7 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
         assert_eq!(library.stored(), filed(&[SH, &newer]));
         if compare {
             let args = ["tools", "remove", "sh", "--slcr-dir", "app"];
-            assert!(cli.slcr(&args, Some(&authority)));
+            assert!(cli.succeeds(&args, Some(&authority)));
             same("remove");
         }
         // Removing never fetches.

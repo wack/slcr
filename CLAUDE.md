@@ -9,6 +9,7 @@ cargo build --release          # Production build
 cargo make check-format        # Format check (CI runs this)
 cargo make clippy              # Lint — canonical blocking gate (== CI and bacon)
 cargo make test                # Run all tests (== CI's nextest run)
+cargo make test-doc            # Compile and run the doc examples (nextest skips them)
 cargo nextest run --locked <filter>   # Run a single test / matching tests by name substring
 cargo make monitor             # Headless bacon for Claude Code's Monitor tool
 cargo insta review             # Review snapshot changes after a failing run (see Testing)
@@ -25,7 +26,9 @@ CI would reject.
   -- -D warnings` (see the `[tasks.clippy]` comment in `Makefile.toml`).
 - `cargo make test` expands to `cargo nextest run --locked` — CI's `ci-flow` uses
   nextest, not the built-in test harness, so `cargo test` alone doesn't fully
-  match CI.
+  match CI. Nextest never runs doctests, so `ci-flow` (and `dev-test-flow`)
+  runs `cargo make test-doc` (`cargo test --doc --locked`) after it, which
+  keeps `src/lib.rs`'s `no_run` example compiling.
 - `on-push.yml` only runs format and clippy; the test suite (and coverage) runs in
   `on-merge.yml`'s `ci-flow`.
 
@@ -170,7 +173,10 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   `UnusableDirectory`), it looks in DIR alone (`Project::in_dir`), joins
   that project or creates `SLCR.toml` there, listing FILE relative to DIR
   (`OutsideSlcrDir` if FILE isn't inside it); FILE stays relative to the
-  working directory and defaults to `DIR/SPEC.slcr.toml`. The logic is
+  working directory and defaults to `DIR/SPEC.slcr.toml`. Whether FILE is
+  inside a directory is decided on its parent directory resolved,
+  symlinks and `..` included (`relative_to`), so a symlink leading out is
+  outside, and a new manifest lists the path discovery will find. The logic is
   `cli::init::initialize(fs, base, Request)`, which `Project::create`
   shares: relative paths are relative to `base`, files are written at
   absolute paths (`FileSystem::create_file_at`, `ensure_vacant_at`) but
@@ -282,8 +288,11 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 - `--slcr-dir` and `--project-root` are `cli::project::{ProjectArgs,
   SlcrDirArg}`, resolved by `Project::locate`: the SLCR directory holds
   `SLCR.toml` and every SLCR file; the project root is what validators
-  check, the SLCR directory unless given. Messages that mean the SLCR
-  directory say "the directory of SLCR.toml".
+  check, the SLCR directory unless given. Messages about a path inside the
+  SLCR directory call it "the directory of SLCR.toml" (path sources,
+  `specs` globs, init's `Unlisted::Outside`); only `UnusableDirectory`, which names
+  a directory given as one, says "the SLCR directory, …", parallel to "the
+  project root, …", the term `--slcr-dir`'s help introduces.
 - All user-facing output goes through `Terminal` (`src/terminal/`), which owns
   color detection (`--enable-colors`) and logging setup (`--log-level` / `LOG_LEVEL`).
 - Errors are `thiserror` + `miette::Diagnostic` types; use `#[diagnostic(help(...))]`
@@ -643,7 +652,8 @@ files at dynamic paths, or `StaticFile` for fixed-name files under a
 
 # Testing
 
-Three layers, all run by `cargo make test`:
+Three layers, all run by `cargo make test` (the doc examples are run by
+`cargo make test-doc`):
 
 - **Unit tests**, inline in `#[cfg(test)]` modules, test the library directly:
   exact strings, error types via `downcast_ref`, and `figment::Jail` for

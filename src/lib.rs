@@ -48,11 +48,13 @@
 //!   and time drivers enabled, reporting each [check::ValidatorStatus] as
 //!   it would be written, stopping when the caller cancels it, and running
 //!   tools on the `PATH` [check::Options] names. It returns a
-//!   [check::Report]. On Unix, dropping the check kills its validators at
-//!   once, with everything they started.
+//!   [check::Report]. On Unix, dropping the check kills every validator's
+//!   process group still alive there and then; a process that left its
+//!   group, or outlived its leader's reaping, isn't.
 //!
 //! [Project::install], [Project::add_tool], and [Project::update_tool]
-//! need a tokio runtime too; the rest are synchronous.
+//! need a tokio runtime with its I/O and time drivers too; the rest are
+//! synchronous.
 //!
 //! # Getting started
 //!
@@ -61,32 +63,45 @@
 //! on its own runtime:
 //!
 //! ```no_run
+//! use miette::IntoDiagnostic;
 //! use slcr::check::Options;
-//! use slcr::{DescriptorStore, Fetcher, Project, SpecName};
+//! use slcr::{DescriptorStore, Fetcher, Project, ProjectError, SpecName};
 //!
 //! # async fn example() -> miette::Result<()> {
 //! // The application's directory for this repository's SLCR files, and
 //! // the repository itself, which its validators check.
 //! let slcr_dir = "/home/me/.local/share/my-app/projects/shop";
 //! let repository = "/home/me/src/shop";
+//! // Nothing in the library creates a directory.
+//! std::fs::create_dir_all(slcr_dir).into_diagnostic()?;
 //! let project = match Project::open(slcr_dir, repository) {
 //!     Ok(project) => project,
-//!     // No `SLCR.toml` yet: start the project.
-//!     Err(_) => {
+//!     // No `SLCR.toml` there yet: start the project.
+//!     Err(ProjectError::NoManifest { .. }) => {
 //!         let name = SpecName::try_from("shop".to_owned())?;
 //!         let (project, _) = Project::create(slcr_dir, repository, "SPEC.slcr.toml", name, None)?;
 //!         project
 //!     }
+//!     Err(error) => return Err(error.into()),
 //! };
 //! // Where the application installs descriptors, for every project.
 //! let store = DescriptorStore::at("/home/me/.local/share/my-app/descriptors");
-//! // Fetching happens only here, when the application allows it.
+//! // Fetching happens only here, when the application allows it. It
+//! // succeeds even when a tool fails; each one's status says how it went.
 //! let installed = project.install(&store, &Fetcher::new()).await?;
-//! println!("{installed}");
+//! if !installed.passed() {
+//!     for failure in installed.failures() {
+//!         eprintln!("{failure:?}");
+//!     }
+//! }
+//! // An application started from the macOS Finder or Dock has a minimal
+//! // PATH; give the check the one the user's shell has.
+//! let mut options = Options::default();
+//! options.path = Some("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin".into());
 //! // Completes when the user presses Cancel.
 //! let cancelled = std::future::pending::<()>();
 //! let report = project
-//!     .check(&store, &Options::default(), |status| println!("{status}"), cancelled)
+//!     .check(&store, &options, |status| println!("{status}"), cancelled)
 //!     .await;
 //! println!("passed: {}", report.passed);
 //! # Ok(())
