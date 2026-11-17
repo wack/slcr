@@ -9,7 +9,7 @@ use thiserror::Error;
 use super::{
     DescriptorVersion, Environment, ToolKey,
     descriptor::{self, Descriptor},
-    manifest::{ManifestFile, Project, ToolEntry},
+    manifest::{ManifestFile, ToolEntry},
     pin::Pin,
     source::SourceArg,
 };
@@ -29,13 +29,13 @@ pub(crate) async fn add(
     source: SourceArg,
     key: Option<ToolKey>,
 ) -> Result<Added> {
-    let project = Project::find_from(env.cwd)?;
-    let mut manifest = ManifestFile::load(&project)?;
+    let project = &env.project;
+    let mut manifest = ManifestFile::load(project)?;
 
     let origin = source.to_string();
     tracing::debug!(%origin, "fetching a descriptor");
     let (source, bytes) = source
-        .fetch(env.fs, env.fetcher, env.cwd, project.root())
+        .fetch(env.fs, env.fetcher, env.cwd, project.slcr_dir())
         .await?;
     let text = descriptor::text(&origin, &bytes)?;
     let descriptor = Descriptor::parse(&origin, text)?;
@@ -125,8 +125,10 @@ impl Display for Added {
 mod tests {
     use super::*;
     use crate::cli::block_on;
+    use crate::project::Layout;
     use crate::tools::fixture::{Fixture, MANIFEST, NEXTEST};
     use crate::tools::https_server::{HttpsServer, Reply};
+    use crate::tools::manifest::Project;
     use crate::tools::source::{Fetcher, SourceError};
 
     impl Fixture {
@@ -288,6 +290,47 @@ mod tests {
         assert_eq!(
             added.to_string(),
             "../../SLCR.toml: added tool cargo-nextest 1.0.0"
+        );
+        assert!(
+            fixture
+                .manifest()
+                .contains("source = { path = \"tools/cargo-nextest.toml\" }")
+        );
+    }
+
+    #[test]
+    fn a_path_is_recorded_relative_to_the_slcr_directory_never_the_project_root() {
+        let fixture = Fixture::new();
+        let repo = fixture.project().with_file_name("repo");
+        std::fs::create_dir_all(repo.join("tools")).unwrap();
+        std::fs::write(repo.join("tools/cargo-nextest.toml"), NEXTEST).unwrap();
+        let fetcher = Fetcher::new();
+        let slcr_dir = fixture.project();
+        let env = || Environment {
+            cwd: &repo,
+            project: Project::new(
+                Layout::new(slcr_dir.clone(), repo.clone()),
+                PathBuf::from("../project/SLCR.toml"),
+            ),
+            ..fixture.env(&fetcher, &slcr_dir)
+        };
+        // A descriptor in the project root is outside the SLCR directory.
+        let source = "tools/cargo-nextest.toml".parse().unwrap();
+        let err = block_on(add(&env(), source, None)).unwrap().unwrap_err();
+        assert!(
+            matches!(
+                err.downcast_ref::<SourceError>(),
+                Some(SourceError::OutsideProject { .. })
+            ),
+            "{err:?}"
+        );
+        assert_eq!(fixture.manifest(), MANIFEST);
+
+        let source = "../project/tools/cargo-nextest.toml".parse().unwrap();
+        let added = block_on(add(&env(), source, None)).unwrap().unwrap();
+        assert_eq!(
+            added.to_string(),
+            "../project/SLCR.toml: added tool cargo-nextest 1.0.0"
         );
         assert!(
             fixture

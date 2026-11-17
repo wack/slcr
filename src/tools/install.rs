@@ -9,7 +9,7 @@ use thiserror::Error;
 use super::{
     Environment, ToolKey,
     descriptor::{self, Descriptor, InvalidDescriptor},
-    manifest::{ManifestFile, Project, ToolEntry},
+    manifest::{ManifestFile, ToolEntry},
     pin::Pin,
     pinned,
     source::SourceError,
@@ -25,13 +25,13 @@ use super::{
 /// It prepares a fresh clone or an offline sandbox, as `cargo fetch` does,
 /// and never writes the manifest: a source that serves other bytes now is
 /// an error, never a reason to re-pin. A tool that fails doesn't stop the
-/// rest; only a project or manifest that can't be read is an error here.
+/// rest; only a manifest that can't be read is an error here.
 pub(crate) async fn install(env: &Environment<'_>) -> Result<Installed> {
-    let project = Project::find_from(env.cwd)?;
-    let manifest = ManifestFile::load(&project)?;
+    let project = &env.project;
+    let manifest = ManifestFile::load(project)?;
     let mut tools = Vec::new();
     for (key, entry) in manifest.manifest().tools() {
-        let outcome = install_tool(env, project.root(), key, entry).await;
+        let outcome = install_tool(env, project.slcr_dir(), key, entry).await;
         tools.push(ToolInstall {
             key: key.clone(),
             outcome,
@@ -43,11 +43,11 @@ pub(crate) async fn install(env: &Environment<'_>) -> Result<Installed> {
     })
 }
 
-/// Install the descriptor `entry`, declared under `key` in the project at
-/// `root`, pins, unless the store already holds it.
+/// Install the descriptor `entry`, declared under `key` in the manifest
+/// in `slcr_dir`, pins, unless the store already holds it.
 async fn install_tool(
     env: &Environment<'_>,
-    root: &Path,
+    slcr_dir: &Path,
     key: &ToolKey,
     entry: &ToolEntry,
 ) -> Result<Status> {
@@ -70,7 +70,7 @@ async fn install_tool(
     let origin = source.to_string();
     tracing::debug!(%origin, "fetching a descriptor");
     let bytes = source
-        .fetch(env.fs, env.fetcher, root)
+        .fetch(env.fs, env.fetcher, slcr_dir)
         .await
         .map_err(|error| InstallError::Unfetchable {
             tool: key.clone(),
@@ -269,8 +269,10 @@ impl Display for ToolInstall {
 mod tests {
     use super::*;
     use crate::cli::block_on;
+    use crate::project::Layout;
     use crate::tools::fixture::{Fixture, NEXTEST};
     use crate::tools::https_server::{HttpsServer, Reply};
+    use crate::tools::manifest::Project;
     use crate::tools::pinned::DescriptorProblem;
     use crate::tools::source::Fetcher;
 
@@ -706,5 +708,31 @@ mod tests {
             .unwrap();
         assert_eq!(installed.verdict(), Ok(()));
         assert!(fixture.installed(NEXTEST));
+    }
+
+    #[test]
+    fn a_path_source_is_read_from_the_slcr_directory_never_the_project_root() {
+        let fixture = Fixture::new();
+        fixture.declare(manifest(&[nextest()]));
+        // A project root elsewhere, holding another descriptor at the same
+        // path, which doesn't hash to the pin.
+        let repo = fixture.project().with_file_name("repo");
+        std::fs::create_dir_all(repo.join("tools")).unwrap();
+        std::fs::write(repo.join("tools/cargo-nextest.toml"), jev()).unwrap();
+        let fetcher = Fetcher::new();
+        let slcr_dir = fixture.project();
+        let env = Environment {
+            cwd: &repo,
+            project: Project::new(
+                Layout::new(slcr_dir.clone(), repo.clone()),
+                PathBuf::from("../project/SLCR.toml"),
+            ),
+            ..fixture.env(&fetcher, &slcr_dir)
+        };
+        let installed = block_on(install(&env)).unwrap().unwrap();
+        assert_eq!(installed.verdict(), Ok(()));
+        assert_eq!(installed.manifest, Path::new("../project/SLCR.toml"));
+        assert!(fixture.installed(NEXTEST));
+        assert!(!fixture.installed(&jev()));
     }
 }

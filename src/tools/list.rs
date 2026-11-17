@@ -1,6 +1,6 @@
 use std::{
     fmt::{self, Display},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use console::measure_text_width;
@@ -17,12 +17,11 @@ use super::{
 use crate::fs::FileSystem;
 use crate::project::problem::display;
 
-/// Every tool the manifest of the project that holds `cwd`, an absolute
-/// path, declares, in the order of their keys, and whether `store` holds
-/// the descriptor each pins. Nothing is fetched.
-pub(crate) fn list(fs: &FileSystem, store: &DescriptorStore, cwd: &Path) -> Result<Listing> {
-    let project = Project::find_from(cwd)?;
-    let manifest = ManifestFile::load(&project)?;
+/// Every tool the manifest of `project` declares, in the order of their
+/// keys, and whether `store` holds the descriptor each pins. Nothing is
+/// fetched.
+pub(crate) fn list(fs: &FileSystem, store: &DescriptorStore, project: &Project) -> Result<Listing> {
+    let manifest = ManifestFile::load(project)?;
     let tools = manifest
         .manifest()
         .tools()
@@ -163,7 +162,7 @@ mod tests {
     impl Fixture {
         /// Run [list] from the project root.
         fn list(&self) -> Listing {
-            list(&self.fs, &self.store, &self.project()).unwrap()
+            list(&self.fs, &self.store, &Self::found(&self.project())).unwrap()
         }
     }
 
@@ -270,7 +269,7 @@ mod tests {
         let fixture = Fixture::new();
         let cwd = fixture.project().join("crates/api");
         std::fs::create_dir_all(&cwd).unwrap();
-        let listing = list(&fixture.fs, &fixture.store, &cwd).unwrap();
-        assert_eq!(listing.manifest, Path::new("../../SLCR.toml"));
+        let listing = list(&fixture.fs, &fixture.store, &Fixture::found(&cwd)).unwrap();
+        assert_eq!(listing.manifest, std::path::Path::new("../../SLCR.toml"));
     }
 }

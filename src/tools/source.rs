@@ -61,17 +61,17 @@ impl Source {
     }
 
     /// Fetch the descriptor's bytes: over HTTPS, or from the file at the
-    /// path, which must be inside the project at `root`.
+    /// path, which must be inside the project's SLCR directory, `slcr_dir`.
     pub(crate) async fn fetch(
         &self,
         fs: &FileSystem,
         fetcher: &Fetcher,
-        root: &Path,
+        slcr_dir: &Path,
     ) -> Result<Vec<u8>, SourceError> {
         match self {
             Self::Url(url) => fetcher.fetch(url).await,
             Self::Path(path) => {
-                let file = path.resolve(root)?;
+                let file = path.resolve(slcr_dir)?;
                 read_descriptor(fs, &file, Path::new(path.as_str()))
             }
         }
@@ -208,7 +208,7 @@ impl Display for HttpsUrl {
     }
 }
 
-/// A path relative to the project root, with forward slashes, to a
+/// A path relative to the SLCR directory, with forward slashes, to a
 /// descriptor kept in the project.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "String")]
@@ -219,14 +219,14 @@ impl ProjectPath {
         &self.0
     }
 
-    /// The file this path names in the project at `root`, which it must
-    /// still be inside after following symlinks.
-    fn resolve(&self, root: &Path) -> Result<PathBuf, SourceError> {
+    /// The file this path names in the SLCR directory `slcr_dir`, which it
+    /// must still be inside after following symlinks.
+    fn resolve(&self, slcr_dir: &Path) -> Result<PathBuf, SourceError> {
         let shown = Path::new(&self.0);
-        let path = root.join(shown);
+        let path = slcr_dir.join(shown);
         let resolved = canonical(&path, shown)?;
-        let root = canonical(root, Path::new("."))?;
-        if resolved.starts_with(&root) {
+        let slcr_dir = canonical(slcr_dir, Path::new("."))?;
+        if resolved.starts_with(&slcr_dir) {
             Ok(resolved)
         } else {
             Err(SourceError::OutsideProject {
@@ -236,15 +236,15 @@ impl ProjectPath {
     }
 
     /// The project path of the local file at `path`, which is relative to
-    /// the working directory `cwd` and must be inside the project at
-    /// `root`, and the file it resolves to.
-    fn locate(path: &Path, cwd: &Path, root: &Path) -> Result<(Self, PathBuf), SourceError> {
+    /// the working directory `cwd` and must be inside the SLCR directory
+    /// `slcr_dir`, and the file it resolves to.
+    fn locate(path: &Path, cwd: &Path, slcr_dir: &Path) -> Result<(Self, PathBuf), SourceError> {
         let resolved = canonical(&cwd.join(path), path)?;
-        let root = canonical(root, Path::new("."))?;
+        let slcr_dir = canonical(slcr_dir, Path::new("."))?;
         let outside = || SourceError::OutsideProject {
             path: path.to_path_buf(),
         };
-        let relative = resolved.strip_prefix(&root).map_err(|_| outside())?;
+        let relative = resolved.strip_prefix(&slcr_dir).map_err(|_| outside())?;
         let mut parts = Vec::new();
         for component in relative.components() {
             match component {
@@ -297,7 +297,7 @@ impl Display for ProjectPath {
     }
 }
 
-/// Whether `value` is relative to the project root, as the schemas'
+/// Whether `value` is relative to the SLCR directory, as the schemas'
 /// paths and globs are: forward slashes, no leading `/`, no `..` segment,
 /// and no backslash or NUL.
 pub(crate) fn is_project_relative(value: &str) -> bool {
@@ -340,14 +340,15 @@ impl Display for SourceArg {
 }
 
 impl SourceArg {
-    /// The manifest source this names in the project at `root`, and the
-    /// descriptor's bytes.
+    /// The manifest source this names in the project whose SLCR directory
+    /// is `slcr_dir`, and the descriptor's bytes. A path is relative to
+    /// the working directory, `cwd`.
     pub(crate) async fn fetch(
         self,
         fs: &FileSystem,
         fetcher: &Fetcher,
         cwd: &Path,
-        root: &Path,
+        slcr_dir: &Path,
     ) -> Result<(Source, Vec<u8>), SourceError> {
         match self {
             Self::Url(url) => {
@@ -355,7 +356,7 @@ impl SourceArg {
                 Ok((Source::Url(url), bytes))
             }
             Self::Path(path) => {
-                let (project_path, file) = ProjectPath::locate(&path, cwd, root)?;
+                let (project_path, file) = ProjectPath::locate(&path, cwd, slcr_dir)?;
                 let bytes = read_descriptor(fs, &file, &path)?;
                 Ok((Source::Path(project_path), bytes))
             }

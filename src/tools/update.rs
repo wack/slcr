@@ -8,7 +8,7 @@ use miette::Result;
 use super::{
     DescriptorVersion, Environment, ToolKey,
     descriptor::{self, Descriptor},
-    manifest::{ManifestFile, Project},
+    manifest::ManifestFile,
     pin::Pin,
 };
 
@@ -21,14 +21,16 @@ use super::{
 /// that already pins what its source serves is left alone, but its
 /// descriptor is installed again if the store has lost it.
 pub(crate) async fn update(env: &Environment<'_>, key: ToolKey) -> Result<Updated> {
-    let project = Project::find_from(env.cwd)?;
-    let mut manifest = ManifestFile::load(&project)?;
+    let project = &env.project;
+    let mut manifest = ManifestFile::load(project)?;
     let declared = manifest.tool(&key)?.clone();
 
     let source = declared.source();
     let origin = source.to_string();
     tracing::debug!(%origin, "fetching a descriptor");
-    let bytes = source.fetch(env.fs, env.fetcher, project.root()).await?;
+    let bytes = source
+        .fetch(env.fs, env.fetcher, project.slcr_dir())
+        .await?;
     let text = descriptor::text(&origin, &bytes)?;
     let descriptor = Descriptor::parse(&origin, text)?;
     let version = descriptor.version().clone();

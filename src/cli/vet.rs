@@ -11,7 +11,7 @@ use thiserror::Error;
 use super::findings::{FileFindings, ValidatorFindings, counted, passes, tally};
 use crate::Terminal;
 use crate::fs::FileSystem;
-use crate::project::{IndexedSpec, Problem, ProjectFile, SpecIndex, discover};
+use crate::project::{IndexedSpec, Layout, Problem, ProjectFile, SpecIndex, discover};
 use crate::spec::file::RequirementsFile;
 use crate::spec::graph::UnvettedDocument;
 use crate::spec::vet::Report;
@@ -83,7 +83,8 @@ impl Vet {
         let (project, outcomes) = if self.args.files.is_empty() {
             let cwd = std::env::current_dir().into_diagnostic()?;
             let store = DescriptorStore::new(&fs);
-            let vetted = vet_project(&fs, &store, &cwd)?;
+            let project = Project::find_from(&cwd)?;
+            let vetted = vet_project(&fs, &store, &project, &cwd);
             (Some(vetted.project), vetted.outcomes)
         } else {
             let outcomes = self
@@ -187,11 +188,10 @@ pub(super) struct VettedProject {
 
 /// The parts of a project that loaded, which `slcr check` runs and
 /// evaluates once the project vets cleanly; then nothing is missing.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct Loaded {
-    /// The project root, as an absolute path; empty if the manifest
-    /// couldn't be loaded.
-    pub(super) root: PathBuf,
+    /// Where the project is: what its validators run against.
+    pub(super) layout: Layout,
     /// Each specification that loaded, in the order of their paths.
     pub(super) specs: Vec<(ProjectFile, UnvettedDocument)>,
     /// Each validator file that loaded, in the order of their paths.
@@ -200,20 +200,21 @@ pub(super) struct Loaded {
     pub(super) descriptors: BTreeMap<ToolKey, Descriptor>,
 }
 
-/// Vet the project that holds `cwd`, an absolute path: read its manifest,
-/// and check the descriptor each declared tool pins as `store` holds it;
-/// discover its specification files and validator files; vet each
-/// specification, check that their names are unique, then vet each
-/// validator file against them.
+/// Vet `project`, naming its files relative to `cwd`, an absolute path:
+/// read its manifest, and check the descriptor each declared tool pins as
+/// `store` holds it; discover its specification files and validator files
+/// in its SLCR directory; vet each specification, check that their names
+/// are unique, then vet each validator file against them.
 pub(super) fn vet_project(
     fs: &FileSystem,
     store: &DescriptorStore,
+    project: &Project,
     cwd: &Path,
-) -> Result<VettedProject> {
-    let project = Project::find_from(cwd)?;
+) -> VettedProject {
+    let layout = project.layout().clone();
     let manifest = project.shown_manifest().to_path_buf();
     tracing::debug!(manifest = %manifest.display(), "vetting a project");
-    let file = match ManifestFile::load(&project) {
+    let file = match ManifestFile::load(project) {
         Ok(file) => file,
         Err(error) => {
             let result = Err(error);
@@ -222,14 +223,19 @@ pub(super) fn vet_project(
                 result,
                 validators: Vec::new(),
             };
-            return Ok(VettedProject {
+            return VettedProject {
                 project,
                 outcomes: Vec::new(),
-                loaded: Loaded::default(),
-            });
+                loaded: Loaded {
+                    layout,
+                    specs: Vec::new(),
+                    validators: Vec::new(),
+                    descriptors: BTreeMap::new(),
+                },
+            };
         }
     };
-    let discovery = discover(project.root(), cwd, file.manifest().specs());
+    let discovery = discover(layout.slcr_dir(), cwd, file.manifest().specs());
     let mut problems = discovery.problems;
     let loaded: Vec<_> = discovery
         .files
@@ -296,16 +302,16 @@ pub(super) fn vet_project(
         result: Ok(problems),
         validators,
     };
-    Ok(VettedProject {
+    VettedProject {
         project: project_outcome,
         outcomes,
         loaded: Loaded {
-            root: project.root().to_path_buf(),
+            layout,
             specs,
             validators: validator_files,
             descriptors,
         },
-    })
+    }
 }
 
 /// What vetting the project as a whole found.
@@ -1038,8 +1044,9 @@ mod tests {
     fn vet_in(cwd: &Path) -> Result<(ProjectOutcome, Vec<Outcome>)> {
         let store = tempfile::tempdir().unwrap();
         let store = DescriptorStore::at(store.path().join("blake3"));
-        vet_project(&FileSystem::new().unwrap(), &store, cwd)
-            .map(|vetted| (vetted.project, vetted.outcomes))
+        let project = Project::find_from(cwd)?;
+        let vetted = vet_project(&FileSystem::new().unwrap(), &store, &project, cwd);
+        Ok((vetted.project, vetted.outcomes))
     }
 
     /// The cargo-nextest example on the Schemas page.
@@ -1092,11 +1099,15 @@ mod tests {
         let fs = FileSystem::new().unwrap();
         store.install(&fs, NEXTEST).unwrap();
         let cwd = dir.path().join("src");
-        let vetted = vet_project(&fs, &store, &cwd).unwrap();
+        let project = Project::find_from(&cwd).unwrap();
+        let vetted = vet_project(&fs, &store, &project, &cwd);
         let project = vetted.project;
         assert_eq!(problems(&project), [] as [&str; 0]);
         // What loaded is kept for `check`: the bad file isn't.
-        assert_eq!(vetted.loaded.root, dir.path());
+        assert_eq!(
+            vetted.loaded.layout,
+            Layout::single(dir.path().to_path_buf())
+        );
         assert_eq!(vetted.loaded.specs.len(), 1);
         assert_eq!(vetted.loaded.validators.len(), 2);
         assert_eq!(vetted.loaded.descriptors.len(), 1);
@@ -1124,6 +1135,47 @@ mod tests {
                  cargo-nextest: 1 is not of type \"string\"",
             ]
         );
+    }
+
+    #[test]
+    fn a_project_is_read_from_its_slcr_directory_never_its_project_root() {
+        let dir = project_dir(&[
+            ("app/SLCR.toml", &declaring_nextest()),
+            ("app/specs/todo.yaml", TODO_API_YAML),
+            (
+                "app/src/.validators.slcr.toml",
+                "formatVersion = \"1\"\n[[validator]]\nrequirement = \"todo-api/REQ-002\"\n\
+                 tool = \"cargo-nextest\"\nwith = { test = \"a::b\" }\n",
+            ),
+            // The project root's own files, which a project kept in `app`
+            // never reads.
+            ("repo/SLCR.toml", "specs = 1\n"),
+            ("repo/specs/broken.yaml", "[unclosed\n"),
+            (
+                "repo/src/.validators.slcr.toml",
+                "formatVersion = \"1\"\n[[validator]]\nrequirement = \"todo-api/REQ-002\"\n\
+                 tool = \"undeclared\"\n",
+            ),
+        ]);
+        let store_dir = tempfile::tempdir().unwrap();
+        let store = DescriptorStore::at(store_dir.path().join("blake3"));
+        let fs = FileSystem::new().unwrap();
+        store.install(&fs, NEXTEST).unwrap();
+        let layout = Layout::new(dir.path().join("app"), dir.path().join("repo"));
+        let project = Project::new(layout.clone(), PathBuf::from("app/SLCR.toml"));
+        let vetted = vet_project(&fs, &store, &project, dir.path());
+        let project = vetted.project;
+        assert_eq!(project.manifest, PathBuf::from("app/SLCR.toml"));
+        assert_eq!(problems(&project), [] as [&str; 0]);
+        assert_eq!(paths(&vetted.outcomes), ["app/specs/todo.yaml"]);
+        assert_eq!(
+            validator_statuses(&project),
+            ["app/src/.validators.slcr.toml: ok"]
+        );
+        // What loaded keeps the layout, for `check` to run validators in
+        // the project root.
+        assert_eq!(vetted.loaded.layout, layout);
+        assert_eq!(vetted.loaded.validators.len(), 1);
     }
 
     #[test]

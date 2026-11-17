@@ -8,7 +8,9 @@ use super::vet::{self, VettedProject, json::Document as VetDocument, vet_project
 use crate::Terminal;
 use crate::fs::FileSystem;
 use crate::run::process::Outcome;
-use crate::tools::{Environment, install::install, source::Fetcher, store::DescriptorStore};
+use crate::tools::{
+    Environment, install::install, manifest::Project, source::Fetcher, store::DescriptorStore,
+};
 
 mod json;
 mod report;
@@ -87,11 +89,13 @@ impl Check {
         let store = DescriptorStore::new(&fs);
         let fetcher = Fetcher::new();
         let cwd = std::env::current_dir().into_diagnostic()?;
+        let project = Project::find_from(&cwd)?;
         let env = Environment {
             fs: &fs,
             store: &store,
             fetcher: &fetcher,
             cwd: &cwd,
+            project,
         };
         block_on(self.check(&env))?
     }
@@ -103,8 +107,8 @@ impl Check {
     async fn check(&self, env: &Environment<'_>) -> Result<()> {
         let deny_warnings = self.args.deny_warnings;
 
-        // A project or manifest that can't be read fails before any tool
-        // is installed; vetting reports it, in full.
+        // A manifest that can't be read fails before any tool is
+        // installed; vetting reports it, in full.
         let installed = if self.args.offline {
             None
         } else {
@@ -133,7 +137,7 @@ impl Check {
             project,
             outcomes,
             loaded,
-        } = vet_project(env.fs, env.store, env.cwd)?;
+        } = vet_project(env.fs, env.store, &env.project, env.cwd);
         let vetted = vet::verdict(Some(&project), &outcomes, false);
         if self.human() {
             vet::write_findings(&self.terminal, Some(&project), &outcomes, deny_warnings)?;
@@ -152,7 +156,7 @@ impl Check {
         }
 
         let plan = Arc::new(Plan::new(
-            loaded.root,
+            loaded.layout,
             loaded.validators,
             loaded.descriptors,
         ));

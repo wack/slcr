@@ -10,6 +10,7 @@ use crate::tools::{
     add::add,
     install::install,
     list::list,
+    manifest::Project,
     remove::remove,
     show::show,
     source::{Fetcher, SourceArg},
@@ -133,18 +134,20 @@ impl Tools {
         let store = DescriptorStore::new(&fs);
         let fetcher = Fetcher::new();
         let cwd = std::env::current_dir().into_diagnostic()?;
+        let project = Project::find_from(&cwd)?;
         let env = Environment {
             fs: &fs,
             store: &store,
             fetcher: &fetcher,
             cwd: &cwd,
+            project,
         };
         let status = match self.args.command {
             ToolsCommand::Add(AddArgs { source, key }) => {
                 block_on(add(&env, source, key))??.to_string()
             }
             ToolsCommand::Update(KeyArgs { key }) => block_on(update(&env, key))??.to_string(),
-            ToolsCommand::Remove(KeyArgs { key }) => remove(&fs, &cwd, key)?.to_string(),
+            ToolsCommand::Remove(KeyArgs { key }) => remove(&fs, &env.project, key)?.to_string(),
             ToolsCommand::Install => {
                 // Each tool that failed is a diagnostic; every tool gets a
                 // status line, and any failure fails the command.
@@ -155,9 +158,11 @@ impl Tools {
                 self.terminal.write_stdout_line(&installed.to_string())?;
                 return Ok(installed.verdict()?);
             }
-            ToolsCommand::List(ListArgs { format }) => format.write(&list(&fs, &store, &cwd)?),
+            ToolsCommand::List(ListArgs { format }) => {
+                format.write(&list(&fs, &store, &env.project)?)
+            }
             ToolsCommand::Show(ShowArgs { key, format }) => {
-                format.write(&show(&fs, &store, &cwd, key)?)
+                format.write(&show(&fs, &store, &env.project, key)?)
             }
         };
         self.terminal.write_stdout_line(&status)

@@ -37,10 +37,17 @@ pub(crate) struct Target<'a> {
     pub(crate) descriptor: &'a Descriptor,
     /// The validator entry's `with` object.
     pub(crate) with: &'a Map<String, Value>,
-    /// The directory that holds `SLCR.toml`, as an absolute path.
+    /// The directory the project's validators check, as an absolute path:
+    /// `{slcr.project_root}`, the `project` working directory, and the top
+    /// of a `nearest` search.
     pub(crate) project_root: &'a Path,
-    /// The validator file the entry is in, as an absolute path.
-    pub(crate) validator_file: &'a Path,
+    /// The directory the entry's validator file checks, under the project
+    /// root, as an absolute path (see [Layout::validator_dir]):
+    /// `{slcr.validator_dir}`, the `validator-dir` working directory, and
+    /// where a `nearest` search starts.
+    ///
+    /// [Layout::validator_dir]: crate::project::Layout::validator_dir
+    pub(crate) validator_dir: &'a Path,
     /// The requirement the validator verifies.
     pub(crate) requirement: &'a QualifiedRequirementId,
 }
@@ -74,10 +81,7 @@ impl Invocation {
     /// Resolve `target` as if slcr's `PATH` were `inherited_path`.
     fn resolve(target: Target<'_>, inherited_path: Option<&OsStr>) -> Result<Self, SpawnFailure> {
         let invoke = target.descriptor.invoke();
-        let validator_dir = target
-            .validator_file
-            .parent()
-            .expect("a validator file is in a directory");
+        let validator_dir = target.validator_dir;
         let values = template::Values {
             with: target.with,
             project_root: target.project_root,
@@ -240,7 +244,7 @@ cwd = "project"
     }
 
     /// A project in a temporary directory, with a validator file in
-    /// `specs/api`.
+    /// `specs/api`, whose project root is its SLCR directory.
     pub(crate) struct Project {
         pub(crate) dir: TempDir,
         pub(crate) requirement: QualifiedRequirementId,
@@ -260,8 +264,9 @@ cwd = "project"
             self.dir.path()
         }
 
-        pub(crate) fn validator_file(&self) -> PathBuf {
-            self.root().join("specs/api/api.validators.slcr.yaml")
+        /// The directory the validator file checks.
+        pub(crate) fn validator_dir(&self) -> PathBuf {
+            self.root().join("specs/api")
         }
 
         /// What running `descriptor` with `with` here resolves to, with
@@ -275,7 +280,7 @@ cwd = "project"
                 descriptor,
                 with: with.as_object().unwrap(),
                 project_root: self.root(),
-                validator_file: &self.validator_file(),
+                validator_dir: &self.validator_dir(),
                 requirement: &self.requirement,
             })
         }
@@ -321,7 +326,7 @@ cwd = "project"
             descriptor: &descriptor,
             with: &Map::new(),
             project_root: project.root(),
-            validator_file: &project.validator_file(),
+            validator_dir: &project.validator_dir(),
             requirement: &project.requirement,
         };
         let invocation = Invocation::resolve(target, Some(OsStr::new("/nonexistent"))).unwrap();

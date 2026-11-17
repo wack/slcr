@@ -13,18 +13,18 @@ use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 use super::source::{Source, is_project_relative};
 use super::{DescriptorVersion, ToolKey, pin::Pin};
 use crate::fs::{FileSystem, ReadError, format::Format, format::ParseError};
+use crate::project::Layout;
 use crate::project::problem::display;
 use crate::spec::graph::FormatVersion;
 
-/// The project manifest's name. Its directory is the project root.
+/// The project manifest's name. Its directory is the SLCR directory.
 pub const MANIFEST: &str = "SLCR.toml";
 
-/// An SLCR project: the directory that holds `SLCR.toml`, found by walking
-/// up from the working directory, the way Cargo finds `Cargo.toml`.
+/// An SLCR project: its [Layout], whose SLCR directory holds `SLCR.toml`,
+/// and how messages name the manifest.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Project {
-    /// The project root, as an absolute path.
-    root: PathBuf,
+    layout: Layout,
     /// The manifest's path relative to the working directory, such as
     /// `SLCR.toml` or `../../SLCR.toml`: how messages name it.
     shown: PathBuf,
@@ -48,16 +48,24 @@ pub enum ProjectError {
 }
 
 impl Project {
-    /// The project that holds `dir`, an absolute path.
+    /// The project laid out as `layout`, whose manifest messages name
+    /// `shown`, its path relative to the working directory.
+    pub(crate) fn new(layout: Layout, shown: PathBuf) -> Self {
+        Self { layout, shown }
+    }
+
+    /// The project that holds `dir`, an absolute path, found by walking up
+    /// from it to the nearest `SLCR.toml`, the way Cargo finds
+    /// `Cargo.toml`. Its project root is its SLCR directory.
     pub(crate) fn find_from(dir: &Path) -> Result<Self, ProjectError> {
         let mut up = PathBuf::new();
         for ancestor in dir.ancestors() {
             match manifest_in(ancestor) {
                 Lookup::Found => {
-                    return Ok(Self {
-                        root: ancestor.to_path_buf(),
-                        shown: up.join(MANIFEST),
-                    });
+                    return Ok(Self::new(
+                        Layout::single(ancestor.to_path_buf()),
+                        up.join(MANIFEST),
+                    ));
                 }
                 Lookup::Misnamed(name) => {
                     return Err(ProjectError::Misnamed {
@@ -70,13 +78,19 @@ impl Project {
         Err(ProjectError::NotFound)
     }
 
-    pub(crate) fn root(&self) -> &Path {
-        &self.root
+    pub(crate) fn layout(&self) -> &Layout {
+        &self.layout
+    }
+
+    /// The directory that holds `SLCR.toml` and the project's SLCR files,
+    /// as an absolute path.
+    pub(crate) fn slcr_dir(&self) -> &Path {
+        self.layout.slcr_dir()
     }
 
     /// The manifest's absolute path.
     pub(crate) fn manifest_path(&self) -> PathBuf {
-        self.root.join(MANIFEST)
+        self.slcr_dir().join(MANIFEST)
     }
 
     /// The manifest's path relative to the working directory.
@@ -269,7 +283,7 @@ where
     Ok(map)
 }
 
-/// A glob relative to the project root, such as `docs/**/*.slcr.toml`.
+/// A glob relative to the SLCR directory, such as `docs/**/*.slcr.toml`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
 pub struct ProjectGlob(String);
@@ -780,12 +794,13 @@ pin = "blake3:41ab9c7e5d3f1a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e0f2a3b5c7d9e1f3a5b"
         std::fs::write(dir.path().join(MANIFEST), "").unwrap();
 
         let project = Project::find_from(&nested).unwrap();
-        assert_eq!(project.root(), dir.path());
+        // Its project root is its SLCR directory.
+        assert_eq!(*project.layout(), Layout::single(dir.path().to_path_buf()));
         assert_eq!(project.shown_manifest(), Path::new("../../SLCR.toml"));
 
         std::fs::write(dir.path().join("a").join(MANIFEST), "").unwrap();
         let project = Project::find_from(&nested).unwrap();
-        assert_eq!(project.root(), dir.path().join("a"));
+        assert_eq!(project.slcr_dir(), dir.path().join("a"));
         assert_eq!(project.shown_manifest(), Path::new("../SLCR.toml"));
 
         let project = Project::find_from(dir.path()).unwrap();

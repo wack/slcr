@@ -49,15 +49,20 @@ mod fixture;
 #[cfg(test)]
 mod https_server;
 
-/// What the `slcr tools` commands read and write outside the project,
-/// passed in so that a caller, such as a test, chooses it.
+/// The project the `slcr tools` commands work on, and what they read and
+/// write outside it, passed in so that a caller, such as a test, chooses
+/// it.
 pub(crate) struct Environment<'a> {
     pub(crate) fs: &'a FileSystem,
     pub(crate) store: &'a store::DescriptorStore,
     pub(crate) fetcher: &'a source::Fetcher,
-    /// The working directory, as an absolute path: where the project is
-    /// looked for, and what a path source is relative to.
+    /// The working directory, as an absolute path: what a path given on
+    /// the command line is relative to, and what messages name files from.
     pub(crate) cwd: &'a Path,
+    /// The project, whose SLCR directory holds the manifest and is what a
+    /// path source is relative to. The tools commands never read its
+    /// project root.
+    pub(crate) project: manifest::Project,
 }
 
 /// The key a descriptor is declared under in the manifest's `[tools]`

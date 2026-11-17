@@ -5,7 +5,6 @@ use std::{
     collections::BTreeMap,
     future::{Future, poll_fn},
     num::NonZeroUsize,
-    path::PathBuf,
     pin::pin,
     sync::Arc,
     task::Poll,
@@ -14,6 +13,7 @@ use std::{
 use serde_json::Map;
 use tokio::task::JoinSet;
 
+use crate::project::Layout;
 use crate::run::{Invocation, SpawnFailure, Target, process::Run};
 use crate::tools::{ToolKey, descriptor::Descriptor};
 use crate::validators::{ValidatorFile, file::Validator};
@@ -27,8 +27,9 @@ pub(super) type Finished = Result<Run, SpawnFailure>;
 /// position in the file.
 #[derive(Debug)]
 pub(super) struct Plan {
-    /// The project root, as an absolute path.
-    root: PathBuf,
+    /// Where the project is: the validator files are in its SLCR
+    /// directory, and the validators run against its project root.
+    layout: Layout,
     files: Vec<ValidatorFile>,
     /// The descriptor of every tool a validator names.
     descriptors: BTreeMap<ToolKey, Descriptor>,
@@ -49,7 +50,7 @@ impl Plan {
     /// Every validator in `files`. Vetting guarantees `descriptors` holds
     /// the descriptor of each one's tool.
     pub(super) fn new(
-        root: PathBuf,
+        layout: Layout,
         files: Vec<ValidatorFile>,
         descriptors: BTreeMap<ToolKey, Descriptor>,
     ) -> Self {
@@ -59,7 +60,7 @@ impl Plan {
             .flat_map(|(file, loaded)| (0..loaded.validators().len()).map(move |i| (file, i)))
             .collect();
         Self {
-            root,
+            layout,
             files,
             descriptors,
             order,
@@ -89,20 +90,25 @@ impl Plan {
     /// Resolve the validator at `index` against slcr's environment as it
     /// is now, which is when `PATH` is searched, then run it.
     async fn run(&self, index: usize) -> Finished {
+        self.invocation(index)?.run().await
+    }
+
+    /// Resolve the validator at `index` against the project root and slcr's
+    /// environment as it is now.
+    fn invocation(&self, index: usize) -> Result<Invocation, SpawnFailure> {
         let job = self.job(index);
         let descriptor = self
             .descriptors
             .get(job.validator.tool())
             .expect("vetting guarantees a descriptor for every validator's tool");
         let empty = Map::new();
-        let invocation = Invocation::new(Target {
+        Invocation::new(Target {
             descriptor,
             with: job.validator.with().as_ref().unwrap_or(&empty),
-            project_root: &self.root,
-            validator_file: job.file.file().absolute(),
+            project_root: self.layout.project_root(),
+            validator_dir: &self.layout.validator_dir(job.file.file()),
             requirement: job.validator.requirement(),
-        })?;
-        invocation.run().await
+        })
     }
 }
 
@@ -233,11 +239,67 @@ timeout = 30
         let descriptor = Descriptor::parse("sh.toml", SH).unwrap();
         let key = ToolKey::try_from("sh".to_owned()).unwrap();
         let plan = Plan::new(
-            dir.path().to_path_buf(),
+            Layout::single(dir.path().to_path_buf()),
             vec![file],
             BTreeMap::from([(key, descriptor)]),
         );
         (dir, plan)
+    }
+
+    #[test]
+    fn validators_run_against_the_project_root_not_the_slcr_directory() {
+        let dir = TempDir::new().unwrap();
+        let (slcr_dir, repo) = (dir.path().join("app"), dir.path().join("repo"));
+        std::fs::create_dir_all(slcr_dir.join("src")).unwrap();
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        // Only the project root's Cargo.toml is in a `nearest` search.
+        std::fs::write(repo.join("Cargo.toml"), "").unwrap();
+        std::fs::write(slcr_dir.join("src/Cargo.toml"), "").unwrap();
+        let relative = Path::new("src/.validators.slcr.toml");
+        let tools = ["in-validator-dir", "in-project", "in-nearest"];
+        let validators: String = tools
+            .iter()
+            .map(|tool| {
+                format!("\n[[validator]]\nrequirement = \"todo-api/REQ-001\"\ntool = \"{tool}\"\n")
+            })
+            .collect();
+        std::fs::write(
+            slcr_dir.join(relative),
+            format!("formatVersion = \"1\"\n{validators}"),
+        )
+        .unwrap();
+        let file = ProjectFile::new(&slcr_dir, dir.path(), relative.to_path_buf());
+        let file = ValidatorFile::load(file).unwrap();
+        let descriptors = tools
+            .iter()
+            .zip([
+                "\"validator-dir\"",
+                "\"project\"",
+                "{ nearest = \"Cargo.toml\" }",
+            ])
+            .map(|(tool, cwd)| {
+                let source = format!(
+                    "formatVersion = \"1\"\nname = \"{tool}\"\nversion = \"1.0.0\"\n\n\
+                     [validator.schema]\ntype = \"object\"\n\n[invoke]\n\
+                     argv = [\"sh\", \"{{slcr.project_root}}\", \"{{slcr.validator_dir}}\"]\n\
+                     cwd = {cwd}\n"
+                );
+                let descriptor = Descriptor::parse("tool.toml", &source).unwrap();
+                (ToolKey::try_from((*tool).to_owned()).unwrap(), descriptor)
+            })
+            .collect();
+        let plan = Plan::new(Layout::new(slcr_dir, repo.clone()), vec![file], descriptors);
+        let invocations: Vec<Invocation> = (0..plan.len())
+            .map(|i| plan.invocation(i).unwrap())
+            .collect();
+        for invocation in &invocations {
+            assert_eq!(
+                invocation.args(),
+                &[repo.as_os_str(), repo.join("src").as_os_str()]
+            );
+        }
+        let cwds: Vec<&Path> = invocations.iter().map(|i| i.cwd().as_path()).collect();
+        assert_eq!(cwds, [repo.join("src").as_path(), &repo, &repo]);
     }
 
     /// Run `plan` `jobs` at a time until `interrupt`; also return the

@@ -125,15 +125,15 @@ impl Init {
 fn unlisted(project: &Project, cwd: &Path, path: &Path) -> Option<Unlisted> {
     let manifest = project.shown_manifest().to_path_buf();
     let spec = path.to_path_buf();
-    // The file exists now, so it resolves, as the project's root did.
+    // The file exists now, so it resolves, as the SLCR directory did.
     let absolute = std::fs::canonicalize(cwd.join(path)).ok()?;
-    let Ok(relative) = absolute.strip_prefix(project.root()) else {
+    let Ok(relative) = absolute.strip_prefix(project.slcr_dir()) else {
         return Some(Unlisted::Outside { manifest, spec });
     };
     let Ok(file) = ManifestFile::load(project) else {
         return Some(Unlisted::Unreadable { manifest, spec });
     };
-    let discovery = discover(project.root(), cwd, file.manifest().specs());
+    let discovery = discover(project.slcr_dir(), cwd, file.manifest().specs());
     if discovery
         .files
         .iter()
@@ -163,7 +163,7 @@ pub enum Unlisted {
     NotMatched {
         manifest: PathBuf,
         spec: PathBuf,
-        /// The file's path relative to the project root: the entry to add.
+        /// The file's path relative to the SLCR directory: the entry to add.
         entry: String,
     },
 
