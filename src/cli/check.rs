@@ -108,9 +108,10 @@ impl Check {
     async fn check(&self, env: &Environment<'_>) -> Result<()> {
         let options = Options {
             install: !self.args.offline,
-            jobs: self.args.jobs.unwrap_or_else(|| {
-                std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
-            }),
+            jobs: self
+                .args
+                .jobs
+                .unwrap_or_else(|| crate::check::Options::default().jobs),
             deny_warnings: self.args.deny_warnings,
             path: None,
         };

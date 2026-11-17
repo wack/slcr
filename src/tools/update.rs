@@ -69,10 +69,10 @@ pub(crate) enum Change {
     UpToDate,
 }
 
-/// What [update] did, which displays as the status `slcr tools update`
+/// What updating a tool did, which displays as the status `slcr tools update`
 /// reports, e.g. `SLCR.toml: updated tool cargo-nextest 1.0.0 -> 1.1.0`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Updated {
+pub struct Updated {
     /// The manifest's path relative to the working directory.
     manifest: PathBuf,
     key: ToolKey,

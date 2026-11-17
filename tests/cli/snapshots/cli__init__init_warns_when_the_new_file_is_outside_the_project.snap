@@ -16,5 +16,5 @@ exit_code: 0
 SLCR.toml: left the existing project manifest unchanged
 
 ----- stderr -----
-  ⚠ ../todo-api.slcr.toml is outside the project of SLCR.toml, whose `specs` can't list it
-  help: move the file into the project, or run `slcr init` where it starts a project of its own
+  ⚠ ../todo-api.slcr.toml is outside the directory of SLCR.toml, so its `specs` can't list it
+  help: create the file inside that directory, or where `slcr init` starts a project of its own

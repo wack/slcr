@@ -29,22 +29,31 @@
 //!   project root, the code its validators check. A validator file checks
 //!   the directory at its own path, relative to the SLCR directory, under
 //!   the project root. Files are named relative to the SLCR directory.
+//! - [Project::create] creates a specification, and the manifest if there
+//!   is none, as `slcr init --slcr-dir` does, and opens the project.
+//! - [Project::add_tool], [Project::update_tool], and
+//!   [Project::remove_tool] edit the manifest's tools as `slcr tools add`,
+//!   `update`, and `remove` do; a path source is relative to the SLCR
+//!   directory, and must be inside it.
 //! - [DescriptorStore::at] names where the project's tools' descriptors are
 //!   installed.
 //! - [Project::vet] vets the project as `slcr vet` does, validator files
 //!   and pinned descriptors included; [vet::json] writes what it found.
 //! - [Project::install] installs every descriptor the store lacks, fetched
-//!   with a [Fetcher], as `slcr tools install` does. It, and nothing else
-//!   here, fetches.
+//!   with a [Fetcher], as `slcr tools install` does. It, adding a tool, and
+//!   updating one are all that fetch.
 //! - [Project::check] checks the project as `slcr check --offline` does,
 //!   asynchronously on the caller's runtime, reporting each
 //!   [check::ValidatorStatus] as it would be written, stopping when the
 //!   caller cancels it, and running tools on the `PATH`
 //!   [check::Options] names. It returns a [check::Report].
 //!
-//! None of these read or change the process's working directory, its
-//! environment (but for the `PATH` a check falls back to), or its signal
-//! handlers, so that a program can work on several projects at once.
+//! None of these read or change the process's working directory or its
+//! signal handlers, or change its environment, so that a program can work
+//! on several projects at once. Of the environment they read only what
+//! `slcr` itself reads: the `PATH` a check falls back to, the variables
+//! that locate git's global excludes, and, while fetching, the proxy
+//! variables.
 //!
 //! [Pin] spells a BLAKE3 hash as SLCR does everywhere: `blake3:` and 64
 //! lowercase hexadecimal digits.
@@ -56,6 +65,7 @@ use std::time::Instant;
 use miette::Diagnostic;
 use thiserror::Error;
 
+pub use cli::init::Initialized;
 pub use config::Cli;
 pub use fs::format::{Format, ParseError};
 pub use query::{Cell, InvalidQuery, Rows};
@@ -64,13 +74,17 @@ pub use spec::id::{CriterionId, RequirementId, SectionId, TermId};
 pub use spec::text::SpecName;
 pub use spec::vet::Report;
 pub use terminal::Terminal;
+pub use tools::add::Added as ToolAdded;
 pub use tools::install::Installed;
 pub use tools::manifest::{
     DirectoryProblem, Given, MANIFEST, Manifest, Project, ProjectError, ProjectGlob, ToolEntry,
+    UnusableDirectory,
 };
 pub use tools::pin::Pin;
-pub use tools::source::{Fetcher, HttpsUrl, ProjectPath, Source, SourceError};
+pub use tools::remove::Removed as ToolRemoved;
+pub use tools::source::{Fetcher, HttpsUrl, InvalidAuthority, ProjectPath, Source};
 pub use tools::store::DescriptorStore;
+pub use tools::update::Updated as ToolUpdated;
 pub use tools::{DescriptorVersion, ToolKey};
 
 pub mod check;

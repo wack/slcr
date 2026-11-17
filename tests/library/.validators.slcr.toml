@@ -153,6 +153,12 @@ tool = "cargo-insta"
 with = { target = "library", test = "projects::checks_stop_every_validator_when_cancelled" }
 
 [[validator]]
+requirement = "slcr/REQ-100"
+criterion = "AC-245"
+tool = "cargo-insta"
+with = { target = "library", test = "projects::checks_stop_every_validator_when_dropped" }
+
+[[validator]]
 requirement = "slcr/REQ-101"
 criterion = "AC-246"
 tool = "cargo-insta"
@@ -163,3 +169,21 @@ requirement = "slcr/REQ-102"
 criterion = "AC-247"
 tool = "cargo-insta"
 with = { target = "library", test = "projects::projects_are_checked_at_once_as_they_are_alone" }
+
+[[validator]]
+requirement = "slcr/REQ-104"
+criterion = "AC-255"
+tool = "cargo-insta"
+with = { target = "library", test = "projects::creating_a_project_writes_what_slcr_init_writes" }
+
+[[validator]]
+requirement = "slcr/REQ-105"
+criterion = "AC-256"
+tool = "cargo-insta"
+with = { target = "library", test = "projects::tools_are_managed_as_slcr_tools_manages_them" }
+
+[[validator]]
+requirement = "slcr/REQ-105"
+criterion = "AC-257"
+tool = "cargo-insta"
+with = { target = "library", test = "projects::managing_tools_changes_nothing_when_it_fails" }

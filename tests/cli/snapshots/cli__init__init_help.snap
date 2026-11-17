@@ -18,9 +18,7 @@ Usage: slcr init [OPTIONS] [FILE]
 
 Arguments:
   [FILE]
-          The requirements file to create: `.yaml`, `.yml`, `.json`, or `.toml`. It must not exist yet
-          
-          [default: SPEC.slcr.toml]
+          The requirements file to create: `.yaml`, `.yml`, `.json`, or `.toml`. It must not exist yet [default: SPEC.slcr.toml, in the directory given with `--slcr-dir`, if any]
 
 Options:
       --name <NAME>
@@ -28,6 +26,9 @@ Options:
 
       --title <TITLE>
           The root Section's title. Defaults to the specification's name
+
+      --slcr-dir <DIR>
+          The directory that holds, or will hold, SLCR.toml. Only it is searched for SLCR.toml, never the working directory or its parents; a new SLCR.toml is created there, and FILE must then be inside it [default: the nearest directory, from the working directory up, that holds SLCR.toml, or else the working directory]
 
       --enable-colors <ENABLE_COLORS>
           Whether to color the output

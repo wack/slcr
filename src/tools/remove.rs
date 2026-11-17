@@ -26,10 +26,10 @@ pub(crate) fn remove(fs: &FileSystem, project: &Project, key: ToolKey) -> Result
     })
 }
 
-/// What [remove] did, which displays as the status `slcr tools remove`
+/// What removing a tool did, which displays as the status `slcr tools remove`
 /// reports, e.g. `SLCR.toml: removed tool cargo-nextest 1.0.0`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Removed {
+pub struct Removed {
     /// The manifest's path relative to the working directory.
     manifest: PathBuf,
     key: ToolKey,

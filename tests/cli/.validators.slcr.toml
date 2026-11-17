@@ -158,6 +158,36 @@ criterion = "AC-024"
 tool = "cargo-insta"
 with = { target = "cli", test = "init::init_rejects_an_unsupported_format" }
 
+[[validator]]
+requirement = "slcr/REQ-103"
+criterion = "AC-248"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_starts_a_project_in_the_slcr_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-103"
+criterion = "AC-249"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_joins_the_project_in_the_slcr_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-103"
+criterion = "AC-250"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_keeps_a_new_project_s_file_inside_the_slcr_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-103"
+criterion = "AC-251"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_refuses_a_missing_slcr_directory" }
+
+[[validator]]
+requirement = "slcr/REQ-103"
+criterion = "AC-252"
+tool = "cargo-insta"
+with = { target = "cli", test = "init::init_help" }
+
 # slcr vet
 
 [[validator]]

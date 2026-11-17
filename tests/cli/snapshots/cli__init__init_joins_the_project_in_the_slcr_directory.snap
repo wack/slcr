@@ -1,0 +1,20 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "--slcr-dir"
+    - app
+    - app/billing.slcr.toml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+app/billing.slcr.toml: created specification billing
+app/SLCR.toml: left the existing project manifest unchanged
+
+----- stderr -----

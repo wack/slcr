@@ -11,6 +11,11 @@
 //! Ctrl-C no longer reaches the child. Dropping a run kills its group, but
 //! a process killed by SIGINT drops nothing: whatever runs validators must
 //! catch Ctrl-C and drop its runs before it exits.
+//!
+//! A run spawned as a task is only dropped when its runtime next polls
+//! it, which may be never. Runs given a [Groups] register their group in
+//! it, and dropping the [GroupsGuard] that owns it kills every group still
+//! registered, there and then.
 
 use std::{
     process::{ExitStatus, Stdio},
@@ -132,6 +137,12 @@ impl Invocation {
     /// validators at once, as tasks, each with its own timeout. Dropping
     /// the future kills the run.
     pub(crate) async fn run(&self) -> Result<Run, SpawnFailure> {
+        self.run_in(&Groups::default()).await
+    }
+
+    /// [Invocation::run], with the child's process group registered in
+    /// `groups` until the child is reaped.
+    pub(crate) async fn run_in(&self, groups: &Groups) -> Result<Run, SpawnFailure> {
         let mut command = Command::new(&self.executable);
         if let Some(path) = self.path() {
             // Set first, so that the descriptor's own `env.PATH` wins.
@@ -154,7 +165,7 @@ impl Invocation {
             executable: self.executable.clone(),
             source,
         })?;
-        let mut group = Group::led_by(&child);
+        let mut group = Group::led_by(&child, groups);
         let stdout = Stream::read(child.stdout.take());
         let stderr = Stream::read(child.stderr.take());
 
@@ -270,26 +281,74 @@ async fn drain(mut stdout: Stream, mut stderr: Stream) -> (Captured, Captured) {
     (stdout.finish(), stderr.finish())
 }
 
+/// The process groups of runs whose children aren't reaped yet, by their
+/// leaders' IDs. Clones share them.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Groups {
+    #[cfg(unix)]
+    leaders: Arc<Mutex<std::collections::BTreeSet<i32>>>,
+}
+
+impl Groups {
+    #[cfg(unix)]
+    fn leaders(&self) -> std::sync::MutexGuard<'_, std::collections::BTreeSet<i32>> {
+        self.leaders.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Owns a [Groups]: dropping it kills every group still registered, at
+/// once, whether or not their runs' tasks are ever polled again.
+#[derive(Debug, Default)]
+pub(crate) struct GroupsGuard(Groups);
+
+impl GroupsGuard {
+    /// The groups it owns, for runs to register in.
+    pub(crate) fn groups(&self) -> &Groups {
+        &self.0
+    }
+}
+
+impl Drop for GroupsGuard {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        for leader in std::mem::take(&mut *self.0.leaders()) {
+            if let Some(leader) = rustix::process::Pid::from_raw(leader) {
+                let _ = rustix::process::kill_process_group(leader, rustix::process::Signal::KILL);
+            }
+        }
+    }
+}
+
 /// The child's process group, killed when the run ends early. slcr kills
 /// it only while the child, its leader, is unreaped: until then the
 /// group's ID can't name any other group.
 struct Group {
     #[cfg(unix)]
     leader: Option<rustix::process::Pid>,
+    /// Where it is registered while its leader is unreaped.
+    #[cfg(unix)]
+    groups: Groups,
 }
 
 impl Group {
-    fn led_by(child: &Child) -> Self {
+    fn led_by(child: &Child, groups: &Groups) -> Self {
         #[cfg(unix)]
-        let group = Self {
-            leader: child
+        let group = {
+            let leader = child
                 .id()
                 .and_then(|id| i32::try_from(id).ok())
-                .and_then(rustix::process::Pid::from_raw),
+                .and_then(rustix::process::Pid::from_raw);
+            if let Some(leader) = leader {
+                groups.leaders().insert(leader.as_raw_nonzero().get());
+            }
+            Self {
+                leader,
+                groups: groups.clone(),
+            }
         };
         #[cfg(not(unix))]
         let group = {
-            let _ = child;
+            let _ = (child, groups);
             Self {}
         };
         group
@@ -309,8 +368,8 @@ impl Group {
     /// The leader has been reaped, so its ID is free for reuse.
     fn reaped(&mut self) {
         #[cfg(unix)]
-        {
-            self.leader = None;
+        if let Some(leader) = self.leader.take() {
+            self.groups.leaders().remove(&leader.as_raw_nonzero().get());
         }
     }
 }
@@ -320,6 +379,9 @@ impl Drop for Group {
     /// interrupted, leaves nothing behind.
     fn drop(&mut self) {
         self.kill();
+        // Killed, it needs no other killing; its leader is reaped by
+        // tokio, after which the ID may be reused.
+        self.reaped();
     }
 }
 

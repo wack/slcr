@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::Terminal;
 use crate::fs::{File, FileSystem};
-use crate::project::discover;
+use crate::project::{discover, relative_to as relative_to_dir};
 use crate::spec::file::{DEFAULT_FILE, RequirementsFile, base_name};
 use crate::spec::graph::SlcrRequirementsDocument;
 use crate::spec::text::{InvalidSpecName, InvalidTitle, SpecName, Title};
@@ -30,9 +30,10 @@ const GLOB_METACHARACTERS: [char; 7] = ['*', '?', '[', ']', '{', '}', '\\'];
 #[derive(Args, Clone, Debug)]
 pub struct InitArgs {
     /// The requirements file to create: `.yaml`, `.yml`, `.json`, or `.toml`.
-    /// It must not exist yet.
-    #[arg(value_name = "FILE", default_value = DEFAULT_FILE)]
-    file: PathBuf,
+    /// It must not exist yet [default: SPEC.slcr.toml, in the directory
+    /// given with `--slcr-dir`, if any].
+    #[arg(value_name = "FILE")]
+    file: Option<PathBuf>,
 
     /// The specification's name, e.g. `todo-api`. Defaults to the file's
     /// name without its extension and any `.slcr` or `.spec`, or, for
@@ -43,6 +44,14 @@ pub struct InitArgs {
     /// The root Section's title. Defaults to the specification's name.
     #[arg(long, value_parser = parse_title)]
     title: Option<Title>,
+
+    /// The directory that holds, or will hold, SLCR.toml. Only it is
+    /// searched for SLCR.toml, never the working directory or its parents;
+    /// a new SLCR.toml is created there, and FILE must then be inside it
+    /// [default: the nearest directory, from the working directory up, that
+    /// holds SLCR.toml, or else the working directory].
+    #[arg(long, value_name = "DIR")]
+    slcr_dir: Option<PathBuf>,
 }
 
 fn parse_spec_name(value: &str) -> Result<SpecName, InvalidSpecName> {
@@ -73,49 +82,149 @@ impl Init {
 
     pub fn dispatch(self) -> Result<()> {
         let InitArgs {
-            file: path,
+            file,
             name,
             title,
+            slcr_dir,
         } = self.args;
-        let file = RequirementsFile::new(path.clone())?;
-        let name = match name {
-            Some(name) => name,
-            None => derived_name(&path)?,
-        };
-        let title = title.unwrap_or_else(|| Title::from(&name));
-        if is_manifest_name(&path) {
-            return Err(InvalidSpecPath::ManifestName { path }.into());
-        }
+        let file = file.unwrap_or_else(|| match &slcr_dir {
+            Some(dir) => dir.join(DEFAULT_FILE),
+            None => PathBuf::from(DEFAULT_FILE),
+        });
         let cwd = std::env::current_dir().into_diagnostic()?;
-        // A project found in a parent directory is left alone too:
-        // projects don't nest.
-        let manifest = match Project::find_from(&cwd) {
-            Ok(project) => ManifestStatus::Existing(project),
-            Err(ProjectError::NotFound) => {
-                ManifestStatus::New(NewManifest::new(listed(&path, &cwd)?))
-            }
-            Err(err) => return Err(err.into()),
+        let request = Request {
+            file: &file,
+            name,
+            title,
+            slcr_dir: slcr_dir.as_deref(),
         };
-        tracing::debug!(path = %path.display(), %name, "creating a requirements file");
-        let document = SlcrRequirementsDocument::new(name, title);
-        let new_manifest = match &manifest {
-            ManifestStatus::New(contents) => Some((NewManifestFile::new(MANIFEST), contents)),
-            ManifestStatus::Existing(_) => None,
-        };
-        create(&FileSystem::new()?, &file, &document, new_manifest)?;
-        let created = Created {
-            path: &path,
-            name: document.spec().name(),
-        };
-        self.terminal.write_stdout_line(&created.to_string())?;
-        self.terminal.write_stdout_line(&manifest.to_string())?;
-        if let ManifestStatus::Existing(project) = &manifest
-            && let Some(unlisted) = unlisted(project, &cwd, &path)
-        {
-            self.terminal.write_diagnostic(&unlisted)?;
+        let initialized = initialize(&FileSystem::new()?, &cwd, request)?;
+        self.terminal.write_stdout_line(&initialized.to_string())?;
+        if let Some(unlisted) = &initialized.unlisted {
+            self.terminal.write_diagnostic(unlisted)?;
         }
         Ok(())
     }
+}
+
+/// What `slcr init` is asked to create.
+pub(crate) struct Request<'a> {
+    /// The specification file, relative to the base directory or
+    /// absolute, as messages name it.
+    pub(crate) file: &'a Path,
+    pub(crate) name: Option<SpecName>,
+    pub(crate) title: Option<Title>,
+    /// The directory that holds or will hold `SLCR.toml`, relative to the
+    /// base directory or absolute. Without one, it is the project's that
+    /// holds the base directory, or else the base directory.
+    pub(crate) slcr_dir: Option<&'a Path>,
+}
+
+/// What `slcr init` did, which displays as its status lines, e.g.
+/// `SPEC.slcr.toml: created specification shop` and `SLCR.toml: created
+/// project manifest`.
+#[derive(Debug)]
+pub struct Initialized {
+    /// The specification, as the request named it.
+    spec: PathBuf,
+    name: SpecName,
+    manifest: ManifestStatus,
+    /// Why the existing manifest doesn't list the new specification, if it
+    /// doesn't.
+    unlisted: Option<Unlisted>,
+}
+
+impl Initialized {
+    /// Whether it created the project manifest, rather than finding one.
+    pub fn created_manifest(&self) -> bool {
+        matches!(self.manifest, ManifestStatus::New(_))
+    }
+
+    /// A warning that the project manifest it found doesn't list the new
+    /// specification, so that vetting and checking won't read it.
+    pub fn warning(&self) -> Option<&(dyn Diagnostic + Send + Sync + 'static)> {
+        self.unlisted
+            .as_ref()
+            .map(|unlisted| unlisted as &(dyn Diagnostic + Send + Sync + 'static))
+    }
+}
+
+impl Display for Initialized {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let created = Created {
+            path: &self.spec,
+            name: &self.name,
+        };
+        write!(f, "{created}\n{}", self.manifest)
+    }
+}
+
+/// Create a specification, as `slcr init` does in `base`, an absolute
+/// directory that the request's relative paths are relative to: in the
+/// project the request names, or else the one that holds `base`, or else
+/// in a new one, whose manifest is created beside it. Nothing is
+/// overwritten and no directory is created; both files are created, or
+/// neither.
+pub(crate) fn initialize(
+    fs: &FileSystem,
+    base: &Path,
+    request: Request<'_>,
+) -> Result<Initialized> {
+    let Request {
+        file: path,
+        name,
+        title,
+        slcr_dir,
+    } = request;
+    let file = RequirementsFile::new(path.to_path_buf())?;
+    let name = match name {
+        Some(name) => name,
+        None => derived_name(path, base)?,
+    };
+    let title = title.unwrap_or_else(|| Title::from(&name));
+    if is_manifest_name(path) {
+        return Err(InvalidSpecPath::ManifestName {
+            path: path.to_path_buf(),
+        }
+        .into());
+    }
+    let at = base.join(path);
+    let found = match slcr_dir {
+        // A project found in a parent directory is left alone too:
+        // projects don't nest.
+        None => match Project::find_from(base) {
+            Ok(project) => Ok(project),
+            Err(ProjectError::NotFound) => Err(base.to_path_buf()),
+            Err(err) => return Err(err.into()),
+        },
+        Some(dir) => Project::in_dir(dir, base)?,
+    };
+    let (manifest, new_manifest) = match found {
+        Ok(project) => (ManifestStatus::Existing(project), None),
+        Err(dir) => {
+            let place = slcr_dir.map(Path::to_path_buf);
+            let contents = NewManifest::new(listed(path, &at, &dir, place)?);
+            let manifest_at = dir.join(MANIFEST);
+            let shown = relative_to_dir(&manifest_at, base);
+            (
+                ManifestStatus::New(shown.clone()),
+                Some((NewManifestFile::new(shown), manifest_at, contents)),
+            )
+        }
+    };
+    tracing::debug!(path = %path.display(), %name, "creating a requirements file");
+    let document = SlcrRequirementsDocument::new(name, title);
+    create(fs, &file, &at, &document, new_manifest.as_ref())?;
+    let unlisted = match &manifest {
+        ManifestStatus::Existing(project) => unlisted(project, base, path),
+        ManifestStatus::New(_) => None,
+    };
+    Ok(Initialized {
+        spec: path.to_path_buf(),
+        name: document.spec().name().clone(),
+        manifest,
+        unlisted,
+    })
 }
 
 /// Why an existing project's manifest doesn't list the specification
@@ -168,12 +277,12 @@ pub enum Unlisted {
     },
 
     #[error(
-        "{} is outside the project of {}, whose `specs` can't list it",
+        "{} is outside the directory of {}, so its `specs` can't list it",
         .spec.display(),
         .manifest.display()
     )]
     #[diagnostic(help(
-        "move the file into the project, or run `slcr init` where it starts a project of its own"
+        "create the file inside that directory, or where `slcr init` starts a project of its own"
     ))]
     Outside { manifest: PathBuf, spec: PathBuf },
 
@@ -188,9 +297,10 @@ pub enum Unlisted {
 
 /// What `slcr init` does with the project manifest, which it reports as
 /// its status, e.g. `SLCR.toml: created project manifest`.
+#[derive(Debug)]
 enum ManifestStatus {
-    /// Create one in the working directory, with these contents.
-    New(NewManifest),
+    /// Create one, which messages name by this path.
+    New(PathBuf),
     /// Leave alone the one of this project.
     Existing(Project),
 }
@@ -198,7 +308,7 @@ enum ManifestStatus {
 impl Display for ManifestStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::New(_) => write!(f, "{MANIFEST}: created project manifest"),
+            Self::New(path) => write!(f, "{}: created project manifest", path.display()),
             Self::Existing(project) => write!(
                 f,
                 "{}: left the existing project manifest unchanged",
@@ -231,27 +341,28 @@ impl File for NewManifestFile {
     }
 }
 
-/// Create the specification, and the manifest if one is given: both, or,
-/// if either fails, neither.
+/// Create the specification at `spec_at`, and the manifest if one is
+/// given, at its path: both, or, if either fails, neither. Errors name
+/// each file as its `File` does.
 fn create(
     fs: &FileSystem,
     spec: &RequirementsFile,
+    spec_at: &Path,
     document: &SlcrRequirementsDocument,
-    manifest: Option<(NewManifestFile, &NewManifest)>,
+    manifest: Option<&(NewManifestFile, PathBuf, NewManifest)>,
 ) -> Result<()> {
-    let Some((manifest, contents)) = manifest else {
-        return fs.create_file(spec, document);
+    let Some((manifest, manifest_at, contents)) = manifest else {
+        return fs.create_file_at(spec, spec_at, document);
     };
-    let spec_path = spec.path(fs)?;
     // The likeliest reasons to refuse, found before anything is written.
-    fs.ensure_vacant(&spec_path)?;
-    fs.ensure_vacant(&manifest.path)?;
-    fs.create_file(spec, document)?;
-    if let Err(err) = fs.create_file(&manifest, contents) {
+    fs.ensure_vacant_at(spec_at, &spec.path(fs)?)?;
+    fs.ensure_vacant_at(manifest_at, &manifest.path)?;
+    fs.create_file_at(spec, spec_at, document)?;
+    if let Err(err) = fs.create_file_at(manifest, manifest_at, contents) {
         // Take the specification back, so no half-made project is left.
-        if let Err(cleanup) = std::fs::remove_file(&spec_path) {
+        if let Err(cleanup) = std::fs::remove_file(spec_at) {
             tracing::warn!(
-                path = %spec_path.display(),
+                path = %spec_at.display(),
                 %cleanup,
                 "could not remove the new specification"
             );
@@ -270,14 +381,26 @@ fn is_manifest_name(path: &Path) -> bool {
         .is_some_and(|name| name.eq_ignore_ascii_case(MANIFEST))
 }
 
-/// How a new manifest in `cwd`, the absolute working directory, lists the
-/// specification at `path` in `specs`: relative to `cwd`, with forward
-/// slashes.
-fn listed(path: &Path, cwd: &Path) -> Result<ProjectGlob, InvalidSpecPath> {
-    let outside = || InvalidSpecPath::Outside {
-        path: path.to_path_buf(),
+/// How a new manifest in `dir`, an absolute directory, lists the
+/// specification at `at`, an absolute path, which messages name `path`, in
+/// `specs`: relative to `dir`, with forward slashes. `dir` is the working
+/// directory, unless it was given, as `given`.
+fn listed(
+    path: &Path,
+    at: &Path,
+    dir: &Path,
+    given: Option<PathBuf>,
+) -> Result<ProjectGlob, InvalidSpecPath> {
+    let outside = || match &given {
+        None => InvalidSpecPath::Outside {
+            path: path.to_path_buf(),
+        },
+        Some(dir) => InvalidSpecPath::OutsideSlcrDir {
+            path: path.to_path_buf(),
+            dir: dir.clone(),
+        },
     };
-    let relative = relative_to(path, cwd).ok_or_else(outside)?;
+    let relative = relative_to(at, dir).ok_or_else(outside)?;
     let mut parts = Vec::new();
     for component in relative.components() {
         let Component::Normal(part) = component else {
@@ -339,6 +462,14 @@ pub enum InvalidSpecPath {
     ))]
     Outside { path: PathBuf },
 
+    #[error("{} is outside {}, where {MANIFEST} would be created", .path.display(), .dir.display())]
+    #[diagnostic(help(
+        "{MANIFEST} lists specification files relative to its own directory, {}: create the \
+         file inside it",
+        .dir.display()
+    ))]
+    OutsideSlcrDir { path: PathBuf, dir: PathBuf },
+
     #[error("{} can't be listed in {MANIFEST}, which reads `specs` as globs", .path.display())]
     #[diagnostic(help("choose a path without `*`, `?`, `[`, `]`, `{{`, `}}`, or `\\`"))]
     GlobCharacters { path: PathBuf },
@@ -348,9 +479,10 @@ pub enum InvalidSpecPath {
     NotUtf8 { path: PathBuf },
 }
 
-/// The name a specification takes from its file's path when none is given.
-fn derived_name(path: &Path) -> Result<SpecName, UnnamedSpec> {
-    let candidate = name_candidate(path);
+/// The name a specification takes from its file's path, relative to
+/// `base` or absolute, when none is given.
+fn derived_name(path: &Path, base: &Path) -> Result<SpecName, UnnamedSpec> {
+    let candidate = name_candidate(path, base);
     candidate
         .clone()
         .and_then(|candidate| SpecName::try_from(candidate).ok())
@@ -363,25 +495,27 @@ fn derived_name(path: &Path) -> Result<SpecName, UnnamedSpec> {
 /// What a specification would be named after its file's path, valid or
 /// not: the file's [base_name], or, for the well-known `SPEC.slcr.*`, the
 /// name of the directory that holds it.
-fn name_candidate(path: &Path) -> Option<String> {
+fn name_candidate(path: &Path, base: &Path) -> Option<String> {
     let stem = path.file_stem().and_then(OsStr::to_str)?;
     if stem == WELL_KNOWN_STEM {
-        return directory_name(path);
+        return directory_name(path, base);
     }
     base_name(path).map(str::to_owned)
 }
 
-/// The name of the directory that holds `path`, which need not exist.
-fn directory_name(path: &Path) -> Option<String> {
+/// The name of the directory that holds `path`, relative to `base` or
+/// absolute, which need not exist.
+fn directory_name(path: &Path, base: &Path) -> Option<String> {
     let directory = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
-        // A bare file name is in the working directory.
+        // A bare file name is in the base directory.
         _ => Path::new("."),
     };
     // Resolving the directory turns `.` and `..` into real names. A
     // directory that doesn't exist can't be resolved, but its own name
     // will do: creating the file fails later anyway, and says why.
-    let resolved = std::fs::canonicalize(directory).unwrap_or_else(|_| directory.to_path_buf());
+    let resolved =
+        std::fs::canonicalize(base.join(directory)).unwrap_or_else(|_| directory.to_path_buf());
     resolved
         .file_name()
         .and_then(OsStr::to_str)
@@ -539,11 +673,18 @@ title = "Glossary"
         fs.load_file(RequirementsFile::new(path).unwrap()).unwrap()
     }
 
+    /// The working directory, which the CLI's relative paths are relative
+    /// to.
+    fn here() -> PathBuf {
+        std::env::current_dir().unwrap()
+    }
+
     #[test]
     fn the_file_defaults_to_the_well_known_name() {
         let args = parse(&[]).unwrap();
-        assert_eq!(args.file, PathBuf::from("SPEC.slcr.toml"));
-        assert_eq!(args.file, PathBuf::from(DEFAULT_FILE));
+        // `dispatch` puts it in the working directory, or in `--slcr-dir`.
+        assert_eq!(args.file, None);
+        assert_eq!(DEFAULT_FILE, "SPEC.slcr.toml");
         assert!(args.name.is_none());
         assert!(args.title.is_none());
     }
@@ -569,7 +710,7 @@ title = "Glossary"
             "never",
         ])
         .unwrap();
-        assert_eq!(args.file, PathBuf::from("specs/api.json"));
+        assert_eq!(args.file, Some(PathBuf::from("specs/api.json")));
         assert_eq!(args.name, Some(spec_name("todo-api")));
         assert_eq!(args.title.unwrap().as_str(), "TodoList API");
     }
@@ -624,7 +765,11 @@ title = "Glossary"
             ("spec.slcr.yml", "spec"),
             ("v2.json", "v2"),
         ] {
-            assert_eq!(derived_name(Path::new(path)), Ok(spec_name(name)), "{path}");
+            assert_eq!(
+                derived_name(Path::new(path), &here()),
+                Ok(spec_name(name)),
+                "{path}"
+            );
         }
     }
 
@@ -632,7 +777,7 @@ title = "Glossary"
     fn only_one_suffix_is_dropped_from_the_stem() {
         // `todo-api.slcr.spec` drops `.spec` and keeps `.slcr`, which is not
         // part of a valid name.
-        let err = derived_name(Path::new("todo-api.slcr.spec.yml")).unwrap_err();
+        let err = derived_name(Path::new("todo-api.slcr.spec.yml"), &here()).unwrap_err();
         assert_eq!(err.candidate.as_deref(), Some("todo-api.slcr"));
     }
 
@@ -645,7 +790,7 @@ title = "Glossary"
             (".spec.yaml", ""),
             ("SPEC.yml", "SPEC"),
         ] {
-            let err = derived_name(Path::new(path)).unwrap_err();
+            let err = derived_name(Path::new(path), &here()).unwrap_err();
             assert_eq!(
                 err,
                 UnnamedSpec {
@@ -662,7 +807,7 @@ title = "Glossary"
         Jail::expect_with(|jail| {
             jail.create_dir("todo-api")?;
             jail.create_dir("billing")?;
-            let derived = |path: &str| derived_name(Path::new(path)).map(String::from);
+            let derived = |path: &str| derived_name(Path::new(path), &here()).map(String::from);
             assert_eq!(derived("todo-api/SPEC.slcr.yml").unwrap(), "todo-api");
             assert_eq!(derived("todo-api/SPEC.slcr.json").unwrap(), "todo-api");
             assert_eq!(derived("todo-api/./SPEC.slcr.toml").unwrap(), "todo-api");
@@ -682,7 +827,7 @@ title = "Glossary"
     #[test]
     fn a_missing_directory_still_names_the_well_known_file() {
         Jail::expect_with(|_| {
-            let name = derived_name(Path::new("absent/SPEC.slcr.yml")).unwrap();
+            let name = derived_name(Path::new("absent/SPEC.slcr.yml"), &here()).unwrap();
             assert_eq!(name, spec_name("absent"));
             Ok(())
         });
@@ -692,7 +837,7 @@ title = "Glossary"
     fn a_directory_that_is_not_a_valid_name_is_rejected() {
         Jail::expect_with(|jail| {
             jail.create_dir("My Project")?;
-            let err = derived_name(Path::new("My Project/SPEC.slcr.yml")).unwrap_err();
+            let err = derived_name(Path::new("My Project/SPEC.slcr.yml"), &here()).unwrap_err();
             assert_eq!(err.candidate.as_deref(), Some("My Project"));
             Ok(())
         });
@@ -700,7 +845,7 @@ title = "Glossary"
 
     #[test]
     fn the_filesystem_root_does_not_name_a_specification() {
-        let err = derived_name(Path::new("/SPEC.slcr.yml")).unwrap_err();
+        let err = derived_name(Path::new("/SPEC.slcr.yml"), &here()).unwrap_err();
         assert_eq!(err.candidate, None);
     }
 
@@ -856,7 +1001,8 @@ title = "Glossary"
         use std::os::unix::ffi::OsStrExt;
 
         let path = Path::new(OsStr::from_bytes(b"spec\xff.toml"));
-        let err = listed(path, Path::new("/project")).unwrap_err();
+        let project = Path::new("/project");
+        let err = listed(path, &project.join(path), project, None).unwrap_err();
         assert!(matches!(err, InvalidSpecPath::NotUtf8 { .. }), "{err}");
     }
 
@@ -869,7 +1015,8 @@ title = "Glossary"
             std::os::unix::fs::symlink(jail.directory().join("project"), &link).unwrap();
             jail.change_dir("project")?;
             let cwd = std::env::current_dir().unwrap();
-            let glob = listed(&link.join("specs/api.toml"), &cwd).unwrap();
+            let path = link.join("specs/api.toml");
+            let glob = listed(&path, &path, &cwd, None).unwrap();
             assert_eq!(glob.as_str(), "specs/api.toml");
             Ok(())
         });
@@ -918,15 +1065,24 @@ title = "Glossary"
                 NewManifest::new(ProjectGlob::try_from(DEFAULT_FILE.to_owned()).unwrap());
             // The manifest's directory is missing, which only the write
             // finds out.
-            let manifest = NewManifestFile::new("missing/SLCR.toml");
-            let err = create(&fs, &spec, &document, Some((manifest, &contents))).unwrap_err();
+            let at = Path::new("SPEC.slcr.toml");
+            let manifest = (
+                NewManifestFile::new("missing/SLCR.toml"),
+                PathBuf::from("missing/SLCR.toml"),
+                contents.clone(),
+            );
+            let err = create(&fs, &spec, at, &document, Some(&manifest)).unwrap_err();
             assert_eq!(err.to_string(), "could not write missing/SLCR.toml");
             assert!(entries(jail, ".").is_empty());
 
             // Anything already at the manifest's path is found first.
             jail.create_file("SLCR.toml", "")?;
-            let manifest = NewManifestFile::new(MANIFEST);
-            let err = create(&fs, &spec, &document, Some((manifest, &contents))).unwrap_err();
+            let manifest = (
+                NewManifestFile::new(MANIFEST),
+                PathBuf::from(MANIFEST),
+                contents,
+            );
+            let err = create(&fs, &spec, at, &document, Some(&manifest)).unwrap_err();
             assert!(err.downcast_ref::<AlreadyExists>().is_some(), "{err}");
             assert_eq!(entries(jail, "."), ["SLCR.toml"]);
             Ok(())
@@ -1074,9 +1230,8 @@ title = "Glossary"
 
     #[test]
     fn the_status_says_what_became_of_the_manifest() {
-        let spec = ProjectGlob::try_from("SPEC.slcr.toml".to_owned()).unwrap();
         assert_eq!(
-            ManifestStatus::New(NewManifest::new(spec)).to_string(),
+            ManifestStatus::New(PathBuf::from(MANIFEST)).to_string(),
             "SLCR.toml: created project manifest"
         );
         let dir = tempfile::tempdir().unwrap();

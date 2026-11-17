@@ -126,7 +126,7 @@ impl HttpsUrl {
 /// The HTTPS client is built when a URL is fetched, not before: building
 /// it loads the platform's certificate authorities, which a project that
 /// keeps its descriptors in the repository never needs.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Fetcher {
     /// The only authority to trust, in place of the platform's, for a
     /// test server.
@@ -139,15 +139,26 @@ impl Fetcher {
         Self::default()
     }
 
-    /// A fetcher that trusts only the certificate authority in `pem`, a
+    /// A fetcher that trusts only the certificate authority in `pem`, one
     /// PEM-encoded certificate, in place of the platform's: for a server
     /// whose certificate a private authority signed.
-    pub fn trusting_only(pem: &[u8]) -> Result<Self, SourceError> {
-        let authority = reqwest::Certificate::from_pem(pem)
-            .map_err(|source| SourceError::Client(Box::new(source)))?;
-        Ok(Self {
+    pub fn trusting_only(pem: &[u8]) -> Result<Self, InvalidAuthority> {
+        let invalid = |reason: String| InvalidAuthority { reason };
+        let mut authorities = reqwest::Certificate::from_pem_bundle(pem)
+            .map_err(|error| invalid(error.to_string()))?;
+        let authority = match authorities.len() {
+            1 => authorities.remove(0),
+            0 => return Err(invalid("it holds no certificate".to_owned())),
+            _ => return Err(invalid("it holds more than one certificate".to_owned())),
+        };
+        let fetcher = Self {
             authority: Some(authority),
-        })
+        };
+        // Building the client is what reads the certificate itself.
+        fetcher
+            .client()
+            .map_err(|error| invalid(error.to_string()))?;
+        Ok(fetcher)
     }
 
     /// A fetcher that trusts only `authority`, for a test server.
@@ -373,6 +384,14 @@ impl SourceArg {
             }
         }
     }
+}
+
+/// The error [Fetcher::trusting_only] returns for a certificate authority
+/// it can't trust.
+#[derive(Debug, Error, Diagnostic)]
+#[error("not a PEM-encoded certificate authority: {reason}")]
+pub struct InvalidAuthority {
+    reason: String,
 }
 
 /// The ways a source can fail to yield a descriptor.
@@ -645,6 +664,31 @@ mod tests {
             .unwrap()
             .unwrap_err();
         assert_eq!(err.to_string(), "tools/none.toml does not exist");
+    }
+
+    #[test]
+    fn only_one_valid_authority_is_trusted() {
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        let pem = params.self_signed(&key).unwrap().pem();
+        assert!(Fetcher::trusting_only(pem.as_bytes()).is_ok());
+
+        let message = |pem: &[u8]| Fetcher::trusting_only(pem).unwrap_err().to_string();
+        assert_eq!(
+            message(b"not a pem"),
+            "not a PEM-encoded certificate authority: it holds no certificate"
+        );
+        assert_eq!(
+            message(format!("{pem}{pem}").as_bytes()),
+            "not a PEM-encoded certificate authority: it holds more than one certificate"
+        );
+        let garbled = b"-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n";
+        assert!(
+            message(garbled).starts_with("not a PEM-encoded certificate authority: "),
+            "{}",
+            message(garbled)
+        );
     }
 
     #[test]

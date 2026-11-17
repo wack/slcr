@@ -15,7 +15,8 @@ use serde_json::Map;
 use tokio::task::JoinSet;
 
 use crate::project::Layout;
-use crate::run::{Invocation, SpawnFailure, Target, process::Run};
+use crate::run::process::{Groups, GroupsGuard, Run};
+use crate::run::{Invocation, SpawnFailure, Target};
 use crate::tools::{ToolKey, descriptor::Descriptor};
 use crate::validators::{ValidatorFile, file::Validator};
 
@@ -95,8 +96,8 @@ impl Plan {
 
     /// Resolve the validator at `index` against slcr's environment as it
     /// is now, which is when `PATH` is searched, then run it.
-    async fn run(&self, index: usize) -> Finished {
-        self.invocation(index)?.run().await
+    async fn run(&self, index: usize, groups: &Groups) -> Finished {
+        self.invocation(index)?.run_in(groups).await
     }
 
     /// Resolve the validator at `index` against the project root and slcr's
@@ -136,13 +137,19 @@ pub(crate) struct Ran {
 /// it have finished. If `interrupt` completes first, every run still going
 /// is dropped, which kills its process group, and `report` is called for
 /// each validator not yet reported, with `None` for those that hadn't
-/// finished.
+/// finished. Dropping the future before it completes kills the process
+/// group of every run still going, synchronously, whether or not the
+/// runtime ever polls their tasks again.
 pub(crate) async fn run_all<E>(
     plan: Arc<Plan>,
     jobs: NonZeroUsize,
     interrupt: impl Future<Output = ()>,
     mut report: impl FnMut(usize, Option<&Finished>) -> Result<(), E>,
 ) -> Result<Ran, E> {
+    // Dropping this future drops it, killing every validator's process
+    // group still alive at once: the tasks running them are only told to
+    // abort, and may never be polled again.
+    let guard = GroupsGuard::default();
     let mut interrupt = pin!(interrupt);
     let mut results: Vec<Option<Finished>> = (0..plan.len()).map(|_| None).collect();
     let mut running = JoinSet::new();
@@ -155,7 +162,8 @@ pub(crate) async fn run_all<E>(
         while started < plan.len() && running.len() < jobs.get() {
             let plan = Arc::clone(&plan);
             let index = started;
-            running.spawn(async move { (index, plan.run(index).await) });
+            let groups = guard.groups().clone();
+            running.spawn(async move { (index, plan.run(index, &groups).await) });
             started += 1;
         }
         let next = poll_fn(|cx| {
@@ -483,6 +491,55 @@ timeout = 30
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(dead(), "the grandchild, {}, is still running", pid.trim());
+    }
+
+    /// Whether the process `pid` is gone, or a zombie until something
+    /// reaps it.
+    fn dead(pid: &str) -> bool {
+        let ps = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", pid.trim()])
+            .output()
+            .unwrap();
+        let state = String::from_utf8_lossy(&ps.stdout);
+        matches!(state.trim_start().chars().next(), None | Some('Z' | 'X'))
+    }
+
+    #[test]
+    fn dropping_the_run_kills_every_validator_at_once() {
+        use std::time::{Duration, Instant};
+
+        let (dir, plan) = plan(&["sleep 30 & echo $! > pid.tmp; mv pid.tmp pid; wait"]);
+        // One thread, which polls nothing once `block_on` returns.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let pid_file = dir.path().join("pid");
+        let dropped = runtime.block_on(async {
+            let run = run_all(Arc::new(plan), NonZeroUsize::MIN, never(), |_, _| {
+                Ok::<_, Infallible>(())
+            });
+            let mut run = std::pin::pin!(run);
+            // Run until the grandchild has started, then drop the run.
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !pid_file.exists() && Instant::now() < deadline {
+                let _ = tokio::time::timeout(Duration::from_millis(20), run.as_mut()).await;
+            }
+            pid_file.exists()
+        });
+        assert!(dropped, "the validator never started");
+        let pid = std::fs::read_to_string(&pid_file).unwrap();
+        // The runtime is still alive, and idle: its tasks are never polled.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !dead(&pid) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            dead(&pid),
+            "the grandchild, {}, is still running",
+            pid.trim()
+        );
+        drop(runtime);
     }
 
     #[test]

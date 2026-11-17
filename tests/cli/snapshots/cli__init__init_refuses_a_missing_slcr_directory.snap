@@ -1,0 +1,19 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "--slcr-dir"
+    - missing
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the SLCR directory, missing, does not exist
+  help: name the directory that holds SLCR.toml

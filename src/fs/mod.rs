@@ -184,11 +184,23 @@ impl FileSystem {
     /// [AlreadyExists]. The check and the creation are one atomic step, so
     /// nothing can appear at the path in between.
     pub(crate) fn create_file<F: File>(&self, file: &F, blob: &F::Data) -> Result<()> {
+        let path = file.path(self)?;
+        self.create_file_at(file, &path, blob)
+    }
+
+    /// [FileSystem::create_file], at `at`, such as an absolute path, while
+    /// errors name the file by the `File`'s own path.
+    pub(crate) fn create_file_at<F: File>(
+        &self,
+        file: &F,
+        at: &Path,
+        blob: &F::Data,
+    ) -> Result<()> {
         let format = format_of(file)?;
         let path = file.path(self)?;
         // Serialize first, so a failure can't leave an empty file behind.
         let marshalled = format.serialize(blob)?;
-        let mut handle = match OpenOptions::new().write(true).create_new(true).open(&path) {
+        let mut handle = match OpenOptions::new().write(true).create_new(true).open(at) {
             Ok(handle) => handle,
             Err(err) if err.kind() == ErrorKind::AlreadyExists => {
                 return Err(AlreadyExists { path }.into());
@@ -202,7 +214,7 @@ impl FileSystem {
             drop(handle);
             // Don't leave a partial file behind. The write error is the one
             // worth reporting, so a failure to clean up is ignored.
-            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::remove_file(at);
             return Err(WriteError { path, source }.into());
         }
         Ok(())
@@ -213,9 +225,14 @@ impl FileSystem {
     /// [FileSystem::create_file] will not refuse one of them. Any other
     /// failure to look is left for the write to report.
     pub(crate) fn ensure_vacant(&self, path: &Path) -> Result<(), AlreadyExists> {
-        match path.symlink_metadata() {
+        self.ensure_vacant_at(path, path)
+    }
+
+    /// [FileSystem::ensure_vacant] at `at`, naming it `shown`.
+    pub(crate) fn ensure_vacant_at(&self, at: &Path, shown: &Path) -> Result<(), AlreadyExists> {
+        match at.symlink_metadata() {
             Ok(_) => Err(AlreadyExists {
-                path: path.to_path_buf(),
+                path: shown.to_path_buf(),
             }),
             Err(_) => Ok(()),
         }

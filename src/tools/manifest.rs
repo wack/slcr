@@ -38,6 +38,7 @@ pub struct Project {
 
 /// The ways finding the project can fail.
 #[derive(Debug, Error, Diagnostic)]
+#[non_exhaustive]
 pub enum ProjectError {
     #[error("could not find {MANIFEST} in the working directory or any parent directory")]
     #[diagnostic(help(
@@ -64,20 +65,45 @@ pub enum ProjectError {
     Misnamed { path: PathBuf },
 
     /// A directory given for the project that isn't one.
-    #[error("{given}, {}, {problem}", .dir.display())]
-    UnusableDirectory {
-        given: Given,
-        /// As it was given.
-        dir: PathBuf,
-        problem: DirectoryProblem,
-        /// What to name instead.
-        #[help]
-        help: String,
-    },
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    UnusableDirectory(UnusableDirectory),
+}
+
+/// A directory named for a project that can't be used as one, such as one
+/// that doesn't exist.
+#[derive(Debug, Error, Diagnostic)]
+#[error("{given}, {}, {problem}", .dir.display())]
+pub struct UnusableDirectory {
+    given: Given,
+    /// As it was given.
+    dir: PathBuf,
+    problem: DirectoryProblem,
+    /// What to name instead.
+    #[help]
+    help: String,
+}
+
+impl UnusableDirectory {
+    /// Which of the project's directories it was named as.
+    pub fn given(&self) -> Given {
+        self.given
+    }
+
+    /// The directory, as it was named.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// Why it can't be used.
+    pub fn problem(&self) -> &DirectoryProblem {
+        &self.problem
+    }
 }
 
 /// Which of a project's directories a caller named.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Given {
     /// The directory that holds `SLCR.toml`.
     SlcrDir,
@@ -96,6 +122,7 @@ impl Display for Given {
 
 /// Why a directory given for a project can't be used.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DirectoryProblem {
     Missing,
     NotADirectory,
@@ -161,17 +188,9 @@ impl Project {
         project_root: impl AsRef<Path>,
     ) -> Result<Self, ProjectError> {
         let (slcr_dir, project_root) = (slcr_dir.as_ref(), project_root.as_ref());
-        for (role, dir) in [
-            (Given::SlcrDir, slcr_dir),
-            (Given::ProjectRoot, project_root),
-        ] {
-            if !dir.is_absolute() {
-                return Err(unusable(role, dir, DirectoryProblem::Relative));
-            }
-        }
         // Files are named relative to the SLCR directory, as `slcr` names
         // them run there.
-        let names_from = directory(Given::SlcrDir, slcr_dir, slcr_dir)?;
+        let (names_from, _) = Self::resolve_absolute(slcr_dir, project_root)?;
         Self::at(slcr_dir, Some(project_root), &names_from)
     }
 
@@ -208,6 +227,41 @@ impl Project {
             Some(root) => project.with_project_root(root),
             None => project,
         })
+    }
+
+    /// The project whose manifest is in `dir`, relative to `cwd` or
+    /// absolute, if that directory holds one; if it holds none, the
+    /// directory, as a canonical absolute path, where one could be
+    /// created. Its parents are never searched.
+    pub(crate) fn in_dir(dir: &Path, cwd: &Path) -> Result<Result<Self, PathBuf>, ProjectError> {
+        let resolved = directory(Given::SlcrDir, dir, cwd)?;
+        match manifest_in(&resolved) {
+            Lookup::Found => Self::at(dir, None, cwd).map(Ok),
+            Lookup::Misnamed(name) => Err(ProjectError::Misnamed {
+                path: dir.join(name),
+            }),
+            Lookup::Absent => Ok(Err(resolved)),
+        }
+    }
+
+    /// `slcr_dir` and `project_root`, which must be absolute, as the
+    /// canonical paths of directories.
+    pub(crate) fn resolve_absolute(
+        slcr_dir: &Path,
+        project_root: &Path,
+    ) -> Result<(PathBuf, PathBuf), ProjectError> {
+        for (role, dir) in [
+            (Given::SlcrDir, slcr_dir),
+            (Given::ProjectRoot, project_root),
+        ] {
+            if !dir.is_absolute() {
+                return Err(unusable(role, dir, DirectoryProblem::Relative));
+            }
+        }
+        Ok((
+            directory(Given::SlcrDir, slcr_dir, slcr_dir)?,
+            directory(Given::ProjectRoot, project_root, project_root)?,
+        ))
     }
 
     /// This project, with its project root at `project_root`, an absolute
@@ -300,12 +354,12 @@ fn unusable(role: Given, given: &Path, problem: DirectoryProblem) -> ProjectErro
         },
         Given::ProjectRoot => "name the directory the validators check".to_owned(),
     };
-    ProjectError::UnusableDirectory {
+    ProjectError::UnusableDirectory(UnusableDirectory {
         given: role,
         dir: given.to_path_buf(),
         problem,
         help,
-    }
+    })
 }
 
 /// If `given` names the manifest itself, the directory that holds it, as

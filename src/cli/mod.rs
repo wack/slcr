@@ -11,7 +11,7 @@ pub use vet::{Vet, VetArgs};
 
 mod check;
 pub(crate) mod findings;
-mod init;
+pub(crate) mod init;
 mod project;
 mod query;
 mod render;

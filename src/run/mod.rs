@@ -360,6 +360,43 @@ cwd = "project"
         assert!(matches!(err, SpawnFailure::ProgramNotFound { .. }));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn the_descriptors_path_wins_over_the_callers() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let project = Project::new();
+        let (theirs, callers) = (TempDir::new().unwrap(), TempDir::new().unwrap());
+        // Each directory has the program; only the descriptor's passes, and
+        // only if the PATH it sees is the descriptor's.
+        let check = format!("#!/bin/sh\n[ \"$PATH\" = '{}' ]\n", theirs.path().display());
+        for (dir, script) in [
+            (theirs.path(), check.as_str()),
+            (callers.path(), "#!/bin/sh\nexit 7\n"),
+        ] {
+            let program = dir.join("both-have-it");
+            fs::write(&program, script).unwrap();
+            fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let descriptor = descriptor(
+            r#"["both-have-it"]"#,
+            &format!("env = {{ PATH = {:?} }}", theirs.path().to_str().unwrap()),
+            "",
+        );
+        let invocation = Invocation::new(Target {
+            descriptor: &descriptor,
+            with: &Map::new(),
+            project_root: project.root(),
+            validator_dir: &project.validator_dir(),
+            requirement: &project.requirement,
+            path: Some(callers.path().as_os_str()),
+        })
+        .unwrap();
+        assert_eq!(invocation.executable(), &theirs.path().join("both-have-it"));
+        let run = crate::cli::block_on(invocation.run()).unwrap().unwrap();
+        assert_eq!(*run.outcome(), process::Outcome::Green);
+    }
+
     #[test]
     fn spawn_failures_say_what_to_do() {
         let project = Project::new();

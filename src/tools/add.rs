@@ -92,10 +92,10 @@ pub(crate) enum Change {
     AlreadyDeclared,
 }
 
-/// What [add] did, which displays as the status `slcr tools add` reports,
+/// What declaring a tool did, which displays as the status `slcr tools add` reports,
 /// e.g. `SLCR.toml: added tool cargo-nextest 1.0.0`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Added {
+pub struct Added {
     /// The manifest's path relative to the working directory.
     manifest: PathBuf,
     key: ToolKey,
