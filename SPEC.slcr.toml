@@ -205,6 +205,47 @@ body = "Below a directory holding `slcr.toml`, `slcr init` fails, says that the 
 
 [[root.children.children.children]]
 kind = "requirement"
+id = "REQ-103"
+title = "Takes the SLCR directory"
+body = "Given `--slcr-dir DIR`, `slcr init` MUST look for `SLCR.toml` in DIR alone, never in the working directory or a parent, and join the project there, or start one by creating `SLCR.toml` in DIR, as it does in the working directory without the option. FILE stays relative to the working directory, and defaults to `SPEC.slcr.toml` in DIR; a new manifest lists it relative to DIR, so FILE MUST then be inside DIR. DIR MUST be an existing directory."
+rationale = "A desktop application creates a repository's specification and manifest in its own data directory, where no working directory or parent would find them."
+modality = "MUST"
+refines = ["REQ-004"]
+dependsOn = ["REQ-007", "REQ-008"]
+usesTerm = ["TERM-018", "TERM-003"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-248"
+title = "Starts a project in the SLCR directory"
+body = "`slcr init --slcr-dir app --name shop`, run outside `app`, which holds no `SLCR.toml`, creates `app/SPEC.slcr.toml` named `shop` and `app/SLCR.toml` whose `specs` is `[\"SPEC.slcr.toml\"]`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-249"
+title = "Joins the project in the SLCR directory"
+body = "With `SLCR.toml` in `app`, run in a directory below another `SLCR.toml`, `slcr init --slcr-dir app app/billing.slcr.toml` creates the specification and reports `app/SLCR.toml` unchanged, leaving both manifests' bytes unchanged."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-250"
+title = "Keeps a new project's file inside the SLCR directory"
+body = "`slcr init --slcr-dir app SPEC.slcr.toml`, run outside `app`, which holds no `SLCR.toml`, fails, explaining that `SLCR.toml` lists files relative to `app`, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-251"
+title = "Refuses a missing SLCR directory"
+body = "`slcr init --slcr-dir missing` fails, naming `missing`, and creates nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-252"
+title = "Describes the SLCR directory"
+body = "`slcr init --help` describes `--slcr-dir` and what FILE defaults to with it."
+
+[[root.children.children.children]]
+kind = "requirement"
 id = "REQ-009"
 title = "Never overwrites"
 body = "`slcr init` MUST NOT overwrite an existing file, not even a dangling symlink, and MUST NOT create a missing directory. It creates the specification and the manifest together or not at all."
@@ -1171,7 +1212,7 @@ body = "`slcr tools --help` describes `add`, `update`, `install`, `remove`, `lis
 kind = "requirement"
 id = "REQ-040"
 title = "Works on the project's manifest"
-body = "Every `slcr tools` subcommand MUST find the project as `slcr vet` does, by walking up from the working directory to the nearest `SLCR.toml`, and name the manifest relative to the working directory. Outside a project it MUST fail with help on creating a manifest. A manifest whose name differs from `SLCR.toml` only in case, and one that breaks the manifest schema, MUST be errors that change nothing."
+body = "Every `slcr tools` subcommand MUST find the project as `slcr vet` does, by walking up from the working directory to the nearest `SLCR.toml` unless given `--slcr-dir`, and name the manifest relative to the working directory. Outside a project it MUST fail with help on creating a manifest. A manifest whose name differs from `SLCR.toml` only in case, and one that breaks the manifest schema, MUST be errors that change nothing."
 modality = "MUST"
 refines = ["REQ-039"]
 dependsOn = ["REQ-015"]
@@ -1200,6 +1241,41 @@ kind = "acceptanceCriterion"
 id = "AC-124"
 title = "Refuses an invalid manifest"
 body = "When `SLCR.toml` breaks its schema, such as with a `specs` pattern or a `path` source that leaves the project, `slcr tools add`, `update`, and `remove` fail, labeling the problem, and leave it unchanged."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-095"
+title = "Takes the SLCR directory"
+body = "Every `slcr tools` subcommand MUST take the project's SLCR directory from `--slcr-dir DIR`, as `slcr vet` does, instead of walking up from the working directory, and work on the manifest there, recording and resolving every path source relative to it wherever the command runs. None of them takes `--project-root`: they never read the project root."
+rationale = "An application that keeps a project's SLCR files outside the project manages its tools there too, and installs its descriptors before it checks it, deciding when that may use the network."
+modality = "MUST"
+refines = ["REQ-039"]
+dependsOn = ["REQ-040", "REQ-093"]
+usesTerm = ["TERM-018"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-235"
+title = "Installs from a path in the SLCR directory"
+body = "Run outside `app`, `slcr tools install --slcr-dir app` installs the descriptor that `source = { path = \"tools/sh.toml\" }` names from `app/tools/sh.toml`."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-236"
+title = "Describes the SLCR directory"
+body = "The `--help` of each of `slcr tools add`, `update`, `install`, `remove`, `list`, and `show` describes `--slcr-dir` and what it defaults to, and `--project-root` is a usage error for each."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-253"
+title = "Declares a tool in the SLCR directory"
+body = "Run in `repo`, `slcr tools add ../app/tools/sh.toml --slcr-dir ../app` declares the tool in `app/SLCR.toml` with `source = { path = \"tools/sh.toml\" }`, while `slcr tools add sh.toml --slcr-dir ../app`, for a descriptor in `repo`, fails because it is outside the SLCR directory, and changes nothing."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-254"
+title = "Updates, removes, lists, and shows in the SLCR directory"
+body = "Run outside `app`, `slcr tools update sh`, `slcr tools list`, `slcr tools show sh`, and `slcr tools remove sh`, each given `--slcr-dir app`, work on `app/SLCR.toml` and name it relative to the working directory."
 
 [[root.children.children.children]]
 kind = "requirement"
@@ -1576,29 +1652,6 @@ kind = "acceptanceCriterion"
 id = "AC-163"
 title = "Reports a failed fetch"
 body = "When a tool's `url` can't be reached, the tool fails, saying why, and neither the manifest nor the store changes."
-
-[[root.children.children.children.children]]
-kind = "requirement"
-id = "REQ-095"
-title = "Installs for an SLCR directory"
-body = "`slcr tools install` MUST take the project's SLCR directory from `--slcr-dir DIR`, as `slcr vet` does, reading the manifest there and resolving each path source relative to it, wherever the command runs."
-rationale = "An application that keeps a project's SLCR files outside the project installs its descriptors before it checks it, and decides when that may use the network."
-modality = "MUST"
-refines = ["REQ-052"]
-dependsOn = ["REQ-093"]
-usesTerm = ["TERM-018"]
-
-[[root.children.children.children.children.acceptanceCriteria]]
-kind = "acceptanceCriterion"
-id = "AC-235"
-title = "Installs from a path in the SLCR directory"
-body = "Run outside `app`, `slcr tools install --slcr-dir app` installs the descriptor that `source = { path = \"tools/sh.toml\" }` names from `app/tools/sh.toml`."
-
-[[root.children.children.children.children.acceptanceCriteria]]
-kind = "acceptanceCriterion"
-id = "AC-236"
-title = "Describes the SLCR directory"
-body = "`slcr tools install --help` describes `--slcr-dir` and what it defaults to."
 
 [[root.children.children.children.children]]
 kind = "requirement"
@@ -2182,7 +2235,7 @@ body = "`slcr --enable-colors sometimes version` is a usage error listing `alway
 kind = "section"
 id = "SEC-005"
 title = "Library"
-body = "The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them, or a desktop application that keeps a repository's SLCR files in its own data directory and checks the repository with them. Through it they read, vet, write, render, slice, and query documents, and install and check projects, exactly as the CLI does, so that there is one definition of the formats."
+body = "The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them, or a desktop application that keeps a repository's SLCR files in its own data directory and checks the repository with them. Through it they read, vet, write, render, slice, and query documents, and create, install, and check projects and manage their tools, exactly as the CLI does, so that there is one definition of the formats."
 
 [[root.children.children]]
 kind = "requirement"
@@ -2308,7 +2361,7 @@ body = "A manifest with an unknown key, one without `specs`, and one whose pin i
 kind = "requirement"
 id = "REQ-091"
 title = "Never fetches descriptors"
-body = "The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project, in memory or on disk, or when it checks a project. Only installing a project's descriptors, when its caller asks, fetches them."
+body = "The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project, in memory or on disk, or when it checks a project. Only installing, declaring, and updating a project's tools, when its caller asks, fetch them."
 rationale = "A program that stores manifests holds sources its users wrote. Fetching them would let a user make it request any URL it can reach, or read any path."
 modality = "MUST NOT"
 refines = ["REQ-085"]
@@ -2339,7 +2392,7 @@ body = "What `slcr check --format json` writes for a project with red and green 
 kind = "requirement"
 id = "REQ-096"
 title = "Works on a project kept anywhere"
-body = "The `slcr` crate MUST let a program vet, install, and check a project on disk whose SLCR directory and project root it names, and whose descriptor store it names, producing what `slcr vet`, `slcr tools install`, and `slcr check` produce for the same project."
+body = "The `slcr` crate MUST let a program create, vet, install, and check a project on disk whose SLCR directory and project root it names, and whose descriptor store it names, and declare, update, and remove its tools, producing what `slcr init`, `slcr vet`, `slcr tools`, and `slcr check` produce for the same project."
 rationale = "A desktop application that tracks a user's repositories keeps each one's SLCR files in its own data directory, and runs SLCR in its own process, alongside other projects' checks, rather than through the CLI."
 modality = "MUST"
 refinement = "AND"
@@ -2364,7 +2417,7 @@ body = "For the project of AC-228, one with a validator file whose directory the
 kind = "requirement"
 id = "REQ-098"
 title = "Installs descriptors only when asked"
-body = "The library MUST install every descriptor a project's manifest pins that a descriptor store its caller names lacks, as `slcr tools install --slcr-dir` does, and report each tool's outcome as `slcr tools install` does, and it MUST NOT fetch a descriptor while doing anything else."
+body = "The library MUST install every descriptor a project's manifest pins that a descriptor store its caller names lacks, as `slcr tools install --slcr-dir` does, and report each tool's outcome as `slcr tools install` does, and it MUST NOT fetch a descriptor except while installing, declaring, or updating a project's tools."
 rationale = "A program decides when it may use the network; a check that fetched would make every check a possible network request."
 modality = "MUST"
 refines = ["REQ-096"]
@@ -2444,7 +2497,7 @@ body = "With a tool's program in a directory the process's `PATH` lacks, a check
 kind = "requirement"
 id = "REQ-102"
 title = "Shares nothing between projects"
-body = "The library MUST NOT read or change the process's working directory, its environment apart from the `PATH` a check falls back to, or its signal handlers while it vets, installs, or checks a project, so that a program can work on several projects at once."
+body = "The library MUST NOT read or change the process's working directory, its environment apart from the `PATH` a check falls back to, or its signal handlers while it works on a project, so that a program can work on several projects at once."
 modality = "MUST NOT"
 refines = ["REQ-096"]
 
@@ -2453,6 +2506,45 @@ kind = "acceptanceCriterion"
 id = "AC-247"
 title = "Checks two projects at once"
 body = "Two projects checked at once, from a working directory inside neither, each return the report checking it alone returns."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-104"
+title = "Creates a project kept anywhere"
+body = "The library MUST create a specification in an SLCR directory its caller names, and, when that directory holds no `SLCR.toml`, the manifest that lists it, writing what `slcr init --slcr-dir` writes for the same name and title. It MUST NOT overwrite a file or create a directory, and creates both files or neither."
+modality = "MUST"
+refines = ["REQ-096"]
+dependsOn = ["REQ-103", "REQ-009"]
+usesTerm = ["TERM-018", "TERM-003"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-255"
+title = "Creates what init creates"
+body = "Creating a project named `shop` in an empty directory writes the bytes `slcr init --slcr-dir` writes there with `--name shop`, and creating it again fails, changing nothing."
+
+[[root.children.children.children]]
+kind = "requirement"
+id = "REQ-105"
+title = "Manages tools as tools does"
+body = "The library MUST declare a tool from a source, update a declared tool, and remove one, in the manifest of an SLCR directory its caller names and with a descriptor store its caller names, as `slcr tools add`, `update`, and `remove` given `--slcr-dir` do: editing the manifest in place, keeping a path source inside the SLCR directory, and changing nothing when they fail. Declaring and updating fetch the descriptor; removing never does."
+rationale = "An application that keeps a repository's SLCR files manages the repository's tools too, and fetches only when its user asks it to."
+modality = "MUST"
+refines = ["REQ-096"]
+dependsOn = ["REQ-043", "REQ-044", "REQ-045", "REQ-048", "REQ-050", "REQ-058", "REQ-095"]
+usesTerm = ["TERM-014", "TERM-009"]
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-256"
+title = "Declares, updates, and removes as tools does"
+body = "Declaring a tool sourced from a URL on a local server, updating it once the server serves a new version, and removing it leave the manifest and the named store with the bytes `slcr tools add`, `update`, and `remove` leave after the same steps."
+
+[[root.children.children.children.acceptanceCriteria]]
+kind = "acceptanceCriterion"
+id = "AC-257"
+title = "Changes nothing when it fails"
+body = "Declaring a tool whose source serves an invalid descriptor, and one whose path is outside the SLCR directory, each fail and leave the manifest and the store unchanged."
 
 [glossary]
 kind = "section"
@@ -2513,7 +2605,7 @@ definition = "A declarative TOML file that tells SLCR how to run one tool: its a
 kind = "term"
 id = "TERM-009"
 title = "Descriptor store"
-definition = "A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine; a program using the library may name a store of its own. Only `slcr tools add`, `update`, and `install`, `slcr check`, and the library's install ever fill it."
+definition = "A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine; a program using the library may name a store of its own. Only `slcr tools add`, `update`, and `install`, `slcr check`, and the library's install, declare, and update ever fill it."
 
 [[glossary.terms]]
 kind = "term"
