@@ -1,0 +1,21 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - add
+    - sh.toml
+    - "--slcr-dir"
+    - "../app"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × sh.toml is outside the directory of SLCR.toml
+  help: a descriptor kept in the project must be inside the directory that holds SLCR.toml; copy it there, or publish it at an HTTPS URL

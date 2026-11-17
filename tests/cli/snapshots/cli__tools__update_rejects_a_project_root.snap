@@ -1,0 +1,28 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - update
+    - sh
+    - "--slcr-dir"
+    - app
+    - "--project-root"
+    - repo
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unexpected argument '--project-root' found
+
+  tip: to pass '--project-root' as a value, use '-- --project-root'
+
+Usage: slcr tools update --slcr-dir <DIR> <NAME>
+
+For more information, try '--help'.

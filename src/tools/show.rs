@@ -1,7 +1,4 @@
-use std::{
-    fmt::{self, Display},
-    path::Path,
-};
+use std::fmt::{self, Display};
 
 use miette::Result;
 use serde::Serialize;
@@ -19,18 +16,16 @@ use super::{
 use crate::fs::FileSystem;
 
 /// The descriptor that the tool declared under `key`, in the manifest of
-/// the project that holds `cwd`, an absolute path, pins, as `store` holds
-/// it. Nothing is fetched: a descriptor that isn't installed, doesn't hash
+/// `project`, pins, as `store` holds it. Nothing is fetched: a descriptor that isn't installed, doesn't hash
 /// to its pin, isn't valid, or doesn't have the version the manifest
 /// declares is an error, as `slcr vet` reports it.
 pub(crate) fn show(
     fs: &FileSystem,
     store: &DescriptorStore,
-    cwd: &Path,
+    project: &Project,
     key: ToolKey,
 ) -> Result<Shown> {
-    let project = Project::find_from(cwd)?;
-    let manifest = ManifestFile::load(&project)?;
+    let manifest = ManifestFile::load(project)?;
     let entry = manifest.tool(&key)?;
     let descriptor = pinned::load(fs, store, &key, entry)?;
     if let Some(problem) = pinned::version_problem(&key, entry, &descriptor) {
@@ -166,7 +161,12 @@ mod tests {
     impl Fixture {
         /// Run [show] from the project root.
         fn show(&self, name: &str) -> Result<Shown> {
-            show(&self.fs, &self.store, &self.project(), key(name))
+            show(
+                &self.fs,
+                &self.store,
+                &Self::found(&self.project()),
+                key(name),
+            )
         }
     }
 

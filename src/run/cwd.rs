@@ -4,8 +4,9 @@ use super::SpawnFailure;
 use crate::project::relative_to;
 use crate::tools::descriptor::Cwd;
 
-/// The directory a validator whose file is in `validator_dir` runs in,
-/// in the project rooted at `project_root`. Both are absolute.
+/// The directory a validator runs in, whose validator file checks
+/// `validator_dir`, under the project root `project_root`. Both are
+/// absolute, and neither need be the SLCR directory.
 pub(super) fn resolve(
     cwd: &Cwd,
     project_root: &Path,
@@ -138,7 +139,7 @@ mod tests {
         let err = resolve(&nearest("Cargo.toml"), &ws.root(), ws.dir.path()).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "the validator file's directory, `..`, is outside the project root"
+            "the directory the validator file checks, `..`, is outside the project root"
         );
     }
 

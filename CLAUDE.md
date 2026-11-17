@@ -9,6 +9,7 @@ cargo build --release          # Production build
 cargo make check-format        # Format check (CI runs this)
 cargo make clippy              # Lint — canonical blocking gate (== CI and bacon)
 cargo make test                # Run all tests (== CI's nextest run)
+cargo make test-doc            # Compile and run the doc examples (nextest skips them)
 cargo nextest run --locked <filter>   # Run a single test / matching tests by name substring
 cargo make monitor             # Headless bacon for Claude Code's Monitor tool
 cargo insta review             # Review snapshot changes after a failing run (see Testing)
@@ -25,7 +26,9 @@ CI would reject.
   -- -D warnings` (see the `[tasks.clippy]` comment in `Makefile.toml`).
 - `cargo make test` expands to `cargo nextest run --locked` — CI's `ci-flow` uses
   nextest, not the built-in test harness, so `cargo test` alone doesn't fully
-  match CI.
+  match CI. Nextest never runs doctests, so `ci-flow` (and `dev-test-flow`)
+  runs `cargo make test-doc` (`cargo test --doc --locked`) after it, which
+  keeps `src/lib.rs`'s `no_run` example compiling.
 - `on-push.yml` only runs format and clippy; the test suite (and coverage) runs in
   `on-merge.yml`'s `ci-flow`.
 
@@ -46,13 +49,15 @@ slice of its controller, loaded via `include_str!`).
 ## Library (`src/lib.rs`)
 
 The library is public API for programs that keep SLCR documents somewhere
-other than files beside the code, such as a server that stores them (spec
-section "Library"). It does what the CLI does, through the same code, and
-never anything of its own: a change to how the CLI reads, vets, renders,
-slices, or queries changes the library with it. `src/lib.rs` documents the
-surface; keep it small, and re-export what it needs rather than making
-modules public wholesale (`spec` and `query` are public because their types
-are the data model).
+other than files beside the code, such as a server that stores them or a
+desktop app that keeps each repository's SLCR files in its own data
+directory (spec section "Library"). It does what the CLI does, through the
+same code, and never anything of its own: a change to how the CLI reads,
+vets, renders, slices, queries, inits, installs, manages tools, or checks
+changes the library with it. `src/lib.rs` documents the surface; keep it
+small, and re-export what it needs rather than making modules public
+wholesale (`spec`, `query`, `vet`, and `check` are public because their
+types are the data model or the reports).
 
 - `Format` (`parse`, `serialize`), `SlcrRequirementsDocument`,
   `UnvettedDocument`, and the `spec` types read and write documents.
@@ -68,11 +73,35 @@ are the data model).
   and `slcr query --format json` (`Rows::to_json`) write; `query` takes an
   optional deadline (`SpecGraph::query_until`, see Queries).
 - `Manifest::parse` reads `SLCR.toml` text; `Manifest::to_toml` writes it as
-  `slcr tools add` writes entries (`insert_tool`). `Source::fetch` stays
-  crate-private: nothing public fetches a descriptor.
-- `check::Report` (`src/check.rs`) reads back `slcr check --format json`,
-  field for field with `deny_unknown_fields`; keep it in step with
-  `src/cli/check/json.rs`, which its tests read back from the CLI snapshots.
+  `slcr tools add` writes entries (`insert_tool`). Neither fetches.
+- `check::Report` (`src/check/report.rs`) reads back `slcr check --format
+  json`, field for field with `deny_unknown_fields`; keep it in step with
+  `src/check/json.rs`, which its tests read back from the CLI snapshots.
+- A project on disk (`src/library.rs`, methods on the public
+  `tools::manifest::Project`): `Project::open(slcr_dir, project_root)`
+  takes absolute paths only (`DirectoryProblem::Relative` otherwise),
+  canonicalizes both, looks for `SLCR.toml` in `slcr_dir` alone, and names
+  files relative to it, as `slcr` run there does. `Project::create`
+  (`slcr init --slcr-dir`, via `cli::init::initialize` with `inside`, so
+  FILE must be inside the SLCR directory even when joining a project:
+  `OutsideExistingSlcrDir`, where starting one fails with `OutsideSlcrDir`),
+  `vet` (`slcr vet --project-root`), `install` (`slcr tools install`),
+  `add_tool`/`update_tool`/`remove_tool` (`slcr tools …`; a path source is
+  relative to the SLCR directory or absolute, and must be inside it), and
+  async `check` (`slcr check --offline`, via `check::flow`: the caller's
+  runtime, with I/O and time drivers; `check::Options` (`jobs`,
+  `deny_warnings`, `path`); a status callback given each
+  `check::ValidatorStatus`; a cancellation future; returns `check::Report`).
+  `DescriptorStore::at(dir)` files `<dir>/<hex>.toml`; `Fetcher::new` or
+  `Fetcher::trusting_only(pem)` (one PEM authority, `InvalidAuthority`
+  otherwise). They use `FileSystem::detached`. Only `install`, `add_tool`,
+  and `update_tool` fetch.
+- The library never reads or changes the working directory or signal
+  handlers, nor changes the environment (REQ-102). It reads only what
+  `slcr` reads: the `PATH` a check falls back to (`Invocation::new`), the
+  variables that locate git's global excludes (`discover`), and, while
+  fetching, the proxy variables (reqwest `system-proxy`). `Cli` and
+  `Terminal` are public for the binary only, `#[doc(hidden)]`.
 
 ## Command flow
 
@@ -83,39 +112,49 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
 `SlcrCommand`, a struct in `src/cli/` that holds the `Terminal`, and a match arm.
 
 - `check` runs every validator and reports whether each requirement is
-  satisfied, unsatisfied, or unknown (`src/cli/check/`). "Check" means only
-  this. It takes no FILE: it works on the project, found as `vet` finds it.
+  satisfied, unsatisfied, or unknown. "Check" means only this. It takes no
+  FILE: it works on the project, found as `vet` finds it, with the same
+  `--slcr-dir` and `--project-root`. The whole pipeline is
+  `check::flow::check` (`src/check/`), which writes nothing: it reports
+  each stage to an `Observer` (`installed`, `vetted`, `status`,
+  `concluded`, `reported`). `src/cli/check.rs` is a presenter, the
+  `Observer` that writes human output (`src/cli/check/report.rs`) or the
+  JSON document, and passes in Ctrl-C (`tokio::signal::ctrl_c`) as the
+  interrupt; the library passes its caller's cancellation future instead.
   1. Unless `--offline`, it installs every pinned descriptor the store
      lacks with `tools::install::install`, exactly as `tools install` does
      (never re-pinning, never writing the manifest), with a status line for
      each it fetched; a failed install fails it with `InstallFailed`. It is
      the only command besides `tools add`, `update`, and `install` that may
      fetch a descriptor.
-  2. It vets the project with `vet::vet_project`, which also returns what
-     loaded (`vet::Loaded`), and writes vet's findings to stderr. If vetting
-     fails, warnings aside (so with `--offline`, a missing descriptor), it
-     writes vet's statuses too and fails with `NotVetted`, running nothing.
-  3. `schedule::run_all` runs every validator in report order (validator
-     file, then position), at most `-j N` at once (default
-     `available_parallelism`), building each `Invocation` just before it
-     runs. Each status line (`src/.validators.slcr.toml validator 1
-     (shop/REQ-002, sh): red (exit 1)`) is written as soon as it and every
-     one before it have finished, so output is the same for any `-j`.
-     Ctrl-C (`tokio::signal::ctrl_c`, listened for before anything starts)
-     aborts every run, which kills its process group, and fails with
-     `Interrupted`.
+  2. It vets the project with `project::vet::vet_project`, which also
+     returns what loaded (`Loaded`, with its `Layout`), and writes vet's
+     findings to stderr. If vetting fails, warnings aside (so with
+     `--offline`, a missing descriptor), it writes vet's statuses too and
+     fails with `NotVetted`, running nothing.
+  3. `check::schedule::run_all` runs every validator in report order
+     (validator file, then position), at most `-j N` at once (default
+     `check::Options::default().jobs`, `available_parallelism`), building
+     each `Invocation` just before it runs, against the project root. Each
+     status line (`check::status::ValidatorStatus`, e.g.
+     `src/.validators.slcr.toml validator 1 (shop/REQ-002, sh): red (exit
+     1)`) is written as soon as it and every one before it have finished,
+     so output is the same for any `-j`. The interrupt aborts every run,
+     which kills its process group, and fails with `Interrupted`; dropping
+     `run_all` kills every live group at once (`GroupsGuard`, see Running
+     validators).
   4. Green and red runs become `satisfaction::Verdicts` under their
      validator's qualified requirement (a spawn failure gives none), and
-     each specification is evaluated. Stderr gets each spawn failure, each
-     red validator (as severe as its requirement's finding, with the last
-     20 lines of its stderr and stdout), and each specification's findings;
-     stdout a summary line each (`shop: 5 satisfied, 2 unsatisfied, 0
-     unknown (1 coverage gap)`).
+     each specification is evaluated (`check::verdict`). Stderr gets each
+     spawn failure, each red validator (as severe as its requirement's
+     finding, with the last 20 lines of its stderr and stdout), and each
+     specification's findings; stdout a summary line each (`shop: 5
+     satisfied, 2 unsatisfied, 0 unknown (1 coverage gap)`).
 
   It fails with `CheckFailed` if a validator couldn't be run or a finding
   is a violation, or, with `--deny-warnings`, on any warning, vet's
   included; unknown requirements and informational findings never fail it.
-  `--format json` writes one document instead (`src/cli/check/json.rs`),
+  `--format json` writes one document instead (`src/check/json.rs`),
   which embeds vet's and every validator's whole captured output. No
   durations appear in human output.
 - `init [FILE]` creates a new specification (`SlcrRequirementsDocument::new`:
@@ -131,10 +170,20 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   `SLCR.toml` in the working directory, with `formatVersion` and `specs`
   listing FILE relative to it; FILE outside the working directory, or with
   glob metacharacters, is then an error (`InvalidSpecPath`), as is a
-  misnamed manifest. Both files go through `FileSystem::create_file`, so it
-  never overwrites anything (even a dangling symlink) and never creates a
-  missing directory; it creates both or neither, removing the spec if the
-  manifest can't be written.
+  misnamed manifest. With `--slcr-dir DIR` (an existing directory, or
+  `UnusableDirectory`), it looks in DIR alone (`Project::in_dir`), joins
+  that project or creates `SLCR.toml` there, listing FILE relative to DIR
+  (`OutsideSlcrDir` if FILE isn't inside it); FILE stays relative to the
+  working directory and defaults to `DIR/SPEC.slcr.toml`. Whether FILE is
+  inside a directory is decided on its parent directory resolved,
+  symlinks and `..` included (`relative_to`), so a symlink leading out is
+  outside, and a new manifest lists the path discovery will find. The logic is
+  `cli::init::initialize(fs, base, Request)`, which `Project::create`
+  shares: relative paths are relative to `base`, files are written at
+  absolute paths (`FileSystem::create_file_at`, `ensure_vacant_at`) but
+  named as given, so it never overwrites anything (even a dangling
+  symlink) and never creates a missing directory; it creates both or
+  neither, removing the spec if the manifest can't be written.
 - `vet [FILE]...` loads each requirements file with
   `RequirementsFile::unvetted()`, writes every finding to stderr as a miette
   diagnostic (`Terminal::write_diagnostic`) and each file's status to stdout,
@@ -144,14 +193,24 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   serialize with a kebab-case `code` plus their fields, so renaming a
   `Violation` or `Warning` variant or field changes that output. Like
   `terraform validate`, `vet` runs nothing and never uses the network.
-  Given no FILE, it vets the project (`src/project/`): it finds `SLCR.toml`
-  as `tools` does, discovers the files its `specs` match, and vets each the
-  same way, named relative to the working directory. The manifest counts as
+  Given no FILE, it vets the project (`project::vet::vet_project`): it finds
+  the SLCR directory, the one holding `SLCR.toml`, as `tools` does (walking
+  up from the working directory, or exactly `--slcr-dir DIR`, never its
+  parents), takes the project root from `--project-root DIR` (default: the
+  SLCR directory), discovers the files its `specs` match in the SLCR
+  directory alone, and vets each the same way, named relative to the
+  working directory. Both options are canonicalized
+  (`Project::locate`), fail with `UnusableDirectory` if they aren't
+  directories, and are a usage error beside a FILE. The manifest counts as
   one more file, with its own status line (`SLCR.toml: 2 problems`): it fails
   if it can't be parsed or the project has a `project::Problem`, each written
   as its own diagnostic. Those include each declared tool whose pinned
   descriptor the store doesn't hold, holds corrupted or invalid, or holds
   with another version (`tools::pinned`); the store is read, never filled.
+  They also include `MissingCounterpart` (`missing-counterpart`): a
+  validator file whose directory, at the same path under the project root,
+  isn't a directory there, which only a project root apart from the SLCR
+  directory can have.
   Then each validator file the walk finds (`src/validators/`) gets a status
   line (`src/.validators.slcr.toml: 2 problems`) and one diagnostic whose
   related diagnostics are its `validators::Finding`s, each labeling its
@@ -185,10 +244,16 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   `vet` reports them; a file that breaks an invariant fails with
   `SliceFailed`, and an ID the file lacks with `UnknownRequirement`. A
   malformed ID is a clap usage error.
+- Every `tools` subcommand takes `--slcr-dir DIR` (flattened into each
+  subcommand's args, never on `slcr tools` itself) and works on the
+  manifest there instead of walking up from the working directory; none
+  takes `--project-root`: they never read the project root. Path sources
+  are recorded and resolved relative to the SLCR directory, wherever the
+  command runs.
 - `tools add SOURCE [--as NAME]` declares a tool in the project manifest,
-  `SLCR.toml` (`src/tools/`): it finds the project root by walking up to
+  `SLCR.toml` (`src/tools/`): it finds the SLCR directory by walking up to
   the nearest `SLCR.toml`, fetches the descriptor from an `https://` URL or
-  a path inside the project, validates it, pins its BLAKE3 hash, installs
+  a path inside the SLCR directory, validates it, pins its BLAKE3 hash, installs
   it in the descriptor store, and only then writes `[tools.<NAME>]`
   (`toml_edit`, so the rest of the file is untouched). The name defaults to
   the descriptor's `name`; a different tool already declared under it is an
@@ -219,7 +284,16 @@ constructs a per-command struct from `src/cli/` and calls its synchronous
   a validator's `with` must satisfy. Both read the store only; `show`
   fails with the `tools::pinned` problem `vet` would report.
 - Commands stay synchronous; an async command calls `cli::block_on` from its
-  `dispatch()` (see `src/cli/runtime.rs`), as `query` and `slice` do.
+  `dispatch()` (see `src/cli/runtime.rs`), as `query`, `slice`, `check`,
+  and `tools` do. The library never calls it.
+- `--slcr-dir` and `--project-root` are `cli::project::{ProjectArgs,
+  SlcrDirArg}`, resolved by `Project::locate`: the SLCR directory holds
+  `SLCR.toml` and every SLCR file; the project root is what validators
+  check, the SLCR directory unless given. Messages about a path inside the
+  SLCR directory call it "the directory of SLCR.toml" (path sources,
+  `specs` globs, init's `Unlisted::Outside`); only `UnusableDirectory`, which names
+  a directory given as one, says "the SLCR directory, …", parallel to "the
+  project root, …", the term `--slcr-dir`'s help introduces.
 - All user-facing output goes through `Terminal` (`src/terminal/`), which owns
   color detection (`--enable-colors`) and logging setup (`--log-level` / `LOG_LEVEL`).
 - Errors are `thiserror` + `miette::Diagnostic` types; use `#[diagnostic(help(...))]`
@@ -338,13 +412,19 @@ and no caching.
 - `add.rs`, `update.rs`, `install.rs`, `remove.rs`, `list.rs`, `show.rs` —
   the whole of `slcr tools add`, `update`, `install`, `remove`, `list`, and
   `show`;
-  `src/cli/tools.rs` only builds their
+  `src/cli/tools.rs` (and `src/library.rs`) only build their
   `Environment` (`mod.rs`: filesystem, `DescriptorStore`, `Fetcher`, working
-  directory) and prints the result. Test new behavior there, with the
+  directory, and the located `Project`) and print the result. Test new behavior there, with the
   shared test `Fixture` (`fixture.rs`), and keep CLI snapshots for what a
   user sees.
-- `manifest.rs` — `Project` (root discovery; a case-only near miss such as
-  `slcr.toml` is an error, so macOS and Linux CI agree), `Manifest` (typed,
+- `manifest.rs` — `Project`: a `Layout` and how messages name the
+  manifest. `find_from` walks up from a directory; `at` and `in_dir` look
+  in one named directory only; `locate` applies `--slcr-dir` and
+  `--project-root`; `open` is the library's, absolute paths only. Named
+  directories are canonicalized, or fail as `UnusableDirectory` (`Given`,
+  `DirectoryProblem`, with a help that suggests the parent of a named
+  `SLCR.toml`); a case-only near miss such as `slcr.toml` is an error, so
+  macOS and Linux CI agree. Also `Manifest` (typed,
   `deny_unknown_fields`), `ManifestFile`, which edits the TOML document
   in place (`set_tool`, `repin_tool`, `remove_tool`), whether `tools` is
   written as `[tools.*]` headers or as an inline table, and `NewManifest`,
@@ -355,14 +435,16 @@ and no caching.
   `type = "object"`, and every `{with.<field>}` names a required scalar
   property. Argument templates are parsed into `Segment`s up front.
 - `pin.rs` — `blake3:` plus 64 lowercase hex; nothing else parses.
-- `source.rs` — `{ url }` or `{ path }` (project-relative, and still inside
-  the project after following symlinks). `Fetcher` fetches URLs with async
-  `reqwest`: HTTPS only, even across redirects, bodies capped at 1 MiB. It
-  builds its client on first use, so path sources never load the platform's
-  certificate authorities.
+- `source.rs` — `{ url }` or `{ path }` (relative to the SLCR directory,
+  and still inside it after following symlinks). `Fetcher` fetches URLs
+  with async `reqwest`: HTTPS only, even across redirects, bodies capped
+  at 1 MiB. It builds its client on first use, so path sources never load
+  the platform's certificate authorities; `trusting_only(pem)` trusts one
+  authority instead, checked up front (`InvalidAuthority`).
 - `https_server.rs` (tests only) — a local HTTPS server with a throwaway
   certificate authority, and a production `Fetcher` that trusts only it, so
   fetching is tested for real: redirects, statuses, the size cap.
+  `tests/library/https.rs` is a smaller one for the library's tests.
 - `pinned.rs` — `load` reads the descriptor a manifest entry pins from the
   store, and `version_problem` compares its version with the entry's; each
   failure is a `DescriptorProblem`, whose help names `slcr tools install`
@@ -372,7 +454,9 @@ and no caching.
   `check` may. `install.rs` reuses `version_problem`, so
   `tools install` reports a version mismatch as `vet` does.
 - `store.rs` — the content-addressed store at
-  `<data dir>/descriptors/blake3/<hex>.toml`; `install` takes a descriptor's
+  `<data dir>/descriptors/blake3/<hex>.toml` (`DescriptorStore::new`), or
+  `<dir>/<hex>.toml` for a `dir` a library caller names
+  (`DescriptorStore::at`); `install` takes a descriptor's
   text and returns the pin it filed it under, and `load` returns the
   descriptor filed under a pin once its bytes hash to it and it parses,
   naming it in errors by `Pin::abbreviated`, never by its absolute path.
@@ -390,22 +474,35 @@ Invocation". Every problem is collected, never just the first, as a
 `Problem` (`problem.rs`), whose paths, like `ProjectFile::shown`, are
 relative to the working directory.
 
-- `discover.rs` — `discover` expands each pattern under the project root:
+- `layout.rs` — `Layout`: the SLCR directory (`SLCR.toml`, specs,
+  validator files, path-sourced descriptors) and the project root (what
+  validators check), both absolute; `Layout::single` makes them one
+  directory, which is the default. `validator_dir(file)` maps a validator
+  file at `d/.validators.slcr.*` in the SLCR directory to
+  `<project root>/d` (the project root itself, never with a trailing
+  separator, for one at the top): `{slcr.validator_dir}`, the
+  `validator-dir` working directory, and where `nearest` starts.
+- `vet.rs` — `vet_project(fs, store, &Project, cwd)` vets a project on disk,
+  as `slcr vet` and `check` and `Project::vet` do, and returns
+  `VettedProject` (outcomes, plus `Loaded`: layout, specs, validator files,
+  descriptors). It never fails; a manifest that can't be loaded is an
+  outcome.
+- `discover.rs` — `discover` expands each pattern under the SLCR directory:
   `globset` with `literal_separator`, so `*` never crosses a `/` but does
   match a leading dot, and an `ignore` walk that sees hidden files (never
   `.git`) and skips what git ignores: in a git repository, the `.gitignore`
-  files of the project and its parents up to the repository's root,
+  files of the SLCR directory and its parents up to the repository's root,
   `.git/info/exclude`, and the global excludes; outside one, as for git,
-  nothing (`require_git(true)`). A
-  file matched twice counts once; files are ordered by project-relative
-  path. A pattern that is invalid or matches nothing, a match that is a
+  nothing (`require_git(true)`). Nothing is read from the project root. A
+  file matched twice counts once; files are ordered by their path relative
+  to the SLCR directory. A pattern that is invalid or matches nothing, a match that is a
   validator file (`.validators.slcr.*`) or has no specification format's
   extension, and an unreadable directory are each a `Problem`. The same
   walk, whatever the patterns, finds every validator file; a second one in
   a directory is a `DuplicateValidatorFile` problem, and both are still
   vetted.
-- `mod.rs` — `ProjectFile`: a discovered file's project-relative, shown,
-  and absolute paths; `load_spec` reads a specification unvetted through
+- `mod.rs` — `ProjectFile`: a discovered file's paths relative to the SLCR
+  directory and to the working directory (shown), and absolute; `load_spec` reads a specification unvetted through
   `FileSystem::load_file_at`, so errors name the shown path.
 - `index.rs` — `SpecIndex` borrows loaded specifications by name; a second
   file with a name already taken is a `DuplicateSpecName` problem naming
@@ -453,18 +550,24 @@ in the file's `validator` array, from 1.
 
 Running one validator, by the rules of "SLCR — Tools: Manifest,
 Descriptors, and Invocation". `check` runs many at once
-(`src/cli/check/schedule.rs`).
+(`src/check/schedule.rs`).
 
 - `mod.rs` — `Invocation::new(Target)` resolves everything up front (the
-  descriptor, the entry's `with`, the absolute project root and validator
-  file, the qualified requirement), or fails with a `SpawnFailure`, which
-  is an error, never a red result.
+  descriptor, the entry's `with`, the absolute project root and the
+  directory the validator file checks, from `Layout::validator_dir`, the
+  qualified requirement, and the caller's `PATH`, if any), or fails with a
+  `SpawnFailure`, which is an error, never a red result. The program is
+  found on the descriptor's `env.PATH`, else the caller's `PATH`, else
+  slcr's own; the child inherits the caller's `PATH` unless the
+  descriptor's `env.PATH` overrides it.
 - `template.rs` — each argv template is exactly one argument: `{with.*}`
   takes a scalar (strings verbatim, numbers and booleans as JSON spells
   them); a missing or non-scalar field is a `SpawnFailure`. No shell, ever.
-- `cwd.rs` — `project`, `validator-dir`, or `nearest`: the validator file's
+- `cwd.rs` — `project` (the project root), `validator-dir` (the directory
+  the validator file checks, under the project root), or `nearest`: that
   directory or its closest ancestor, no higher than the project root, with
-  an entry of that name.
+  an entry of that name. None of these is in the SLCR directory unless it
+  is the project root.
 - `program.rs` — slcr finds the program itself, never through `Command`'s
   platform-specific search: an executable regular file (following
   symlinks) in an absolute entry of the PATH the child will see, so the
@@ -479,7 +582,30 @@ Descriptors, and Invocation". `check` runs many at once
   reaped, kills through `rustix` (std can't signal a group, and
   `unsafe_code` is forbidden). That group is outside the terminal's
   foreground group, so the caller must handle Ctrl-C by dropping its runs.
+  A run spawned as a task is only dropped when its runtime next polls it,
+  so `run_in(&Groups)` registers its group in `Groups` until its leader is
+  reaped, and dropping the `GroupsGuard` that `run_all` owns kills every
+  group still registered, synchronously (Unix only; elsewhere tokio's
+  `kill_on_drop` kills the direct child when the task is dropped).
   Output still open 2 s after the child exits is cut off, not waited for.
+
+## Checking (`src/check/`)
+
+The public `check` module: `Report` (`report.rs`), `Options`, and
+`ValidatorStatus` (`status.rs`, whose `Display` is the status line), and the
+crate-private pipeline `slcr check` and `Project::check` share.
+
+- `flow.rs` — `check(env, &Options, interrupt, &mut impl Observer)`: install
+  (if asked), vet, plan, `run_all`, evaluate, report. It writes nothing; the
+  `Observer` sees each stage, and `reported` gets the JSON `Document` last.
+  Its result is the verdict (`InstallFailed`, `NotVetted`, `Interrupted`,
+  `CheckFailed`) or an observer's error.
+- `schedule.rs` — `Plan` (the `Layout`, validator files, descriptors, and
+  `PATH`) and `run_all`: `-j` at a time, statuses in report order, the
+  interrupt, and the `GroupsGuard`.
+- `verdict.rs` — verdicts, evaluation, the `Tally`, and the errors.
+- `json.rs` — the `--format json` document; the library reads it back into
+  `Report` through `serde_json` values.
 
 ## Queries (`src/query/`)
 
@@ -514,7 +640,11 @@ A file that can't be read fails with a `ReadError` naming its path; one that
 can't be deserialized
 fails with a `ParseError` that labels the problem in the file's source when the
 deserializer reports a location; `load_file_at` reads a file from one path,
-such as an absolute one, while errors name it by the `File`'s own path.
+such as an absolute one, while errors name it by the `File`'s own path, and
+`create_file_at` and `ensure_vacant_at` do the same for creating one.
+`FileSystem::new` reads the platform's directories from the environment;
+`FileSystem::detached`, the library's, has none and never reads it (its
+`data_dir` panics; nothing in the library calls it).
 Generated text goes through
 `replace_file`, which writes atomically via a temporary file and never
 creates a directory. Implement `File` for
@@ -523,7 +653,8 @@ files at dynamic paths, or `StaticFile` for fixed-name files under a
 
 # Testing
 
-Three layers, all run by `cargo make test`:
+Three layers, all run by `cargo make test` (the doc examples are run by
+`cargo make test-doc`):
 
 - **Unit tests**, inline in `#[cfg(test)]` modules, test the library directly:
   exact strings, error types via `downcast_ref`, and `figment::Jail` for
@@ -537,6 +668,17 @@ Three layers, all run by `cargo make test`:
   exported. Where the CLI's output defines the answer, they run the real
   binary on the same files and compare bytes. Their validators are in
   `tests/library/.validators.slcr.toml`, with target `library`.
+  `main.rs` holds documents, vetting in memory, rendering, querying, and
+  manifests; `projects.rs` holds projects on disk kept apart from their
+  code (`app` the SLCR directory, `repo` the project root, a workspace
+  store `slcr` run there shares), named `projects::<test>` in validators;
+  `https.rs` is a local HTTPS server whose authority `Fetcher::trusting_only`
+  trusts. `slcr` itself can only be made to trust it through
+  `SSL_CERT_FILE`, which its verifier honors on Linux alone, so the test
+  that compares tool management with the CLI over HTTPS (AC-256) checks
+  the library against bytes it builds itself everywhere, and against the
+  CLI on Linux. Their runtimes enable tokio's I/O and time drivers, which
+  checks need.
 
 ## CLI snapshot tests (`tests/cli/`)
 
@@ -620,8 +762,10 @@ installed (`cargo install --locked cargo-insta cargo-nextest`).
   are in `tests/cli/.validators.slcr.toml`, grouped by subcommand, each
   proving one acceptance criterion by naming its test by its path in the
   `cli` target (`version::version_prints_the_package_version`). Every CLI
-  test proves at least one criterion. Renaming a test means updating its
-  validator, or `slcr check` fails.
+  test proves at least one criterion. The spec's "Library" section is
+  proven the same way by `tests/library/.validators.slcr.toml`, in the
+  `library` target (`projects::checks_never_install`). Renaming a test
+  means updating its validator, or `slcr check` fails.
 - When CLI behavior changes, change its requirement or criterion, its test,
   and its validator together; a new CLI test gets a validator for the
   criterion it proves, adding a criterion if none fits. IDs are never

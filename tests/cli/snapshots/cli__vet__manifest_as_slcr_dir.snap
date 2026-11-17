@@ -1,0 +1,19 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--slcr-dir"
+    - app/SLCR.toml
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+Error:   × the SLCR directory, app/SLCR.toml, is not a directory
+  help: name the directory that holds SLCR.toml: did you mean `app`?

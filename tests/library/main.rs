@@ -15,6 +15,9 @@ use slcr::{
 };
 use tempfile::TempDir;
 
+mod https;
+mod projects;
+
 const TODO_API_YAML: &str = include_str!("../fixtures/todo-api.spec.yaml");
 const TODO_API_JSON: &str = include_str!("../fixtures/todo-api.spec.json");
 const TODO_API_TOML: &str = include_str!("../fixtures/todo-api.spec.toml");
@@ -548,9 +551,11 @@ fn check_reports_read_back_as_check_wrote_them() {
     }
 }
 
-/// Run `future` to completion on a runtime of its own.
+/// Run `future` to completion on a runtime of its own, with its I/O and
+/// time drivers, which checks need.
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
+        .enable_all()
         .build()
         .unwrap()
         .block_on(future)

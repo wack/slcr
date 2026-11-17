@@ -1,0 +1,59 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--slcr-dir"
+    - app
+    - "--project-root"
+    - repo
+    - "--format"
+    - json
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+{
+  "passed": false,
+  "project": {
+    "manifest": "app/SLCR.toml",
+    "passed": false,
+    "problems": [
+      {
+        "code": "missing-counterpart",
+        "path": "app/lib/.validators.slcr.toml",
+        "counterpart": "repo/lib",
+        "message": "the validator file app/lib/.validators.slcr.toml checks repo/lib, which is not a directory",
+        "help": "a validator file checks the directory at its own path, relative to the directory of SLCR.toml, under the project root: move it to mirror the code it checks, or delete it"
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "app/SPEC.slcr.yml",
+      "passed": true,
+      "violations": 0,
+      "warnings": 0,
+      "findings": []
+    }
+  ],
+  "validators": [
+    {
+      "path": "app/lib/.validators.slcr.toml",
+      "passed": true,
+      "problems": []
+    },
+    {
+      "path": "app/src/.validators.slcr.toml",
+      "passed": true,
+      "problems": []
+    }
+  ]
+}
+
+----- stderr -----
+Error:   × vetting failed for 1 of 4 files

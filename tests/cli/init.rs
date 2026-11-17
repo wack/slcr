@@ -190,3 +190,62 @@ fn init_rejects_an_invalid_title() {
 fn init_takes_only_one_file() {
     assert_cmd_snapshot!(Workspace::new().slcr(&["init", "a.yaml", "b.yaml"]));
 }
+
+#[test]
+fn init_starts_a_project_in_the_slcr_directory() {
+    let workspace = Workspace::new();
+    workspace.dir("app");
+    assert_cmd_snapshot!(workspace.slcr(&["init", "--slcr-dir", "app", "--name", "shop"]));
+    assert_eq!(workspace.files(), ["app/SLCR.toml", "app/SPEC.slcr.toml"]);
+    assert_snapshot!("slcr_dir_manifest", workspace.read("app/SLCR.toml"));
+    assert!(
+        workspace
+            .read("app/SPEC.slcr.toml")
+            .contains("name = \"shop\"")
+    );
+}
+
+#[test]
+fn init_joins_the_project_in_the_slcr_directory() {
+    let workspace = Workspace::new();
+    let app = "formatVersion = \"1\"\nspecs = [\"*.slcr.toml\"]\n";
+    workspace
+        .file("SLCR.toml", MANIFEST)
+        .file("work/app/SLCR.toml", app);
+    assert_cmd_snapshot!(workspace.slcr_in(
+        "work",
+        &["init", "--slcr-dir", "app", "app/billing.slcr.toml"]
+    ));
+    assert_eq!(
+        workspace.files(),
+        [
+            "SLCR.toml",
+            "work/app/SLCR.toml",
+            "work/app/billing.slcr.toml"
+        ]
+    );
+    assert_eq!(workspace.read("SLCR.toml"), MANIFEST);
+    assert_eq!(workspace.read("work/app/SLCR.toml"), app);
+}
+
+#[test]
+fn init_keeps_a_new_project_s_file_inside_the_slcr_directory() {
+    let workspace = Workspace::new();
+    workspace.dir("app");
+    assert_cmd_snapshot!(workspace.slcr(&[
+        "init",
+        "--slcr-dir",
+        "app",
+        "SPEC.slcr.toml",
+        "--name",
+        "shop"
+    ]));
+    assert!(workspace.files().is_empty(), "{:?}", workspace.files());
+}
+
+#[test]
+fn init_refuses_a_missing_slcr_directory() {
+    let workspace = Workspace::new();
+    assert_cmd_snapshot!(workspace.slcr(&["init", "--slcr-dir", "missing"]));
+    assert!(workspace.files().is_empty(), "{:?}", workspace.files());
+}

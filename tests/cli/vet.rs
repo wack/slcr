@@ -497,3 +497,86 @@ fn vet_rejects_yaml_scalars_that_are_not_strings() {
     workspace.file("quoted.yaml", &quoted);
     assert_cmd_snapshot!(workspace.slcr(&["vet", "version.yaml", "title.yaml", "quoted.yaml"]));
 }
+
+/// A project kept outside its root, as a desktop application keeps one:
+/// `app` holds [validated]'s files and validators for `src`, and `repo`,
+/// the project root, holds a `src` directory.
+fn kept_outside() -> Workspace {
+    let workspace = Workspace::new();
+    workspace
+        .file("app/SLCR.toml", declaring("1.0.0", NEXTEST_DESCRIPTOR))
+        .file("app/SPEC.slcr.yml", TODO_API_YAML)
+        .file("app/tools/cargo-nextest.toml", NEXTEST_DESCRIPTOR)
+        .file("app/src/.validators.slcr.toml", VALIDATORS_TOML)
+        .dir("repo/src")
+        .install(NEXTEST_DESCRIPTOR);
+    workspace
+}
+
+#[test]
+fn vet_vets_a_project_kept_outside_its_root() {
+    let workspace = kept_outside();
+    assert_cmd_snapshot!(workspace.slcr(&["vet", "--slcr-dir", "app", "--project-root", "repo"]));
+}
+
+#[test]
+fn vet_ignores_validator_files_under_the_project_root() {
+    let workspace = kept_outside();
+    workspace.file(
+        "repo/src/.validators.slcr.toml",
+        VALIDATORS_TOML.replace("cargo-nextest", "undeclared"),
+    );
+    assert_cmd_snapshot!(workspace.slcr(&["vet", "--slcr-dir", "app", "--project-root", "repo"]));
+}
+
+#[test]
+fn vet_reports_a_validator_file_with_no_counterpart() {
+    let workspace = kept_outside();
+    workspace.file("app/lib/.validators.slcr.toml", VALIDATORS_TOML);
+    let args = ["vet", "--slcr-dir", "app", "--project-root", "repo"];
+    assert_cmd_snapshot!("no_counterpart", workspace.slcr(&args));
+    assert_cmd_snapshot!(
+        "no_counterpart_json",
+        workspace.slcr(&[&args[..], &["--format", "json"]].concat())
+    );
+}
+
+#[test]
+fn vet_searches_no_parent_of_the_slcr_directory() {
+    let workspace = kept_outside();
+    assert_cmd_snapshot!(workspace.slcr(&["vet", "--slcr-dir", "app/src"]));
+}
+
+#[test]
+fn vet_rejects_a_directory_that_does_not_exist() {
+    let workspace = kept_outside();
+    assert_cmd_snapshot!(
+        "missing_project_root",
+        workspace.slcr_in("app", &["vet", "--project-root", "missing"])
+    );
+    assert_cmd_snapshot!(
+        "missing_slcr_dir",
+        workspace.slcr(&["vet", "--slcr-dir", "missing"])
+    );
+    // The manifest itself, named in place of its directory.
+    assert_cmd_snapshot!(
+        "manifest_as_slcr_dir",
+        workspace.slcr(&["vet", "--slcr-dir", "app/SLCR.toml"])
+    );
+}
+
+#[test]
+fn vet_takes_the_directories_only_in_project_mode() {
+    let workspace = kept_outside();
+    assert_cmd_snapshot!(
+        "project_root_with_a_file",
+        workspace.slcr_in(
+            "app",
+            &["vet", "--project-root", "../repo", "SPEC.slcr.yml"]
+        )
+    );
+    assert_cmd_snapshot!(
+        "slcr_dir_with_a_file",
+        workspace.slcr(&["vet", "app/SPEC.slcr.yml", "--slcr-dir", "app"])
+    );
+}

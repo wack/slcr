@@ -1,0 +1,12 @@
+---
+source: tests/cli/tools.rs
+expression: "workspace.read(\"app/SLCR.toml\")"
+---
+# The project manifest.
+formatVersion = "1"
+specs = ["SPEC.slcr.yml"]
+
+[tools.sh]
+version = "1.0.0"
+source = { path = "tools/sh.toml" }
+pin = "blake3:19c615ae9011c37ac675d5d9102b85b98d91d4c2e37e806ba0f89b55f70c047c"

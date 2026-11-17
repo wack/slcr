@@ -15,7 +15,7 @@ pub(super) fn passes(report: &Report, deny_warnings: bool) -> bool {
 }
 
 /// `count` and `noun`, pluralized: "1 warning", "2 warnings".
-pub(super) fn counted(count: usize, noun: &str) -> String {
+pub(crate) fn counted(count: usize, noun: &str) -> String {
     match count {
         1 => format!("1 {noun}"),
         _ => format!("{count} {noun}s"),

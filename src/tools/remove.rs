@@ -1,6 +1,6 @@
 use std::{
     fmt::{self, Display},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use miette::Result;
@@ -11,14 +11,12 @@ use super::{
 };
 use crate::fs::FileSystem;
 
-/// Remove the tool declared under `key` from the manifest of the project
-/// that holds `cwd`, an absolute path.
+/// Remove the tool declared under `key` from the manifest of `project`.
 ///
 /// Its descriptor stays in the descriptor store, which other projects on
 /// the machine may pin it from.
-pub(crate) fn remove(fs: &FileSystem, cwd: &Path, key: ToolKey) -> Result<Removed> {
-    let project = Project::find_from(cwd)?;
-    let mut manifest = ManifestFile::load(&project)?;
+pub(crate) fn remove(fs: &FileSystem, project: &Project, key: ToolKey) -> Result<Removed> {
+    let mut manifest = ManifestFile::load(project)?;
     let entry = manifest.remove_tool(&key)?;
     manifest.save(fs)?;
     Ok(Removed {
@@ -28,10 +26,10 @@ pub(crate) fn remove(fs: &FileSystem, cwd: &Path, key: ToolKey) -> Result<Remove
     })
 }
 
-/// What [remove] did, which displays as the status `slcr tools remove`
+/// What removing a tool did, which displays as the status `slcr tools remove`
 /// reports, e.g. `SLCR.toml: removed tool cargo-nextest 1.0.0`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Removed {
+pub struct Removed {
     /// The manifest's path relative to the working directory.
     manifest: PathBuf,
     key: ToolKey,
@@ -63,7 +61,7 @@ mod tests {
     impl Fixture {
         /// Run [remove] from the project root.
         fn remove(&self, name: &str) -> Result<Removed> {
-            remove(&self.fs, &self.project(), key(name))
+            remove(&self.fs, &Self::found(&self.project()), key(name))
         }
     }
 
@@ -175,7 +173,7 @@ mod tests {
         fixture.add("tools/cargo-nextest.toml", None).unwrap();
         let cwd = fixture.project().join("crates/api");
         std::fs::create_dir_all(&cwd).unwrap();
-        let removed = remove(&fixture.fs, &cwd, key("cargo-nextest")).unwrap();
+        let removed = remove(&fixture.fs, &Fixture::found(&cwd), key("cargo-nextest")).unwrap();
         assert_eq!(
             removed.to_string(),
             "../../SLCR.toml: removed tool cargo-nextest 1.0.0"

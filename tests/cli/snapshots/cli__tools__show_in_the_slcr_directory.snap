@@ -1,0 +1,41 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - show
+    - sh
+    - "--slcr-dir"
+    - app
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+sh 1.1.0
+name:    sh
+source:  tools/sh.toml
+pin:     blake3:4a1896d2fed9d8b4c1e653ea2afbe36f617e8d45788be6b6ac4536893c820d19
+argv:    ["sh", "-c", "{with.script}"]
+cwd:     project
+env:     none
+timeout: none
+pass:    0
+
+Each validator's `with` must satisfy this schema:
+{
+  "properties": {
+    "script": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "script"
+  ],
+  "type": "object"
+}
+
+----- stderr -----

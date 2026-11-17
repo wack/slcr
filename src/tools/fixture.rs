@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
-use super::{Environment, pin::Pin, source::Fetcher, store::DescriptorStore};
+use super::{Environment, manifest::Project, pin::Pin, source::Fetcher, store::DescriptorStore};
 use crate::fs::FileSystem;
 
 /// The cargo-nextest example on the Schemas page.
@@ -38,13 +38,20 @@ impl Fixture {
         self.dir.path().join("project")
     }
 
-    /// An environment that runs in `cwd` and fetches with `fetcher`.
+    /// The project that holds `cwd`, as the commands find it.
+    pub(crate) fn found(cwd: &Path) -> Project {
+        Project::find_from(cwd).unwrap()
+    }
+
+    /// An environment that runs in `cwd`, on the project that holds it,
+    /// and fetches with `fetcher`.
     pub(crate) fn env<'a>(&'a self, fetcher: &'a Fetcher, cwd: &'a Path) -> Environment<'a> {
         Environment {
             fs: &self.fs,
             store: &self.store,
             fetcher,
             cwd,
+            project: Self::found(cwd),
         }
     }
 

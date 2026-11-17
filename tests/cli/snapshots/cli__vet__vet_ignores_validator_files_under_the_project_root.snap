@@ -1,0 +1,22 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--slcr-dir"
+    - app
+    - "--project-root"
+    - repo
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+app/SLCR.toml: ok
+app/SPEC.slcr.yml: ok
+app/src/.validators.slcr.toml: ok
+
+----- stderr -----

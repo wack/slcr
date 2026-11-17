@@ -1,0 +1,27 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - "--slcr-dir"
+    - app
+    - "--project-root"
+    - repo
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 1
+----- stdout -----
+app/SLCR.toml: 1 problem
+app/SPEC.slcr.yml: ok
+app/lib/.validators.slcr.toml: ok
+app/src/.validators.slcr.toml: ok
+
+----- stderr -----
+  × the validator file app/lib/.validators.slcr.toml checks repo/lib, which is not a directory
+  help: a validator file checks the directory at its own path, relative to the directory of SLCR.toml, under the project root: move it to mirror the code it checks, or delete it
+
+Error:   × vetting failed for 1 of 4 files

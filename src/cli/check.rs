@@ -1,23 +1,23 @@
-use std::{num::NonZeroUsize, sync::Arc};
+use std::num::NonZeroUsize;
 
 use clap::{Args, ValueEnum};
 use miette::{IntoDiagnostic, Result};
 
-use super::block_on;
-use super::vet::{self, VettedProject, json::Document as VetDocument, vet_project};
+use super::vet::{self, Outcome, ProjectOutcome};
+use super::{ProjectArgs, block_on};
 use crate::Terminal;
+use crate::check::flow::{self, Conclusion, Observer, Options};
+use crate::check::json::Document;
+use crate::check::status::ValidatorStatus;
+use crate::check::verdict::severity;
 use crate::fs::FileSystem;
-use crate::run::process::Outcome;
-use crate::tools::{Environment, install::install, source::Fetcher, store::DescriptorStore};
+use crate::run::process::Outcome as RunOutcome;
+use crate::tools::install::Installed;
+use crate::tools::{Environment, source::Fetcher, store::DescriptorStore};
 
-mod json;
 mod report;
-mod schedule;
-mod verdict;
 
 use report::{RedValidator, SpecFindings, Unrunnable};
-use schedule::{Plan, run_all};
-use verdict::{Interrupted, NotVetted, Tally, evaluate_all, severity, verdicts};
 
 /// The arguments to `slcr check`.
 #[derive(Args, Clone, Debug)]
@@ -26,6 +26,9 @@ pub struct CheckArgs {
     /// With 1, they run one at a time, in the order they are reported.
     #[arg(short, long, value_name = "N", value_parser = parse_jobs)]
     jobs: Option<NonZeroUsize>,
+
+    #[command(flatten)]
+    project: ProjectArgs,
 
     /// Never fetch a descriptor: one the descriptor store lacks fails
     /// vetting, as it does `slcr vet`.
@@ -69,6 +72,10 @@ fn parse_jobs(value: &str) -> Result<NonZeroUsize, String> {
 /// aside. Then it runs every validator, `--jobs` at a time, and evaluates
 /// each specification from their results.
 ///
+/// The project is the one in `--slcr-dir`, or else the one that holds the
+/// working directory, and its validators run against `--project-root`,
+/// which defaults to the directory of `SLCR.toml`.
+///
 /// It fails if a validator can't be run, if Ctrl-C interrupts it, if an
 /// unsatisfied MUST or MUST NOT requirement isn't absorbed, or, with
 /// `--deny-warnings`, on any warning. Unknown requirements never fail it.
@@ -87,151 +94,124 @@ impl Check {
         let store = DescriptorStore::new(&fs);
         let fetcher = Fetcher::new();
         let cwd = std::env::current_dir().into_diagnostic()?;
+        let project = self.args.project.locate(&cwd)?;
         let env = Environment {
             fs: &fs,
             store: &store,
             fetcher: &fetcher,
             cwd: &cwd,
+            project,
         };
         block_on(self.check(&env))?
     }
 
-    fn human(&self) -> bool {
-        self.args.format == OutputFormat::Human
-    }
-
     async fn check(&self, env: &Environment<'_>) -> Result<()> {
-        let deny_warnings = self.args.deny_warnings;
-
-        // A project or manifest that can't be read fails before any tool
-        // is installed; vetting reports it, in full.
-        let installed = if self.args.offline {
-            None
-        } else {
-            install(env).await.ok()
+        let options = Options {
+            install: !self.args.offline,
+            jobs: self
+                .args
+                .jobs
+                .unwrap_or_else(|| crate::check::Options::default().jobs),
+            deny_warnings: self.args.deny_warnings,
+            path: None,
         };
-        let descriptors = || installed.as_ref().map(json::descriptors);
-        if let Some(installed) = &installed {
-            if self.human() {
-                for error in installed.errors() {
-                    self.terminal.write_diagnostic(error.as_ref())?;
-                }
-                for line in installed.changes() {
-                    self.terminal.write_stdout_line(&line)?;
-                }
-            }
-            if let Err(failed) = installed.verdict() {
-                self.write_json(&json::Document {
-                    descriptors: descriptors(),
-                    ..json::Document::default()
-                })?;
-                return Err(failed.into());
-            }
-        }
-
-        let VettedProject {
-            project,
-            outcomes,
-            loaded,
-        } = vet_project(env.fs, env.store, env.cwd)?;
-        let vetted = vet::verdict(Some(&project), &outcomes, false);
-        if self.human() {
-            vet::write_findings(&self.terminal, Some(&project), &outcomes, deny_warnings)?;
-            if vetted.is_err() {
-                vet::write_statuses(&self.terminal, Some(&project), &outcomes)?;
-            }
-        }
-        let vet_document = || Some(VetDocument::new(Some(&project), &outcomes, deny_warnings));
-        if let Err(failed) = vetted {
-            self.write_json(&json::Document {
-                descriptors: descriptors(),
-                vet: vet_document(),
-                ..json::Document::default()
-            })?;
-            return Err(NotVetted { failed }.into());
-        }
-
-        let plan = Arc::new(Plan::new(
-            loaded.root,
-            loaded.validators,
-            loaded.descriptors,
-        ));
-        let jobs = self
-            .args
-            .jobs
-            .unwrap_or_else(|| std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN));
-        let ran = run_all(Arc::clone(&plan), jobs, interrupt(), |index, finished| {
-            if !self.human() {
-                return Ok(());
-            }
-            let status = report::status(plan.job(index), finished);
-            self.terminal.write_stdout_line(&status)
-        })
-        .await?;
-        let evaluated = (!ran.interrupted).then(|| {
-            let verdicts = verdicts(&plan, &ran.results);
-            evaluate_all(&loaded.specs, &verdicts)
-        });
-
-        if self.human() {
-            for (job, finished) in plan.jobs().zip(&ran.results) {
-                match finished {
-                    Some(Err(failure)) => {
-                        self.terminal
-                            .write_diagnostic(&Unrunnable::new(job, failure))?;
-                    }
-                    Some(Ok(run)) => {
-                        let Outcome::Red(red) = run.outcome() else {
-                            continue;
-                        };
-                        let requirement = job.validator.requirement();
-                        let severity = evaluated
-                            .as_deref()
-                            .and_then(|evaluated| severity(evaluated, requirement));
-                        let diagnostic = RedValidator::new(job, red, severity, deny_warnings);
-                        self.terminal
-                            .write_diagnostic_with(&diagnostic, &report::output(run))?;
-                    }
-                    None => {}
-                }
-            }
-            for spec in evaluated.iter().flatten() {
-                if !spec.evaluation.findings().is_empty() {
-                    let findings = SpecFindings::new(spec, deny_warnings);
-                    self.terminal.write_diagnostic(&findings)?;
-                }
-                self.terminal.write_stdout_line(&report::summary(spec))?;
-            }
-        }
-
-        let verdict: Result<()> = match &evaluated {
-            None => Err(Interrupted {
-                finished: ran.results.iter().flatten().count(),
-                total: ran.results.len(),
-            }
-            .into()),
-            Some(evaluated) => {
-                let vet_warnings = outcomes.iter().map(vet::Outcome::warnings).sum();
-                let tally = Tally::new(vet_warnings, &ran.results, evaluated);
-                tally.verdict(deny_warnings).map_err(Into::into)
-            }
+        let mut presenter = Presenter {
+            terminal: &self.terminal,
+            format: self.args.format,
+            deny_warnings: self.args.deny_warnings,
         };
-        self.write_json(&json::Document {
-            passed: verdict.is_ok(),
-            interrupted: ran.interrupted,
-            descriptors: descriptors(),
-            vet: vet_document(),
-            validators: Some(json::validators(&plan, &ran.results)),
-            specs: evaluated
-                .as_deref()
-                .map(|evaluated| json::specs(evaluated, deny_warnings)),
-        })?;
-        verdict
+        flow::check(env, &options, interrupt(), &mut presenter).await
+    }
+}
+
+/// Writes what a check does as it happens: in human form, the statuses
+/// and summaries on stdout and the diagnostics on stderr, or else one JSON
+/// document on stdout.
+struct Presenter<'a> {
+    terminal: &'a Terminal,
+    format: OutputFormat,
+    deny_warnings: bool,
+}
+
+impl Presenter<'_> {
+    fn human(&self) -> bool {
+        self.format == OutputFormat::Human
+    }
+}
+
+impl Observer for Presenter<'_> {
+    fn installed(&mut self, installed: &Installed) -> Result<()> {
+        if self.human() {
+            for error in installed.errors() {
+                self.terminal.write_diagnostic(error.as_ref())?;
+            }
+            for line in installed.changes() {
+                self.terminal.write_stdout_line(&line)?;
+            }
+        }
+        Ok(())
     }
 
-    /// Write `document` to stdout, if that's the format asked for.
-    fn write_json(&self, document: &json::Document<'_>) -> Result<()> {
-        match self.args.format {
+    fn vetted(
+        &mut self,
+        project: &ProjectOutcome,
+        outcomes: &[Outcome],
+        passed: bool,
+    ) -> Result<()> {
+        if self.human() {
+            vet::write_findings(self.terminal, Some(project), outcomes, self.deny_warnings)?;
+            if !passed {
+                vet::write_statuses(self.terminal, Some(project), outcomes)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn status(&mut self, status: &ValidatorStatus) -> Result<()> {
+        if self.human() {
+            self.terminal.write_stdout_line(status.as_str())?;
+        }
+        Ok(())
+    }
+
+    fn concluded(&mut self, conclusion: &Conclusion<'_>) -> Result<()> {
+        if !self.human() {
+            return Ok(());
+        }
+        let deny_warnings = self.deny_warnings;
+        for (job, finished) in conclusion.plan.jobs().zip(conclusion.results) {
+            match finished {
+                Some(Err(failure)) => {
+                    self.terminal
+                        .write_diagnostic(&Unrunnable::new(job, failure))?;
+                }
+                Some(Ok(run)) => {
+                    let RunOutcome::Red(red) = run.outcome() else {
+                        continue;
+                    };
+                    let requirement = job.validator.requirement();
+                    let severity = conclusion
+                        .evaluated
+                        .and_then(|evaluated| severity(evaluated, requirement));
+                    let diagnostic = RedValidator::new(job, red, severity, deny_warnings);
+                    self.terminal
+                        .write_diagnostic_with(&diagnostic, &report::output(run))?;
+                }
+                None => {}
+            }
+        }
+        for spec in conclusion.evaluated.into_iter().flatten() {
+            if !spec.evaluation.findings().is_empty() {
+                let findings = SpecFindings::new(spec, deny_warnings);
+                self.terminal.write_diagnostic(&findings)?;
+            }
+            self.terminal.write_stdout_line(&report::summary(spec))?;
+        }
+        Ok(())
+    }
+
+    fn reported(&mut self, document: &Document<'_>) -> Result<()> {
+        match self.format {
             OutputFormat::Json => self.terminal.write_stdout_line(&document.to_json()),
             OutputFormat::Human => Ok(()),
         }

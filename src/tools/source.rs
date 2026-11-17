@@ -61,17 +61,17 @@ impl Source {
     }
 
     /// Fetch the descriptor's bytes: over HTTPS, or from the file at the
-    /// path, which must be inside the project at `root`.
+    /// path, which must be inside the project's SLCR directory, `slcr_dir`.
     pub(crate) async fn fetch(
         &self,
         fs: &FileSystem,
         fetcher: &Fetcher,
-        root: &Path,
+        slcr_dir: &Path,
     ) -> Result<Vec<u8>, SourceError> {
         match self {
             Self::Url(url) => fetcher.fetch(url).await,
             Self::Path(path) => {
-                let file = path.resolve(root)?;
+                let file = path.resolve(slcr_dir)?;
                 read_descriptor(fs, &file, Path::new(path.as_str()))
             }
         }
@@ -126,8 +126,8 @@ impl HttpsUrl {
 /// The HTTPS client is built when a URL is fetched, not before: building
 /// it loads the platform's certificate authorities, which a project that
 /// keeps its descriptors in the repository never needs.
-#[derive(Default)]
-pub(crate) struct Fetcher {
+#[derive(Debug, Default)]
+pub struct Fetcher {
     /// The only authority to trust, in place of the platform's, for a
     /// test server.
     authority: Option<reqwest::Certificate>,
@@ -135,8 +135,30 @@ pub(crate) struct Fetcher {
 
 impl Fetcher {
     /// A fetcher that trusts the platform's certificate authorities.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A fetcher that trusts only the certificate authority in `pem`, one
+    /// PEM-encoded certificate, in place of the platform's: for a server
+    /// whose certificate a private authority signed.
+    pub fn trusting_only(pem: &[u8]) -> Result<Self, InvalidAuthority> {
+        let invalid = |reason: String| InvalidAuthority { reason };
+        let mut authorities = reqwest::Certificate::from_pem_bundle(pem)
+            .map_err(|error| invalid(error.to_string()))?;
+        let authority = match authorities.len() {
+            1 => authorities.remove(0),
+            0 => return Err(invalid("it holds no certificate".to_owned())),
+            _ => return Err(invalid("it holds more than one certificate".to_owned())),
+        };
+        let fetcher = Self {
+            authority: Some(authority),
+        };
+        // Building the client is what reads the certificate itself.
+        fetcher
+            .client()
+            .map_err(|error| invalid(error.to_string()))?;
+        Ok(fetcher)
     }
 
     /// A fetcher that trusts only `authority`, for a test server.
@@ -208,7 +230,7 @@ impl Display for HttpsUrl {
     }
 }
 
-/// A path relative to the project root, with forward slashes, to a
+/// A path relative to the SLCR directory, with forward slashes, to a
 /// descriptor kept in the project.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "String")]
@@ -219,14 +241,14 @@ impl ProjectPath {
         &self.0
     }
 
-    /// The file this path names in the project at `root`, which it must
-    /// still be inside after following symlinks.
-    fn resolve(&self, root: &Path) -> Result<PathBuf, SourceError> {
+    /// The file this path names in the SLCR directory `slcr_dir`, which it
+    /// must still be inside after following symlinks.
+    fn resolve(&self, slcr_dir: &Path) -> Result<PathBuf, SourceError> {
         let shown = Path::new(&self.0);
-        let path = root.join(shown);
+        let path = slcr_dir.join(shown);
         let resolved = canonical(&path, shown)?;
-        let root = canonical(root, Path::new("."))?;
-        if resolved.starts_with(&root) {
+        let slcr_dir = canonical(slcr_dir, Path::new("."))?;
+        if resolved.starts_with(&slcr_dir) {
             Ok(resolved)
         } else {
             Err(SourceError::OutsideProject {
@@ -236,15 +258,15 @@ impl ProjectPath {
     }
 
     /// The project path of the local file at `path`, which is relative to
-    /// the working directory `cwd` and must be inside the project at
-    /// `root`, and the file it resolves to.
-    fn locate(path: &Path, cwd: &Path, root: &Path) -> Result<(Self, PathBuf), SourceError> {
+    /// the working directory `cwd` and must be inside the SLCR directory
+    /// `slcr_dir`, and the file it resolves to.
+    fn locate(path: &Path, cwd: &Path, slcr_dir: &Path) -> Result<(Self, PathBuf), SourceError> {
         let resolved = canonical(&cwd.join(path), path)?;
-        let root = canonical(root, Path::new("."))?;
+        let slcr_dir = canonical(slcr_dir, Path::new("."))?;
         let outside = || SourceError::OutsideProject {
             path: path.to_path_buf(),
         };
-        let relative = resolved.strip_prefix(&root).map_err(|_| outside())?;
+        let relative = resolved.strip_prefix(&slcr_dir).map_err(|_| outside())?;
         let mut parts = Vec::new();
         for component in relative.components() {
             match component {
@@ -297,7 +319,7 @@ impl Display for ProjectPath {
     }
 }
 
-/// Whether `value` is relative to the project root, as the schemas'
+/// Whether `value` is relative to the SLCR directory, as the schemas'
 /// paths and globs are: forward slashes, no leading `/`, no `..` segment,
 /// and no backslash or NUL.
 pub(crate) fn is_project_relative(value: &str) -> bool {
@@ -340,14 +362,15 @@ impl Display for SourceArg {
 }
 
 impl SourceArg {
-    /// The manifest source this names in the project at `root`, and the
-    /// descriptor's bytes.
+    /// The manifest source this names in the project whose SLCR directory
+    /// is `slcr_dir`, and the descriptor's bytes. A path is relative to
+    /// the working directory, `cwd`.
     pub(crate) async fn fetch(
         self,
         fs: &FileSystem,
         fetcher: &Fetcher,
         cwd: &Path,
-        root: &Path,
+        slcr_dir: &Path,
     ) -> Result<(Source, Vec<u8>), SourceError> {
         match self {
             Self::Url(url) => {
@@ -355,12 +378,20 @@ impl SourceArg {
                 Ok((Source::Url(url), bytes))
             }
             Self::Path(path) => {
-                let (project_path, file) = ProjectPath::locate(&path, cwd, root)?;
+                let (project_path, file) = ProjectPath::locate(&path, cwd, slcr_dir)?;
                 let bytes = read_descriptor(fs, &file, &path)?;
                 Ok((Source::Path(project_path), bytes))
             }
         }
     }
+}
+
+/// The error [Fetcher::trusting_only] returns for a certificate authority
+/// it can't trust.
+#[derive(Debug, Error, Diagnostic)]
+#[error("not a PEM-encoded certificate authority: {reason}")]
+pub struct InvalidAuthority {
+    reason: String,
 }
 
 /// The ways a source can fail to yield a descriptor.
@@ -372,7 +403,7 @@ pub enum SourceError {
     ))]
     NotHttps { url: String },
 
-    #[error("{path:?} is not a path relative to the project root")]
+    #[error("{path:?} is not a path relative to the directory of SLCR.toml")]
     #[diagnostic(help(
         "a path source uses forward slashes, with no leading `/` and no `..` segment"
     ))]
@@ -385,7 +416,7 @@ pub enum SourceError {
     #[diagnostic(transparent)]
     Unreadable(ReadError),
 
-    #[error("{} is outside the project", .path.display())]
+    #[error("{} is outside the directory of SLCR.toml", .path.display())]
     #[diagnostic(help(
         "a descriptor kept in the project must be inside the directory that holds SLCR.toml; \
          copy it there, or publish it at an HTTPS URL"
@@ -633,6 +664,31 @@ mod tests {
             .unwrap()
             .unwrap_err();
         assert_eq!(err.to_string(), "tools/none.toml does not exist");
+    }
+
+    #[test]
+    fn only_one_valid_authority_is_trusted() {
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        let pem = params.self_signed(&key).unwrap().pem();
+        assert!(Fetcher::trusting_only(pem.as_bytes()).is_ok());
+
+        let message = |pem: &[u8]| Fetcher::trusting_only(pem).unwrap_err().to_string();
+        assert_eq!(
+            message(b"not a pem"),
+            "not a PEM-encoded certificate authority: it holds no certificate"
+        );
+        assert_eq!(
+            message(format!("{pem}{pem}").as_bytes()),
+            "not a PEM-encoded certificate authority: it holds more than one certificate"
+        );
+        let garbled = b"-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n";
+        assert!(
+            message(garbled).starts_with("not a PEM-encoded certificate authority: "),
+            "{}",
+            message(garbled)
+        );
     }
 
     #[test]

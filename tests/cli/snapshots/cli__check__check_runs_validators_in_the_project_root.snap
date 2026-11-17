@@ -1,0 +1,28 @@
+---
+source: tests/cli/check.rs
+info:
+  program: slcr
+  args:
+    - check
+    - "--slcr-dir"
+    - app
+    - "--project-root"
+    - repo
+    - "-j"
+    - "1"
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+in-nearest: installed blake3:2612333006ae…
+in-project: installed blake3:2804ad1912cd…
+in-validator-dir: installed blake3:b5f3f14aa2de…
+app/src/.validators.slcr.toml validator 1 (shop/REQ-002, in-validator-dir): green
+app/src/.validators.slcr.toml validator 2 (shop/REQ-002, in-project): green
+app/src/.validators.slcr.toml validator 3 (shop/REQ-002, in-nearest): green
+shop: 1 satisfied, 0 unsatisfied, 6 unknown (4 coverage gaps)
+
+----- stderr -----

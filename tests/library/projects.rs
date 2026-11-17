@@ -1,0 +1,907 @@
+//! Projects on disk whose SLCR files are kept apart from their code, as a
+//! desktop application keeps them: vetted, installed, and checked through
+//! the library, and held to what `slcr` writes for the same project.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{Duration, Instant};
+
+use serde_json::Value;
+use slcr::check::{Options, Report, RunOutcome};
+use slcr::{DescriptorStore, Project};
+use tempfile::TempDir;
+
+use super::TODO_API_YAML;
+use super::https::HttpsServer;
+
+/// A tool that runs `with.script` with `sh -c` in the directory its
+/// validator file checks.
+const SH: &str = r#"formatVersion = "1"
+name = "sh"
+version = "1.0.0"
+
+[validator.schema]
+type = "object"
+required = ["script"]
+properties.script = { type = "string" }
+
+[invoke]
+argv = ["sh", "-c", "{with.script}"]
+cwd = "validator-dir"
+timeout = 60
+"#;
+
+/// Where `slcr`'s data directory is in a [Workspace], given its
+/// `XDG_DATA_HOME` and `HOME`.
+#[cfg(target_os = "macos")]
+const DATA_DIR: &str = ".home/Library/Application Support/slcr";
+#[cfg(not(target_os = "macos"))]
+const DATA_DIR: &str = ".data/slcr";
+
+/// The BLAKE3 hash of `text`, in hexadecimal.
+fn hex(text: &str) -> String {
+    blake3::hash(text.as_bytes()).to_hex().to_string()
+}
+
+/// A manifest whose `specs` is `SPEC.slcr.yml` and that declares `key`,
+/// pinned to `descriptor`, from `source`, a TOML inline table.
+fn declaring(key: &str, descriptor: &str, source: &str) -> String {
+    format!(
+        "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n\n[tools.{key}]\n\
+         version = \"1.0.0\"\nsource = {source}\npin = \"blake3:{}\"\n",
+        hex(descriptor)
+    )
+}
+
+/// A validator file whose validators check `todo-api/REQ-002` with `tool`,
+/// each running one of `scripts`.
+fn validators(tool: &str, scripts: &[&str]) -> String {
+    let validators: String = scripts
+        .iter()
+        .map(|script| {
+            format!(
+                "\n[[validator]]\nrequirement = \"todo-api/REQ-002\"\ntool = \"{tool}\"\n\
+                 with = {{ script = {script:?} }}\n"
+            )
+        })
+        .collect();
+    format!("formatVersion = \"1\"\n{validators}")
+}
+
+/// A scratch directory, canonical as a working directory is, that `slcr`
+/// runs in with its data directory, and so its descriptor store, there.
+struct Workspace {
+    /// Deleted when the workspace is dropped.
+    _dir: TempDir,
+    /// The workspace, canonical, as a working directory is.
+    root: PathBuf,
+}
+
+impl Workspace {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        Self { _dir: dir, root }
+    }
+
+    /// A workspace holding a project kept outside its root: `app`, its
+    /// SLCR directory, with the canon specification and [SH] kept in it,
+    /// and `repo`, its project root, with a `src` directory.
+    fn kept() -> Self {
+        let kept = Self::new();
+        kept.file(
+            "app/SLCR.toml",
+            &declaring("sh", SH, "{ path = \"tools/sh.toml\" }"),
+        )
+        .file("app/SPEC.slcr.yml", TODO_API_YAML)
+        .file("app/tools/sh.toml", SH);
+        std::fs::create_dir_all(kept.root.join("repo/src")).unwrap();
+        kept
+    }
+
+    /// [Workspace::kept], with validators in `app/src` running `scripts`,
+    /// and [SH] installed.
+    fn validated(scripts: &[&str]) -> Self {
+        let kept = Self::kept();
+        kept.file("app/src/.validators.slcr.toml", &validators("sh", scripts))
+            .install(SH);
+        kept
+    }
+
+    fn path(&self, path: &str) -> PathBuf {
+        self.root.join(path)
+    }
+
+    fn file(&self, path: &str, contents: &str) -> &Self {
+        let path = self.path(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+        self
+    }
+
+    /// The descriptor store `slcr` uses when run in the workspace.
+    fn store(&self) -> DescriptorStore {
+        DescriptorStore::at(self.path(DATA_DIR).join("descriptors/blake3"))
+    }
+
+    fn read(&self, path: &str) -> String {
+        std::fs::read_to_string(self.path(path)).unwrap()
+    }
+
+    /// Each file the store holds, and its contents.
+    fn stored(&self) -> Vec<(String, String)> {
+        let dir = self.path(DATA_DIR).join("descriptors/blake3");
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return Vec::new();
+        };
+        let mut stored: Vec<(String, String)> = entries
+            .map(|entry| {
+                let path = entry.unwrap().path();
+                let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                (name, std::fs::read_to_string(path).unwrap())
+            })
+            .collect();
+        stored.sort();
+        stored
+    }
+
+    /// File `descriptor` in [Workspace::store], as installing it would.
+    fn install(&self, descriptor: &str) -> &Self {
+        self.file(
+            &format!("{DATA_DIR}/descriptors/blake3/{}.toml", hex(descriptor)),
+            descriptor,
+        )
+    }
+
+    fn project(&self) -> Project {
+        Project::open(self.path("app"), self.path("repo")).unwrap()
+    }
+
+    /// `slcr` with `args`, run in the workspace's directory `dir`, with
+    /// the workspace's data directory, and trusting `authority`, a PEM
+    /// certificate authority, if given, where `slcr` lets the environment
+    /// name one.
+    fn slcr(&self, dir: &str, args: &[&str], authority: Option<&Path>) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_slcr"));
+        command
+            .args(args)
+            .current_dir(self.path(dir))
+            .env_remove("LOG_LEVEL")
+            .env("NO_COLOR", "1")
+            .env("XDG_DATA_HOME", self.path(".data"))
+            .env("HOME", self.path(".home"));
+        if let Some(authority) = authority {
+            command.env("SSL_CERT_FILE", authority);
+        }
+        command
+    }
+
+    /// The stdout of `slcr` with `args`, run in `app`.
+    fn written_in_app(&self, args: &[&str]) -> String {
+        let output = self.slcr("app", args, None).output().unwrap();
+        String::from_utf8(output.stdout).unwrap()
+    }
+
+    /// Whether `slcr` with `args`, run in the workspace, succeeds.
+    fn succeeds(&self, args: &[&str], authority: Option<&Path>) -> bool {
+        self.slcr(".", args, authority).status().unwrap().success()
+    }
+
+    /// What `slcr check --offline --format json --project-root ../repo`
+    /// writes, without durations.
+    fn checked_by_slcr(&self) -> Value {
+        let written = self.written_in_app(&[
+            "check",
+            "--offline",
+            "--format",
+            "json",
+            "--project-root",
+            "../repo",
+        ]);
+        without_durations(serde_json::from_str(&written).unwrap())
+    }
+
+    /// Check the project with `options`, on a runtime of the test's.
+    fn check(&self, options: &Options) -> Report {
+        super::block_on(self.project().check(
+            &self.store(),
+            options,
+            |_| {},
+            std::future::pending(),
+        ))
+    }
+}
+
+/// `report` as JSON, with every validator's `durationMs` removed: what
+/// two runs of the same check share.
+fn without_durations(mut report: Value) -> Value {
+    if let Some(validators) = report["validators"].as_array_mut() {
+        for validator in validators {
+            validator.as_object_mut().unwrap().remove("durationMs");
+        }
+    }
+    report
+}
+
+fn json(report: &Report) -> Value {
+    without_durations(serde_json::to_value(report).unwrap())
+}
+
+/// Options for a check `jobs` validators at a time.
+fn jobs(jobs: usize) -> Options {
+    let mut options = Options::default();
+    options.jobs = jobs.try_into().unwrap();
+    options
+}
+
+#[test]
+fn projects_kept_anywhere_vet_as_slcr_vet_reports_them() {
+    let ok = Workspace::validated(&["true"]);
+    let no_counterpart = Workspace::validated(&["true"]);
+    no_counterpart.file(
+        "app/lib/.validators.slcr.toml",
+        &validators("sh", &["true"]),
+    );
+    let uninstalled = Workspace::kept();
+    uninstalled.file(
+        "app/src/.validators.slcr.toml",
+        &validators("sh", &["true"]),
+    );
+    for (name, kept) in [
+        ("ok", &ok),
+        ("no counterpart", &no_counterpart),
+        ("uninstalled", &uninstalled),
+    ] {
+        let (project, outcomes) = kept.project().vet(&kept.store());
+        let written =
+            kept.written_in_app(&["vet", "--format", "json", "--project-root", "../repo"]);
+        let report = slcr::vet::json(Some(&project), &outcomes, false);
+        assert_eq!(format!("{report}\n"), written, "{name}");
+        assert_eq!(project.passes(), name == "ok", "{name}");
+    }
+}
+
+#[test]
+fn installing_fills_the_store_it_is_given() {
+    // Unique, so that nothing could have filed it before.
+    let descriptor = format!("# {:?}\n{SH}", Instant::now());
+    let kept = Workspace::kept();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (installed, manifest) = runtime.block_on(async {
+        let server = HttpsServer::start(&descriptor).await;
+        let source = format!("{{ url = \"{}\" }}", server.url("/sh.toml"));
+        let manifest = declaring("sh", &descriptor, &source);
+        kept.file("app/SLCR.toml", &manifest);
+        let installed = kept
+            .project()
+            .install(&kept.store(), &server.fetcher())
+            .await
+            .unwrap();
+        assert_eq!(server.requests(), 1);
+        (installed, manifest)
+    });
+    let pin = format!("blake3:{}", hex(&descriptor));
+    assert_eq!(
+        installed.to_string(),
+        format!("sh: installed {}…", &pin[..19])
+    );
+    assert!(installed.passed());
+    let descriptors = installed.descriptors();
+    assert_eq!(descriptors.len(), 1);
+    assert_eq!(descriptors[0].pin.unwrap().to_string(), pin);
+    let filed = kept
+        .path(DATA_DIR)
+        .join(format!("descriptors/blake3/{}.toml", hex(&descriptor)));
+    assert_eq!(std::fs::read_to_string(filed).unwrap(), descriptor);
+    // The store `slcr` uses by default never got it.
+    let default = directories::ProjectDirs::from("", "", "slcr").map(|dirs| {
+        dirs.data_dir()
+            .join(format!("descriptors/blake3/{}.toml", hex(&descriptor)))
+    });
+    assert!(!default.is_some_and(|path| path.exists()));
+    // Nor did the project's manifest change.
+    let after = kept.read("app/SLCR.toml");
+    assert_eq!(after, manifest);
+}
+
+#[test]
+fn checks_report_as_slcr_check_does() {
+    let kept = Workspace::validated(&["true", "echo out; echo err >&2; exit 3", "exit 0"]);
+    let report = kept.check(&jobs(2));
+    assert!(!report.passed);
+    let outcomes: Vec<RunOutcome> = report
+        .validators
+        .iter()
+        .flatten()
+        .map(|validator| validator.outcome)
+        .collect();
+    assert_eq!(
+        outcomes,
+        [RunOutcome::Green, RunOutcome::Red, RunOutcome::Green]
+    );
+    assert_eq!(json(&report), kept.checked_by_slcr());
+}
+
+#[test]
+fn checks_run_on_their_caller_s_runtime() {
+    let kept = Workspace::validated(&["true", "exit 0"]);
+    let (project, store) = (kept.project(), kept.store());
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    // A check that started a runtime of its own would panic here, inside
+    // one already running.
+    let report = runtime
+        .block_on(async move {
+            tokio::spawn(async move {
+                project
+                    .check(&store, &Options::default(), |_| {}, std::future::pending())
+                    .await
+            })
+            .await
+        })
+        .unwrap();
+    assert!(report.passed, "{report:?}");
+    assert_eq!(json(&report), kept.checked_by_slcr());
+}
+
+#[test]
+fn checks_report_statuses_as_slcr_check_writes_them() {
+    let kept = Workspace::validated(&["sleep 0.3", "exit 1", "true", "sleep 0.1; true"]);
+    let mut statuses = Vec::new();
+    super::block_on(kept.project().check(
+        &kept.store(),
+        &jobs(4),
+        |status| statuses.push(status.to_string()),
+        std::future::pending(),
+    ));
+    let written =
+        kept.written_in_app(&["check", "--offline", "--project-root", "../repo", "-j", "4"]);
+    let lines: Vec<&str> = written.lines().collect();
+    assert_eq!(statuses.len(), 4);
+    assert_eq!(statuses, lines[..4]);
+    // The rest is the specification's summary.
+    assert_eq!(lines.len(), 5, "{written}");
+    assert!(lines[4].starts_with("todo-api: "), "{written}");
+}
+
+#[test]
+fn checks_never_install() {
+    // A server that would see any connection made to it.
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    server.set_nonblocking(true).unwrap();
+    let port = server.local_addr().unwrap().port();
+    let kept = Workspace::kept();
+    let source = format!("{{ url = \"https://127.0.0.1:{port}/sh.toml\" }}");
+    kept.file("app/SLCR.toml", &declaring("sh", SH, &source))
+        .file(
+            "app/src/.validators.slcr.toml",
+            &validators("sh", &["touch ran"]),
+        );
+    let report = kept.check(&Options::default());
+    assert!(!report.passed);
+    assert_eq!(report.descriptors, None);
+    assert_eq!(report.validators, None);
+    let vet = report.vet.as_ref().unwrap();
+    assert_eq!(vet["passed"], false);
+    let problems = vet["project"]["problems"].as_array().unwrap();
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(
+        problems[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("is not installed"),
+        "{problems:?}"
+    );
+    assert!(!kept.path("repo/src/ran").exists());
+    let accepted = server.accept();
+    assert!(
+        matches!(&accepted, Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
+        "{accepted:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn checks_stop_every_validator_when_cancelled() {
+    // One at a time: the first finishes; the second starts a grandchild,
+    // records its PID, and outlives the cancellation; the rest never
+    // start.
+    let kept = Workspace::validated(&[
+        "true",
+        "sleep 30 & echo $! > pid.tmp; mv pid.tmp pid; wait",
+        "touch third",
+        "touch fourth",
+        "touch fifth",
+    ]);
+    let pid_file = kept.path("repo/src/pid");
+    let cancel = {
+        let pid_file = pid_file.clone();
+        async move {
+            while !pid_file.exists() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+    };
+    let started = Instant::now();
+    let report = super::block_on(
+        kept.project()
+            .check(&kept.store(), &jobs(1), |_| {}, cancel),
+    );
+    assert!(started.elapsed() < Duration::from_secs(10));
+    assert!(report.interrupted && !report.passed);
+    assert_eq!(report.specs, None);
+    let outcomes: Vec<RunOutcome> = report
+        .validators
+        .iter()
+        .flatten()
+        .map(|validator| validator.outcome)
+        .collect();
+    assert_eq!(
+        outcomes,
+        [
+            RunOutcome::Green,
+            RunOutcome::Interrupted,
+            RunOutcome::Interrupted,
+            RunOutcome::Interrupted,
+            RunOutcome::Interrupted,
+        ]
+    );
+    for never in ["third", "fourth", "fifth"] {
+        assert!(!kept.path(&format!("repo/src/{never}")).exists(), "{never}");
+    }
+
+    let pid = std::fs::read_to_string(&pid_file).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !dead(&pid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(dead(&pid), "the sleep, {}, is still running", pid.trim());
+}
+
+#[cfg(unix)]
+#[test]
+fn checks_stop_every_validator_when_dropped() {
+    // An application drops a check it no longer wants, and may never poll
+    // its runtime again.
+    let kept = Workspace::validated(&["sleep 30 & echo $! > pid.tmp; mv pid.tmp pid; wait"]);
+    let pid_file = kept.path("repo/src/pid");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let (project, store) = (kept.project(), kept.store());
+    let started = runtime.block_on(async {
+        let options = jobs(1);
+        let check = project.check(&store, &options, |_| {}, std::future::pending());
+        let mut check = std::pin::pin!(check);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !pid_file.exists() && Instant::now() < deadline {
+            let _ = tokio::time::timeout(Duration::from_millis(20), check.as_mut()).await;
+        }
+        pid_file.exists()
+        // The check is dropped here.
+    });
+    assert!(started, "the validator never started");
+    let pid = std::fs::read_to_string(&pid_file).unwrap();
+    // The runtime is alive, and never polled again.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !dead(&pid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(dead(&pid), "the sleep, {}, is still running", pid.trim());
+    drop(runtime);
+}
+
+/// Whether the process `pid` is gone, or a zombie until something reaps
+/// it.
+#[cfg(unix)]
+fn dead(pid: &str) -> bool {
+    let ps = Command::new("ps")
+        .args(["-o", "stat=", "-p", pid.trim()])
+        .output()
+        .unwrap();
+    let state = String::from_utf8_lossy(&ps.stdout);
+    matches!(state.trim_start().chars().next(), None | Some('Z' | 'X'))
+}
+
+#[cfg(unix)]
+#[test]
+fn checks_find_tools_on_the_path_they_are_given() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let kept = Workspace::kept();
+    let bin = kept.path("bin");
+    // Green only if the PATH it sees is exactly the one given.
+    let program = format!("#!/bin/sh\n[ \"$PATH\" = '{}' ]\n", bin.display());
+    kept.file("bin/only-here", &program);
+    std::fs::set_permissions(
+        bin.join("only-here"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    let descriptor = SH
+        .replace("name = \"sh\"", "name = \"only-here\"")
+        .replace("[\"sh\", \"-c\", \"{with.script}\"]", "[\"only-here\"]");
+    kept.file(
+        "app/SLCR.toml",
+        &declaring(
+            "only-here",
+            &descriptor,
+            "{ path = \"tools/only-here.toml\" }",
+        ),
+    )
+    .file("app/tools/only-here.toml", &descriptor)
+    .file(
+        "app/src/.validators.slcr.toml",
+        &validators("only-here", &["unused"]),
+    )
+    .install(&descriptor);
+    let process_path = std::env::var_os("PATH").unwrap_or_default();
+    assert!(!std::env::split_paths(&process_path).any(|dir| dir == bin));
+
+    let mut given = Options::default();
+    given.path = Some(bin.clone().into_os_string());
+    let report = kept.check(&given);
+    let validator = &report.validators.as_ref().unwrap()[0];
+    assert_eq!(validator.outcome, RunOutcome::Green, "{report:?}");
+
+    let report = kept.check(&Options::default());
+    let validator = &report.validators.as_ref().unwrap()[0];
+    assert_eq!(validator.outcome, RunOutcome::CouldNotRun);
+    let error = validator.error.as_ref().unwrap();
+    assert_eq!(error["message"], "`only-here` was not found on PATH");
+}
+
+#[test]
+fn projects_are_checked_at_once_as_they_are_alone() {
+    // Where the two checks meet: each leaves its mark, then waits up to
+    // 10 s for the other's, and records whether it saw it. It passes
+    // either way, so its report is the same alone or not.
+    let shared = tempfile::tempdir().unwrap();
+    let meet = |own: &str, other: &str| {
+        let dir = shared.path().display();
+        format!(
+            "touch '{dir}/{own}'; i=0; until [ -f '{dir}/{other}' ]; do i=$((i+1)); \
+             [ $i -gt 200 ] && exit 0; sleep 0.05; done; touch '{dir}/{own}-met'"
+        )
+    };
+    // Each project's validators see their own project root: one finds
+    // its own file there, and one looks for the other's.
+    let first =
+        Workspace::validated(&["test -f first", "test -f second", &meet("first", "second")]);
+    first.file("repo/src/first", "");
+    let second =
+        Workspace::validated(&["test -f second", "test -f first", &meet("second", "first")]);
+    second.file("repo/src/second", "");
+    let cwd = std::env::current_dir().unwrap();
+    for kept in [&first, &second] {
+        assert!(!cwd.starts_with(&kept.root), "{}", cwd.display());
+    }
+
+    // Alone, each finds the other's mark already there.
+    for mark in ["first", "second"] {
+        std::fs::write(shared.path().join(mark), "").unwrap();
+    }
+    let alone = [json(&first.check(&jobs(2))), json(&second.check(&jobs(2)))];
+    for mark in ["first", "second", "first-met", "second-met"] {
+        let _ = std::fs::remove_file(shared.path().join(mark));
+    }
+
+    // Both on one runtime, as tasks that run at the same time.
+    let check = |kept: &Workspace| {
+        let (project, store) = (kept.project(), kept.store());
+        async move {
+            project
+                .check(&store, &jobs(2), |_| {}, std::future::pending())
+                .await
+        }
+    };
+    let (first_check, second_check) = (check(&first), check(&second));
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let at_once = runtime.block_on(async {
+        let first = tokio::spawn(first_check);
+        let second = tokio::spawn(second_check);
+        (first.await.unwrap(), second.await.unwrap())
+    });
+    // Each saw the other's mark while it waited: they ran at once.
+    for met in ["first-met", "second-met"] {
+        assert!(shared.path().join(met).exists(), "{met}");
+    }
+    assert_eq!([json(&at_once.0), json(&at_once.1)], alone);
+    // Each is the other's mirror: green where it finds its own file.
+    for (report, name) in [(&at_once.0, "first"), (&at_once.1, "second")] {
+        let outcomes: Vec<RunOutcome> = report
+            .validators
+            .iter()
+            .flatten()
+            .map(|validator| validator.outcome)
+            .collect();
+        assert_eq!(
+            outcomes,
+            [RunOutcome::Green, RunOutcome::Red, RunOutcome::Green],
+            "{name}"
+        );
+    }
+    // Nothing either did is in the working directory.
+    assert!(!Path::new("first").exists() && !Path::new("second").exists());
+}
+
+#[test]
+fn creating_a_project_writes_what_slcr_init_writes() {
+    let (library, cli) = (Workspace::new(), Workspace::new());
+    for workspace in [&library, &cli] {
+        std::fs::create_dir_all(workspace.path("app")).unwrap();
+        std::fs::create_dir_all(workspace.path("repo")).unwrap();
+    }
+    let name = slcr::SpecName::try_from("shop".to_owned()).unwrap();
+    let (project, initialized) = Project::create(
+        library.path("app"),
+        library.path("repo"),
+        "SPEC.slcr.toml",
+        name.clone(),
+        None,
+    )
+    .unwrap();
+    assert!(cli.succeeds(&["init", "--slcr-dir", "app", "--name", "shop"], None));
+    for file in ["app/SLCR.toml", "app/SPEC.slcr.toml"] {
+        assert_eq!(library.read(file), cli.read(file), "{file}");
+    }
+    assert!(initialized.created_manifest() && initialized.warning().is_none());
+    assert_eq!(
+        initialized.to_string(),
+        "SPEC.slcr.toml: created specification shop\nSLCR.toml: created project manifest"
+    );
+    assert_eq!(project.slcr_dir(), library.path("app"));
+    assert_eq!(project.project_root(), library.path("repo"));
+
+    // Again, it fails, and changes nothing.
+    let before = [
+        library.read("app/SLCR.toml"),
+        library.read("app/SPEC.slcr.toml"),
+    ];
+    let again = Project::create(
+        library.path("app"),
+        library.path("repo"),
+        "SPEC.slcr.toml",
+        name,
+        None,
+    );
+    assert!(again.is_err());
+    let after = [
+        library.read("app/SLCR.toml"),
+        library.read("app/SPEC.slcr.toml"),
+    ];
+    assert_eq!(after, before);
+    let entries = std::fs::read_dir(library.path("app")).unwrap().count();
+    assert_eq!(entries, 2);
+
+    // A file outside the SLCR directory is refused, whether it would join
+    // the project there or start one, and nothing is written.
+    let outside = Workspace::new();
+    std::fs::create_dir_all(outside.path("new")).unwrap();
+    std::fs::create_dir_all(outside.path("repo")).unwrap();
+    #[allow(unused_mut)]
+    let mut refused = vec![
+        (library.path("app"), PathBuf::from("../repo/evil.slcr.toml")),
+        (library.path("app"), outside.path("repo/evil.slcr.toml")),
+        (outside.path("new"), PathBuf::from("../repo/evil.slcr.toml")),
+    ];
+    // A symlink inside the SLCR directory that leads out of it, written
+    // through or climbed out of with `..`, is outside it too.
+    #[cfg(unix)]
+    {
+        for slcr_dir in [library.path("app"), outside.path("new")] {
+            let repo = slcr_dir.parent().unwrap().join("repo");
+            std::os::unix::fs::symlink(&repo, slcr_dir.join("link")).unwrap();
+            refused.push((slcr_dir.clone(), PathBuf::from("link/evil.slcr.toml")));
+            refused.push((slcr_dir, PathBuf::from("link/../evil.slcr.toml")));
+        }
+    }
+    for (slcr_dir, file) in refused {
+        let name = slcr::SpecName::try_from("evil".to_owned()).unwrap();
+        let created = Project::create(&slcr_dir, library.path("repo"), &file, name, None);
+        let error = created
+            .err()
+            .unwrap_or_else(|| panic!("{}", file.display()));
+        // Joining the project in `app`, its SLCR.toml exists; starting one
+        // in `new`, it would be created.
+        let (message, help) = if slcr_dir == library.path("app") {
+            (
+                format!(
+                    "is outside {}, the directory of SLCR.toml",
+                    slcr_dir.display()
+                ),
+                format!(
+                    "SLCR.toml lists specification files relative to its own directory: \
+                     create the file inside {}",
+                    slcr_dir.display()
+                ),
+            )
+        } else {
+            (
+                format!(
+                    "is outside {}, where SLCR.toml would be created",
+                    slcr_dir.display()
+                ),
+                format!(
+                    "SLCR.toml lists specification files relative to its own directory, {}: \
+                     create the file inside it",
+                    slcr_dir.display()
+                ),
+            )
+        };
+        assert_eq!(
+            error.to_string(),
+            format!("{} {message}", file.display()),
+            "{}",
+            file.display()
+        );
+        assert_eq!(
+            error.help().map(|help| help.to_string()),
+            Some(help),
+            "{}",
+            file.display()
+        );
+    }
+    assert_eq!(std::fs::read_dir(library.path("repo")).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(outside.path("repo")).unwrap().count(), 0);
+    // Beside the symlinks, nothing in either SLCR directory or above them.
+    let links = usize::from(cfg!(unix));
+    assert_eq!(
+        std::fs::read_dir(outside.path("new")).unwrap().count(),
+        links
+    );
+    assert_eq!(
+        std::fs::read_dir(library.path("app")).unwrap().count(),
+        2 + links
+    );
+    for root in [&library.root, &outside.root] {
+        assert!(!root.join("evil.slcr.toml").exists());
+    }
+}
+
+#[test]
+fn tools_are_managed_as_slcr_tools_manages_them() {
+    let (library, cli) = (Workspace::new(), Workspace::new());
+    let manifest = "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n";
+    for workspace in [&library, &cli] {
+        workspace
+            .file("app/SLCR.toml", manifest)
+            .file("app/SPEC.slcr.yml", TODO_API_YAML);
+    }
+    // On every platform, each step leaves the bytes it should. Only where
+    // `slcr` lets the environment name a certificate authority can it
+    // fetch from the local server, to compare with what it leaves too.
+    let compare = cfg!(target_os = "linux");
+    let newer = SH.replace("version = \"1.0.0\"", "version = \"1.1.0\"");
+    let project = Project::open(library.path("app"), library.path("app")).unwrap();
+    let store = library.store();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let server = HttpsServer::start(SH).await;
+        let authority = cli.path("authority.pem");
+        std::fs::write(&authority, server.authority()).unwrap();
+        let fetcher = server.fetcher();
+        let url = server.url("/sh.toml");
+        let key = || slcr::ToolKey::try_from("sh".to_owned()).unwrap();
+        // The manifest declaring `descriptor`, at `version`, from the
+        // server, as `slcr tools add` writes the entry.
+        let declaring = |version: &str, descriptor: &str| {
+            format!(
+                "{manifest}\n[tools.sh]\nversion = \"{version}\"\nsource = {{ url = \"{url}\" }}\n\
+                 pin = \"blake3:{}\"\n",
+                hex(descriptor)
+            )
+        };
+        // What the store holds: each of `descriptors`, filed by its hash.
+        let filed = |descriptors: &[&str]| {
+            let mut filed: Vec<(String, String)> = descriptors
+                .iter()
+                .map(|text| (format!("{}.toml", hex(text)), (*text).to_owned()))
+                .collect();
+            filed.sort();
+            filed
+        };
+        // The same step, by the library and by `slcr`, leaves the same.
+        let same = |step: &str| {
+            assert_eq!(
+                library.read("app/SLCR.toml"),
+                cli.read("app/SLCR.toml"),
+                "{step}"
+            );
+            assert_eq!(library.stored(), cli.stored(), "{step}");
+        };
+
+        let added = project
+            .add_tool(&store, &fetcher, &url, None)
+            .await
+            .unwrap();
+        assert_eq!(added.to_string(), "SLCR.toml: added tool sh 1.0.0");
+        assert_eq!(library.read("app/SLCR.toml"), declaring("1.0.0", SH));
+        assert_eq!(library.stored(), filed(&[SH]));
+        if compare {
+            let args = ["tools", "add", &url, "--slcr-dir", "app"];
+            assert!(cli.succeeds(&args, Some(&authority)));
+            same("add");
+        }
+
+        server.serve(&newer);
+        let updated = project.update_tool(&store, &fetcher, key()).await.unwrap();
+        assert_eq!(
+            updated.to_string(),
+            "SLCR.toml: updated tool sh 1.0.0 -> 1.1.0"
+        );
+        assert_eq!(library.read("app/SLCR.toml"), declaring("1.1.0", &newer));
+        assert_eq!(library.stored(), filed(&[SH, &newer]));
+        if compare {
+            let args = ["tools", "update", "sh", "--slcr-dir", "app"];
+            assert!(cli.succeeds(&args, Some(&authority)));
+            same("update");
+        }
+
+        let requests = server.requests();
+        let removed = project.remove_tool(key()).unwrap();
+        assert_eq!(removed.to_string(), "SLCR.toml: removed tool sh 1.1.0");
+        assert_eq!(library.read("app/SLCR.toml"), manifest);
+        // The store keeps both, which other projects may pin.
+        assert_eq!(library.stored(), filed(&[SH, &newer]));
+        if compare {
+            let args = ["tools", "remove", "sh", "--slcr-dir", "app"];
+            assert!(cli.succeeds(&args, Some(&authority)));
+            same("remove");
+        }
+        // Removing never fetches.
+        assert_eq!(server.requests(), requests);
+    });
+}
+
+#[test]
+fn managing_tools_changes_nothing_when_it_fails() {
+    let library = Workspace::new();
+    let manifest = "formatVersion = \"1\"\nspecs = [\"SPEC.slcr.yml\"]\n";
+    library
+        .file("app/SLCR.toml", manifest)
+        .file("app/SPEC.slcr.yml", TODO_API_YAML)
+        .file("elsewhere/sh.toml", SH);
+    let project = Project::open(library.path("app"), library.path("app")).unwrap();
+    let store = library.store();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let server = HttpsServer::start("not = \"a descriptor\"\n").await;
+        let fetcher = server.fetcher();
+        let url = server.url("/sh.toml");
+        let invalid = project.add_tool(&store, &fetcher, &url, None).await;
+        assert!(invalid.is_err());
+        assert_eq!(server.requests(), 1);
+
+        let outside = library.path("elsewhere/sh.toml");
+        for source in [outside.to_str().unwrap(), "../elsewhere/sh.toml"] {
+            let error = project
+                .add_tool(&store, &fetcher, source, None)
+                .await
+                .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("is outside the directory of SLCR.toml"),
+                "{source}: {error}"
+            );
+        }
+    });
+    assert_eq!(library.read("app/SLCR.toml"), manifest);
+    assert!(library.stored().is_empty());
+
+    // A path inside it, relative to it, is recorded relative to it.
+    library.file("app/tools/sh.toml", SH);
+    let added =
+        super::block_on(project.add_tool(&store, &slcr::Fetcher::new(), "tools/sh.toml", None));
+    assert_eq!(added.unwrap().to_string(), "SLCR.toml: added tool sh 1.0.0");
+    assert!(
+        library
+            .read("app/SLCR.toml")
+            .contains("source = { path = \"tools/sh.toml\" }")
+    );
+}

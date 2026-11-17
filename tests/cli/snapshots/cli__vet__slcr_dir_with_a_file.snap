@@ -1,0 +1,23 @@
+---
+source: tests/cli/vet.rs
+info:
+  program: slcr
+  args:
+    - vet
+    - app/SPEC.slcr.yml
+    - "--slcr-dir"
+    - app
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: the argument '[FILE]...' cannot be used with '--slcr-dir <DIR>'
+
+Usage: slcr vet <FILE>...
+
+For more information, try '--help'.

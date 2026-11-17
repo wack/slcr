@@ -3,7 +3,7 @@
 //! server that receives it from the sandbox that ran the validators.
 //!
 //! [Report] deserializes exactly the shape the CLI writes, field for field
-//! (see `src/cli/check/json.rs`): an unknown field, a missing required one,
+//! (see `src/check/json.rs`): an unknown field, a missing required one,
 //! or a value of the wrong type fails. The `vet` document `check` embeds,
 //! and the `error` of a validator that couldn't run or a descriptor that
 //! couldn't be installed, are kept as JSON objects, unread.
@@ -228,9 +228,9 @@ mod tests {
     }
 
     const SNAPSHOTS: [&str; 2] = [
-        include_str!("../tests/cli/snapshots/cli__check__check_reports_in_json.snap"),
+        include_str!("../../tests/cli/snapshots/cli__check__check_reports_in_json.snap"),
         include_str!(
-            "../tests/cli/snapshots/cli__check__check_reports_a_vetting_failure_in_json.snap"
+            "../../tests/cli/snapshots/cli__check__check_reports_a_vetting_failure_in_json.snap"
         ),
     ];
 

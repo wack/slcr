@@ -61,6 +61,7 @@ All of the following must hold:
 - [Names and titles the specification](#REQ-006)
 - [Starts a project](#REQ-007)
 - [Joins an existing project](#REQ-008)
+- [Takes the SLCR directory](#REQ-103)
 - [Never overwrites](#REQ-009)
 - [init usage](#REQ-010)
 
@@ -170,8 +171,41 @@ When `SLCR.toml` isn't valid TOML, `slcr init` still creates the specification, 
 
 Below a directory holding `slcr.toml`, `slcr init` fails, says that the manifest's name is case-sensitive, and creates nothing.
 
+<a id="REQ-103"></a>
+#### 1.2.5 Takes the SLCR directory
+
+Given `--slcr-dir DIR`, `slcr init` MUST look for `SLCR.toml` in DIR alone, never in the working directory or a parent, and join the project there, or start one by creating `SLCR.toml` in DIR, as it does in the working directory without the option. FILE stays relative to the working directory, and defaults to `SPEC.slcr.toml` in DIR; a new manifest lists it relative to DIR, so FILE MUST then be inside DIR. DIR MUST be an existing directory.
+
+*Rationale:* A desktop application creates a repository's specification and manifest in its own data directory, where no working directory or parent would find them.
+
+*Depends on:* [Starts a project](#REQ-007), [Joins an existing project](#REQ-008)
+
+*Terms:* [SLCR directory](#TERM-018), [Project manifest](#TERM-003)
+
+*Acceptance criteria:*
+
+<a id="AC-248"></a>**Starts a project in the SLCR directory**
+
+`slcr init --slcr-dir app --name shop`, run outside `app`, which holds no `SLCR.toml`, creates `app/SPEC.slcr.toml` named `shop` and `app/SLCR.toml` whose `specs` is `["SPEC.slcr.toml"]`.
+
+<a id="AC-249"></a>**Joins the project in the SLCR directory**
+
+With `SLCR.toml` in `app`, run in a directory below another `SLCR.toml`, `slcr init --slcr-dir app app/billing.slcr.toml` creates the specification and reports `app/SLCR.toml` unchanged, leaving both manifests' bytes unchanged.
+
+<a id="AC-250"></a>**Keeps a new project's file inside the SLCR directory**
+
+`slcr init --slcr-dir app SPEC.slcr.toml`, run outside `app`, which holds no `SLCR.toml`, fails, explaining that `SLCR.toml` lists files relative to `app`, and creates nothing.
+
+<a id="AC-251"></a>**Refuses a missing SLCR directory**
+
+`slcr init --slcr-dir missing` fails, naming `missing`, and creates nothing.
+
+<a id="AC-252"></a>**Describes the SLCR directory**
+
+`slcr init --help` describes `--slcr-dir` and what FILE defaults to with it.
+
 <a id="REQ-009"></a>
-#### 1.2.5 Never overwrites
+#### 1.2.6 Never overwrites
 
 `slcr init` MUST NOT overwrite an existing file, not even a dangling symlink, and MUST NOT create a missing directory. It creates the specification and the manifest together or not at all.
 
@@ -188,7 +222,7 @@ Below a directory holding `slcr.toml`, `slcr init` fails, says that the manifest
 `slcr init specs/todo-api.yaml`, when `specs` doesn't exist, fails with help to create the directory first, and creates nothing.
 
 <a id="REQ-010"></a>
-#### 1.2.6 init usage
+#### 1.2.7 init usage
 
 `slcr init` MUST take at most one FILE, MUST reject a FILE whose extension names no supported format, and MUST describe itself, its arguments, and its options when given `--help`.
 
@@ -224,6 +258,7 @@ All of the following must hold:
 - [Discovers specifications](#REQ-016)
 - [Vets validator files](#REQ-017)
 - [Vets pinned descriptors](#REQ-018)
+- [Takes the SLCR directory and the project root](#REQ-093)
 - [Reads YAML as the schemas type it](#REQ-084)
 - [vet usage](#REQ-019)
 
@@ -324,7 +359,7 @@ In a project holding a valid specification, one with a warning, one with a viola
 <a id="REQ-016"></a>
 #### 1.3.5 Discovers specifications
 
-`slcr vet` MUST expand each `specs` pattern as a glob relative to the project root, in which `*` and `?` never cross a `/` and `**` does, seeing hidden files but skipping `.git` and whatever git ignores. A pattern that is invalid or matches nothing, a match that is a validator file or has no supported format's extension, and two files whose specifications share a name MUST each be a problem of the manifest, as MUST a manifest that breaks its schema, such as a pattern that leaves the project.
+`slcr vet` MUST expand each `specs` pattern as a glob relative to the SLCR directory, in which `*` and `?` never cross a `/` and `**` does, seeing hidden files but skipping `.git` and whatever git ignores. A pattern that is invalid or matches nothing, a match that is a validator file or has no supported format's extension, and two files whose specifications share a name MUST each be a problem of the manifest, as MUST a manifest that breaks its schema, such as a pattern that leaves the project.
 
 *Rationale:* A pattern that silently matches nothing would leave a specification unvetted and unchecked while every command passes.
 
@@ -363,7 +398,7 @@ A manifest whose `specs` holds `../SPEC.slcr.yml` can't be loaded, and the error
 <a id="REQ-017"></a>
 #### 1.3.6 Vets validator files
 
-In project mode, `slcr vet` MUST find every validator file in the project, however `specs` reads, by the same walk that finds specifications, and report each with a status line. Each problem MUST be labeled at its validator in the file's source: a requirement that doesn't resolve to a specification and a requirement in it, an acceptance criterion that isn't the requirement's own, a tool the manifest doesn't declare, a `with` that the tool's validator schema rejects (one problem per schema error), and a validator identical to an earlier one. Two validator files in one directory MUST be a problem of the manifest.
+In project mode, `slcr vet` MUST find every validator file in the SLCR directory, however `specs` reads, by the same walk that finds specifications, and report each with a status line. Each problem MUST be labeled at its validator in the file's source: a requirement that doesn't resolve to a specification and a requirement in it, an acceptance criterion that isn't the requirement's own, a tool the manifest doesn't declare, a `with` that the tool's validator schema rejects (one problem per schema error), and a validator identical to an earlier one. Two validator files in one directory MUST be a problem of the manifest.
 
 *Terms:* [Validator](#TERM-006), [Validator file](#TERM-007)
 
@@ -420,8 +455,49 @@ When the pinned descriptor's argv names a `with` field its schema lacks, `slcr v
 
 When the manifest declares version 0.9.0 but the pinned descriptor is 1.0.0, `slcr vet` reports both versions, with help naming `slcr tools update`.
 
+<a id="REQ-093"></a>
+#### 1.3.8 Takes the SLCR directory and the project root
+
+In project mode, `slcr vet` MUST take the project's SLCR directory from `--slcr-dir DIR`, which must hold `SLCR.toml` itself, without searching its parents, and its project root from `--project-root DIR`. Without them, the SLCR directory is found by walking up from the working directory, and the project root is the SLCR directory. It MUST read the manifest, the requirements files, and the validator files from the SLCR directory alone, never from the project root, and MUST report a validator file whose directory, at the same path under the project root, is not a directory there as a problem of the manifest. A directory that doesn't exist MUST fail the command, naming it, and either option given with a FILE MUST be a usage error.
+
+*Rationale:* A desktop application that tracks a user's repositories keeps each one's SLCR files in its own data directory, yet their validators must run against the repository as if the files were in it. A validator file's path names the code it checks, so the SLCR directory mirrors the project root's layout, and a validator file without its counterpart would fail only when `check` tried to run it.
+
+*Depends on:* [Vets the project](#REQ-015)
+
+*Terms:* [SLCR directory](#TERM-018), [Project root](#TERM-019), [Validator file](#TERM-007)
+
+*Acceptance criteria:*
+
+<a id="AC-228"></a>**Vets a project kept outside its root**
+
+With `SLCR.toml`, a specification, and `src/.validators.slcr.toml` in `app`, and a `src` directory in `repo`, `slcr vet --slcr-dir app --project-root repo` reports each file `ok`, named relative to the working directory, and exits with status 0.
+
+<a id="AC-229"></a>**Ignores validator files under the project root**
+
+With a validator file in `repo/src` that names an undeclared tool, `slcr vet --slcr-dir app --project-root repo` neither lists nor vets it.
+
+<a id="AC-230"></a>**Reports a validator file with no counterpart**
+
+With `app/lib/.validators.slcr.toml` and no `repo/lib`, `slcr vet --slcr-dir app --project-root repo` reports a problem of the manifest naming `lib` and fails.
+
+<a id="AC-231"></a>**Searches no parent of the SLCR directory**
+
+`slcr vet --slcr-dir app/src`, where only `app` holds `SLCR.toml`, fails, saying that `app/src` holds no `SLCR.toml`.
+
+<a id="AC-232"></a>**Rejects a directory that doesn't exist**
+
+`slcr vet --project-root missing` fails, naming `missing`.
+
+<a id="AC-233"></a>**Takes the directories only in project mode**
+
+`slcr vet --project-root repo SPEC.slcr.toml` is a usage error.
+
+<a id="AC-234"></a>**Describes the directories**
+
+`slcr vet --help` describes `--slcr-dir` and `--project-root`, and what each defaults to.
+
 <a id="REQ-084"></a>
-#### 1.3.8 Reads YAML as the schemas type it
+#### 1.3.9 Reads YAML as the schemas type it
 
 `slcr` MUST read a YAML file as the JSON data that the SLCR schemas describe: a plain scalar that YAML would read as a number or a boolean, such as `formatVersion: 1` or `title: 2024`, MUST fail to load where the schema expects a string, as the same value does in TOML and JSON. Quoted, the same value is a string, and only `true` and `false` are booleans.
 
@@ -434,7 +510,7 @@ When the manifest declares version 0.9.0 but the pinned descriptor is 1.0.0, `sl
 `slcr vet` given YAML files with `formatVersion: 1` and with `title: 2024` reports that each could not be loaded, labeling the value with help that it must be quoted, while the file with `title: "2024"` is `ok`.
 
 <a id="REQ-019"></a>
-#### 1.3.9 vet usage
+#### 1.3.10 vet usage
 
 `slcr vet` MUST take any number of FILEs, MUST reject a `--format` other than `human` or `json`, and MUST describe itself, its arguments, and its options when given `--help`.
 
@@ -912,6 +988,7 @@ REQUIREMENT MUST be a requirement ID spelled canonically, such as `REQ-005`; any
 All of the following must hold:
 
 - [Works on the project's manifest](#REQ-040)
+- [Takes the SLCR directory](#REQ-095)
 - [Names tools](#REQ-041)
 - [tools add](#REQ-042)
 - [tools update](#REQ-047)
@@ -931,7 +1008,7 @@ All of the following must hold:
 <a id="REQ-040"></a>
 #### 1.7.1 Works on the project's manifest
 
-Every `slcr tools` subcommand MUST find the project as `slcr vet` does, by walking up from the working directory to the nearest `SLCR.toml`, and name the manifest relative to the working directory. Outside a project it MUST fail with help on creating a manifest. A manifest whose name differs from `SLCR.toml` only in case, and one that breaks the manifest schema, MUST be errors that change nothing.
+Every `slcr tools` subcommand MUST find the project as `slcr vet` does, by walking up from the working directory to the nearest `SLCR.toml` unless given `--slcr-dir`, and name the manifest relative to the working directory. Outside a project it MUST fail with help on creating a manifest. A manifest whose name differs from `SLCR.toml` only in case, and one that breaks the manifest schema, MUST be errors that change nothing.
 
 *Depends on:* [Vets the project](#REQ-015)
 
@@ -955,8 +1032,37 @@ Beside `slcr.toml`, `slcr tools add`, `update`, and `remove` fail, saying that t
 
 When `SLCR.toml` breaks its schema, such as with a `specs` pattern or a `path` source that leaves the project, `slcr tools add`, `update`, and `remove` fail, labeling the problem, and leave it unchanged.
 
+<a id="REQ-095"></a>
+#### 1.7.2 Takes the SLCR directory
+
+Every `slcr tools` subcommand MUST take the project's SLCR directory from `--slcr-dir DIR`, as `slcr vet` does, instead of walking up from the working directory, and work on the manifest there, recording and resolving every path source relative to it wherever the command runs. None of them takes `--project-root`: they never read the project root.
+
+*Rationale:* An application that keeps a project's SLCR files outside the project manages its tools there too, and installs its descriptors before it checks it, deciding when that may use the network.
+
+*Depends on:* [Works on the project's manifest](#REQ-040), [Takes the SLCR directory and the project root](#REQ-093)
+
+*Terms:* [SLCR directory](#TERM-018)
+
+*Acceptance criteria:*
+
+<a id="AC-235"></a>**Installs from a path in the SLCR directory**
+
+Run outside `app`, `slcr tools install --slcr-dir app` installs the descriptor that `source = { path = "tools/sh.toml" }` names from `app/tools/sh.toml`.
+
+<a id="AC-236"></a>**Describes the SLCR directory**
+
+The `--help` of each of `slcr tools add`, `update`, `install`, `remove`, `list`, and `show` describes `--slcr-dir` and what it defaults to, and `--project-root` is a usage error for each.
+
+<a id="AC-253"></a>**Declares a tool in the SLCR directory**
+
+Run in `repo`, `slcr tools add ../app/tools/sh.toml --slcr-dir ../app` declares the tool in `app/SLCR.toml` with `source = { path = "tools/sh.toml" }`, while `slcr tools add sh.toml --slcr-dir ../app`, for a descriptor in `repo`, fails because it is outside the SLCR directory, and changes nothing.
+
+<a id="AC-254"></a>**Updates, removes, lists, and shows in the SLCR directory**
+
+Run outside `app`, `slcr tools update sh`, `slcr tools list`, `slcr tools show sh`, and `slcr tools remove sh`, each given `--slcr-dir app`, work on `app/SLCR.toml` and name it relative to the working directory.
+
 <a id="REQ-041"></a>
-#### 1.7.2 Names tools
+#### 1.7.3 Names tools
 
 A tool's name, the key of its entry in the manifest's `tools`, by which validators refer to it, MUST be lowercase letters and digits in dash-separated words, such as `cargo-insta`. Any other name given to a `slcr tools` subcommand MUST be a usage error.
 
@@ -969,7 +1075,7 @@ A tool's name, the key of its entry in the manifest's `tools`, by which validato
 `Nextest`, given to `slcr tools add --as`, `update`, `remove`, or `show`, is a usage error saying that it is not a valid tool name.
 
 <a id="REQ-042"></a>
-#### 1.7.3 tools add
+#### 1.7.4 tools add
 
 `slcr tools` MUST have an `add` subcommand that declares a tool in the project manifest from its descriptor's source.
 
@@ -983,9 +1089,9 @@ All of the following must hold:
 *Terms:* [Tool descriptor](#TERM-008), [Tool](#TERM-014)
 
 <a id="REQ-043"></a>
-##### 1.7.3.1 Declares and installs a descriptor
+##### 1.7.4.1 Declares and installs a descriptor
 
-`slcr tools add SOURCE` MUST fetch the descriptor at SOURCE, check that it is a valid descriptor, install it in the descriptor store, and only then declare it in the manifest under its `name`, or under NAME given `--as NAME`, with its `version`, its source, and its pin, reporting `SLCR.toml: added tool NAME VERSION`. A path is recorded relative to the project root, wherever the command runs. The manifest MUST be edited in place, keeping the rest of it as it was.
+`slcr tools add SOURCE` MUST fetch the descriptor at SOURCE, check that it is a valid descriptor, install it in the descriptor store, and only then declare it in the manifest under its `name`, or under NAME given `--as NAME`, with its `version`, its source, and its pin, reporting `SLCR.toml: added tool NAME VERSION`. A path is recorded relative to the SLCR directory, wherever the command runs. The manifest MUST be edited in place, keeping the rest of it as it was.
 
 *Terms:* [Project manifest](#TERM-003), [Tool descriptor](#TERM-008), [Descriptor store](#TERM-009), [Pin](#TERM-010)
 
@@ -999,12 +1105,12 @@ All of the following must hold:
 
 `slcr tools add tools/cargo-nextest.toml --as nextest` declares it as `[tools.nextest]`.
 
-<a id="AC-128"></a>**Records a path relative to the project root**
+<a id="AC-128"></a>**Records a path relative to the SLCR directory**
 
 Run in `crates/api`, `slcr tools add ../../tools/cargo-nextest.toml` records `source = { path = "tools/cargo-nextest.toml" }`.
 
 <a id="REQ-044"></a>
-##### 1.7.3.2 Never replaces a declared tool
+##### 1.7.4.2 Never replaces a declared tool
 
 Adding the descriptor already declared under a name MUST change nothing and say so. Adding a different descriptor under a name already taken MUST fail, installing nothing and changing nothing, with help to choose another name with `--as` or to remove the declared tool first.
 
@@ -1023,7 +1129,7 @@ Adding the same descriptor twice reports `SLCR.toml: tool cargo-nextest 1.0.0 is
 Adding a newer cargo-nextest descriptor while cargo-nextest is declared fails, with help naming `--as` and `slcr tools remove`, leaves the manifest unchanged, and doesn't install the newer descriptor.
 
 <a id="REQ-045"></a>
-##### 1.7.3.3 Accepts only a sound descriptor from a trusted source
+##### 1.7.4.3 Accepts only a sound descriptor from a trusted source
 
 SOURCE MUST be either a path inside the project, still inside it after following symlinks, or an `https://` URL; any other URL MUST be a usage error. URLs MUST be fetched over HTTPS only, even across redirects, and a body larger than 1 MiB refused. A source that can't be fetched or doesn't exist, bytes that aren't UTF-8 or TOML, a descriptor that breaks its schema or its invariants, and a descriptor store that can't be created MUST each fail, declaring and installing nothing.
 
@@ -1066,7 +1172,7 @@ A descriptor whose argv uses `{with.name}`, which its validator schema doesn't d
 When a file stands where the data directory would be, `slcr tools add` fails, saying that it could not create the descriptor store, and leaves the manifest unchanged.
 
 <a id="REQ-046"></a>
-##### 1.7.3.4 tools add usage
+##### 1.7.4.4 tools add usage
 
 `slcr tools add` MUST describe itself, SOURCE, and `--as` when given `--help`.
 
@@ -1077,7 +1183,7 @@ When a file stands where the data directory would be, `slcr tools add` fails, sa
 `slcr tools add --help` describes SOURCE, as a path or an HTTPS URL, and `--as`.
 
 <a id="REQ-047"></a>
-#### 1.7.4 tools update
+#### 1.7.5 tools update
 
 `slcr tools` MUST have an `update` subcommand that re-fetches a declared tool's descriptor from its recorded source and re-pins the tool to it.
 
@@ -1093,7 +1199,7 @@ All of the following must hold:
 *Terms:* [Pin](#TERM-010), [Tool](#TERM-014)
 
 <a id="REQ-048"></a>
-##### 1.7.4.1 Re-fetches and re-pins
+##### 1.7.5.1 Re-fetches and re-pins
 
 `slcr tools update NAME` MUST re-fetch the descriptor of the tool declared as NAME from its recorded source, check and install it as `slcr tools add` does, and re-pin the entry, editing only its `version` and `pin` values in place, so that the rest of the manifest, comments and spacing included, stays as it was. It reports `updated tool NAME OLD -> NEW`, or `re-pinned tool NAME VERSION` when only the bytes changed. The descriptor it replaces MUST stay in the store, where other projects may pin it.
 
@@ -1116,7 +1222,7 @@ After a comment is added to the descriptor, `slcr tools update cargo-nextest` re
 Updating a tool in a manifest with comments, aligned `=` signs, and a second tool changes only that tool's `version` and `pin` values.
 
 <a id="REQ-049"></a>
-##### 1.7.4.2 Leaves an up-to-date tool alone
+##### 1.7.5.2 Leaves an up-to-date tool alone
 
 When the source serves exactly the bytes the entry pins, `slcr tools update` MUST leave the manifest unchanged and report the tool up to date, installing the descriptor if the store lacks it.
 
@@ -1133,7 +1239,7 @@ When the source serves exactly the bytes the entry pins, `slcr tools update` MUS
 When the store lost the pinned descriptor, so that `slcr vet` fails, `slcr tools update` reports the tool up to date and installs it, after which `slcr vet` passes.
 
 <a id="REQ-050"></a>
-##### 1.7.4.3 Changes nothing on failure
+##### 1.7.5.3 Changes nothing on failure
 
 A NAME the manifest doesn't declare, and a recorded source that can't be fetched, doesn't exist, leads outside the project (by a symlink, say), or serves bytes that aren't a valid descriptor, MUST fail the update, changing neither the manifest nor the store. So MUST a descriptor store that can't be created.
 
@@ -1174,7 +1280,7 @@ When the source serves a descriptor whose argv uses an undeclared `with` field, 
 When a file stands where the data directory would be, the update fails, saying that it could not create the descriptor store, and leaves the manifest unchanged.
 
 <a id="REQ-051"></a>
-##### 1.7.4.4 tools update usage
+##### 1.7.5.4 tools update usage
 
 `slcr tools update` MUST describe itself and NAME when given `--help`.
 
@@ -1185,7 +1291,7 @@ When a file stands where the data directory would be, the update fails, saying t
 `slcr tools update --help` describes NAME as the name the tool is declared under.
 
 <a id="REQ-052"></a>
-#### 1.7.5 tools install
+#### 1.7.6 tools install
 
 `slcr tools` MUST have an `install` subcommand that fills the descriptor store with every descriptor the manifest pins, exactly as pinned.
 
@@ -1201,7 +1307,7 @@ All of the following must hold:
 *Terms:* [Descriptor store](#TERM-009), [Pin](#TERM-010)
 
 <a id="REQ-053"></a>
-##### 1.7.5.1 Installs what the store lacks
+##### 1.7.6.1 Installs what the store lacks
 
 `slcr tools install` MUST install each descriptor that the manifest's tools pin and that the store lacks or holds corrupted. It fetches the descriptor from the tool's recorded source, and installs it only once its bytes hash to the pin, it is a valid descriptor, and its version is the declared one. A descriptor already installed MUST be left alone, unfetched. Each tool gets a status line on stdout: `installed PIN`, `installed PIN, replacing a corrupted copy`, `already installed`, or `failed`.
 
@@ -1232,7 +1338,7 @@ In a fresh clone whose store is empty, `slcr vet` reports the tool's descriptor 
 With no tools declared, `slcr tools install` says that there is nothing to install, and succeeds.
 
 <a id="REQ-054"></a>
-##### 1.7.5.2 Never re-pins
+##### 1.7.6.2 Never re-pins
 
 `slcr tools install` MUST NOT write the manifest, nor install any bytes but the pinned ones. A source that now serves other bytes, a pinned descriptor that is invalid, and a declared version that isn't the pinned descriptor's each fail that tool, with help naming `slcr tools update` where re-pinning would fix it.
 
@@ -1255,7 +1361,7 @@ When the pin is of an invalid descriptor, the tool fails, explaining why it is i
 When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, the tool fails as `slcr vet` reports it, and nothing is installed.
 
 <a id="REQ-055"></a>
-##### 1.7.5.3 Reports every tool
+##### 1.7.6.3 Reports every tool
 
 One tool failing MUST NOT stop `slcr tools install` from installing the others. Each failure is a diagnostic on stderr, and the command fails, counting the tools that failed, if any did.
 
@@ -1270,7 +1376,7 @@ When one tool's source serves other bytes, one is installed, and one is not, the
 When a tool's `url` can't be reached, the tool fails, saying why, and neither the manifest nor the store changes.
 
 <a id="REQ-056"></a>
-##### 1.7.5.4 tools install usage
+##### 1.7.6.4 tools install usage
 
 `slcr tools install` MUST take no arguments, and MUST describe itself when given `--help`.
 
@@ -1285,7 +1391,7 @@ When a tool's `url` can't be reached, the tool fails, saying why, and neither th
 `slcr tools install cargo-nextest` is a usage error naming the unexpected argument.
 
 <a id="REQ-057"></a>
-#### 1.7.6 tools remove
+#### 1.7.7 tools remove
 
 `slcr tools` MUST have a `remove` subcommand that removes a tool from the project manifest.
 
@@ -1298,7 +1404,7 @@ All of the following must hold:
 *Terms:* [Tool](#TERM-014)
 
 <a id="REQ-058"></a>
-##### 1.7.6.1 Removes the entry
+##### 1.7.7.1 Removes the entry
 
 `slcr tools remove NAME` MUST delete the entry of the tool declared as NAME, with the comment above it, and the `tools` table too if no tool is left, keeping the rest of the manifest as it was, and report `removed tool NAME VERSION`. The tool's descriptor MUST stay in the store, where other projects may pin it.
 
@@ -1315,7 +1421,7 @@ After `slcr tools add` then `slcr tools remove cargo-nextest`, the manifest is b
 Removing one of two tools from a commented manifest removes that tool's entry and the comment above it, and nothing else.
 
 <a id="REQ-059"></a>
-##### 1.7.6.2 Requires a declared tool
+##### 1.7.7.2 Requires a declared tool
 
 `slcr tools remove` MUST fail for a NAME the manifest doesn't declare, changing nothing, with help naming the tools it does declare, or `slcr tools add` if it declares none.
 
@@ -1326,7 +1432,7 @@ Removing one of two tools from a commented manifest removes that tool's entry an
 `slcr tools remove cargo-nextest` in a project that declares no tools fails, with help to declare one with `slcr tools add`, and leaves the manifest unchanged.
 
 <a id="REQ-060"></a>
-##### 1.7.6.3 tools remove usage
+##### 1.7.7.3 tools remove usage
 
 `slcr tools remove` MUST describe itself and NAME when given `--help`.
 
@@ -1337,7 +1443,7 @@ Removing one of two tools from a commented manifest removes that tool's entry an
 `slcr tools remove --help` describes NAME as the name the tool is declared under.
 
 <a id="REQ-061"></a>
-#### 1.7.7 tools list
+#### 1.7.8 tools list
 
 `slcr tools` MUST have a `list` subcommand that lists the tools the project manifest declares, and whether this machine holds each one's descriptor.
 
@@ -1350,7 +1456,7 @@ All of the following must hold:
 *Terms:* [Tool](#TERM-014)
 
 <a id="REQ-062"></a>
-##### 1.7.7.1 Lists every declared tool
+##### 1.7.8.1 Lists every declared tool
 
 `slcr tools list` MUST write a table of every tool the manifest declares: its name, its version, whether the descriptor store holds its descriptor (`installed` or `not installed`), its source, and its pin. It MUST only read the store, never fetching or installing a descriptor. A manifest that declares no tools MUST be reported as such, with help to declare one.
 
@@ -1367,7 +1473,7 @@ With ast-grep and cargo-nextest declared and only cargo-nextest installed, `slcr
 With no tools declared, `slcr tools list` says so and suggests `slcr tools add <SOURCE>`.
 
 <a id="REQ-063"></a>
-##### 1.7.7.2 Lists in JSON
+##### 1.7.8.2 Lists in JSON
 
 `slcr tools list --format json` MUST write one JSON document instead: the manifest's path and `tools`, each with its `key`, `version`, `source`, `pin`, and `descriptor` (`installed` or `not-installed`). `--format human` is the default, and any other format MUST be a usage error.
 
@@ -1382,7 +1488,7 @@ With no tools declared, `slcr tools list` says so and suggests `slcr tools add <
 `slcr tools list --format yaml` is a usage error listing `human` and `json`.
 
 <a id="REQ-064"></a>
-##### 1.7.7.3 tools list usage
+##### 1.7.8.3 tools list usage
 
 `slcr tools list` MUST describe itself and `--format` when given `--help`.
 
@@ -1393,7 +1499,7 @@ With no tools declared, `slcr tools list` says so and suggests `slcr tools add <
 `slcr tools list --help` describes `--format` and its values.
 
 <a id="REQ-065"></a>
-#### 1.7.8 tools show
+#### 1.7.9 tools show
 
 `slcr tools` MUST have a `show` subcommand that prints the descriptor a declared tool pins: how the tool runs, and what each validator's `with` must hold.
 
@@ -1409,7 +1515,7 @@ All of the following must hold:
 *Terms:* [Validator](#TERM-006), [Tool descriptor](#TERM-008)
 
 <a id="REQ-066"></a>
-##### 1.7.8.1 Prints the pinned descriptor
+##### 1.7.9.1 Prints the pinned descriptor
 
 `slcr tools show NAME` MUST print the descriptor that the tool declared as NAME pins, as the store holds it: its name, version, source, and pin; its argv, working directory, environment, and timeout; the exit codes that pass; and the JSON Schema every validator's `with` must satisfy.
 
@@ -1422,7 +1528,7 @@ All of the following must hold:
 `slcr tools show cargo-nextest` prints its source, pin, argv with its `{with.test}` placeholder, `cwd: nearest Cargo.toml`, `env: none`, `timeout: none`, `pass: 0`, and its validator schema.
 
 <a id="REQ-067"></a>
-##### 1.7.8.2 Shows in JSON
+##### 1.7.9.2 Shows in JSON
 
 `slcr tools show NAME --format json` MUST write one JSON document instead, holding the tool's `key`, and the descriptor's `name`, `version`, `source`, `pin`, `invoke`, `results`, and `schema`. `--format human` is the default.
 
@@ -1433,7 +1539,7 @@ All of the following must hold:
 `slcr tools show cargo-nextest --format json` writes the document, its `invoke` holding the argv as written.
 
 <a id="REQ-068"></a>
-##### 1.7.8.3 Shows only what the project pins
+##### 1.7.9.3 Shows only what the project pins
 
 `slcr tools show` MUST fail, changing nothing, for a NAME the manifest doesn't declare, with help listing the tools it does, and, with the problem `slcr vet` reports, for a descriptor the store doesn't hold, holds corrupted, or holds with another version than the declared one. It MUST only read the store, never fetching or installing a descriptor.
 
@@ -1460,7 +1566,7 @@ When the store's copy no longer hashes to its pin, `slcr tools show` fails, sayi
 When the manifest declares 0.9.0 but the pinned descriptor is 1.0.0, `slcr tools show` fails with help naming `slcr tools update`.
 
 <a id="REQ-069"></a>
-##### 1.7.8.4 tools show usage
+##### 1.7.9.4 tools show usage
 
 `slcr tools show` MUST describe itself, NAME, and `--format` when given `--help`.
 
@@ -1488,6 +1594,7 @@ All of the following must hold:
 - [Runs validators in parallel](#REQ-077)
 - [Stops when interrupted](#REQ-078)
 - [Reports in JSON](#REQ-079)
+- [Runs validators against the project root](#REQ-094)
 - [check usage](#REQ-080)
 
 *Terms:* [Validator](#TERM-006), [Satisfaction status](#TERM-015)
@@ -1675,8 +1782,29 @@ On Unix, SIGINT sent while the second of five validators runs `sleep 30` in the 
 
 When vetting fails, `slcr check --format json` writes vet's report and no run, and nothing runs.
 
+<a id="REQ-094"></a>
+#### 1.8.10 Runs validators against the project root
+
+`slcr check` MUST take `--slcr-dir` and `--project-root` as `slcr vet` does, and install, vet, and check the project they name. It MUST run each validator against the project root: `{slcr.project_root}`, the `project` working directory, and the top of a `nearest` search MUST be the project root, and `{slcr.validator_dir}`, the `validator-dir` working directory, and the start of a `nearest` search MUST be the directory at the validator file's path, relative to the SLCR directory, under the project root.
+
+*Rationale:* Validators check the code, wherever the SLCR files that name them are kept, so a project checks the same whether its SLCR directory is its root or kept elsewhere.
+
+*Depends on:* [Takes the SLCR directory and the project root](#REQ-093)
+
+*Terms:* [SLCR directory](#TERM-018), [Project root](#TERM-019)
+
+*Acceptance criteria:*
+
+<a id="AC-237"></a>**Runs validators in the project root**
+
+In the project of AC-228, `slcr check --slcr-dir app --project-root repo` runs green validators that see `{slcr.project_root}` as `repo`, `{slcr.validator_dir}` as `repo/src`, and their working directory as `repo/src` under `validator-dir`, as `repo` under `project`, and as `repo` under a `nearest` search for a `Cargo.toml` that only `repo` holds.
+
+<a id="AC-238"></a>**Describes the directories**
+
+`slcr check --help` describes `--slcr-dir` and `--project-root`, and what each defaults to.
+
 <a id="REQ-080"></a>
-#### 1.8.10 check usage
+#### 1.8.11 check usage
 
 `slcr check` MUST describe itself and its options, `--jobs`, `--offline`, `--deny-warnings`, and `--format`, when given `--help`.
 
@@ -1747,7 +1875,7 @@ What `slcr` does whichever subcommand runs: its top-level help, and the options 
 <a id="SEC-005"></a>
 ## 3. Library
 
-The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them. Through it they read, vet, write, render, slice, and query documents exactly as the CLI does, so that there is one definition of the formats.
+The `slcr` crate is also a library, for programs that keep SLCR documents somewhere other than files beside the code, such as a server that stores them, or a desktop application that keeps a repository's SLCR files in its own data directory and checks the repository with them. Through it they read, vet, write, render, slice, and query documents, and create, install, and check projects and manage their tools, exactly as the CLI does, so that there is one definition of the formats.
 
 <a id="REQ-085"></a>
 ### 3.1 Does what the CLI does
@@ -1858,7 +1986,7 @@ A manifest with an unknown key, one without `specs`, and one whose pin isn't `bl
 <a id="REQ-091"></a>
 #### 3.1.6 Never fetches descriptors
 
-The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project held in memory.
+The library MUST NOT fetch any tool's descriptor, from its URL or from its path, when it reads, writes, or vets a manifest or a project, in memory or on disk, or when it checks a project. Only installing, declaring, and updating a project's tools, when its caller asks, fetch them.
 
 *Rationale:* A program that stores manifests holds sources its users wrote. Fetching them would let a user make it request any URL it can reach, or read any path.
 
@@ -1883,6 +2011,154 @@ The library MUST read back the JSON document `slcr check --format json` writes, 
 
 What `slcr check --format json` writes for a project with red and green validators, and for one that fails vetting, reads back with each validator and requirement status, and serializes back to the same JSON, while an empty object, an unknown field, an unknown status, and an unqualified requirement are rejected.
 
+<a id="REQ-096"></a>
+### 3.2 Works on a project kept anywhere
+
+The `slcr` crate MUST let a program create, vet, install, and check a project on disk whose SLCR directory and project root it names, and whose descriptor store it names, and declare, update, and remove its tools, producing what `slcr init`, `slcr vet`, `slcr tools`, and `slcr check` produce for the same project.
+
+*Rationale:* A desktop application that tracks a user's repositories keeps each one's SLCR files in its own data directory, and runs SLCR in its own process, alongside other projects' checks, rather than through the CLI.
+
+All of the following must hold:
+
+- [Vets a project kept anywhere](#REQ-097)
+- [Installs descriptors only when asked](#REQ-098)
+- [Checks as check does](#REQ-099)
+- [Stops when its caller cancels](#REQ-100)
+- [Runs tools on its caller's PATH](#REQ-101)
+- [Shares nothing between projects](#REQ-102)
+- [Creates a project kept anywhere](#REQ-104)
+- [Manages tools as tools does](#REQ-105)
+
+*Terms:* [SLCR directory](#TERM-018), [Project root](#TERM-019), [Descriptor store](#TERM-009)
+
+<a id="REQ-097"></a>
+#### 3.2.1 Vets a project kept anywhere
+
+The library MUST vet a project given its SLCR directory, its project root, and a descriptor store, including its validator files and the descriptors its tools pin, and MUST report what it finds in the JSON document `slcr vet --format json --project-root ROOT` writes when run in the SLCR directory.
+
+*Depends on:* [Takes the SLCR directory and the project root](#REQ-093), [Reports in JSON](#REQ-014), [Vets validator files](#REQ-017), [Vets pinned descriptors](#REQ-018)
+
+*Acceptance criteria:*
+
+<a id="AC-239"></a>**Reports a project kept anywhere as vet does**
+
+For the project of AC-228, one with a validator file whose directory the project root lacks, and one whose store lacks a pinned descriptor, the library's report is the bytes `slcr vet --format json --project-root ../repo` writes in `app` with the same store.
+
+<a id="REQ-098"></a>
+#### 3.2.2 Installs descriptors only when asked
+
+The library MUST install every descriptor a project's manifest pins that a descriptor store its caller names lacks, as `slcr tools install --slcr-dir` does, and report each tool's outcome as `slcr tools install` does, and it MUST NOT fetch a descriptor except while installing, declaring, or updating a project's tools.
+
+*Rationale:* A program decides when it may use the network; a check that fetched would make every check a possible network request.
+
+*Depends on:* [Installs what the store lacks](#REQ-053), [Takes the SLCR directory](#REQ-095)
+
+*Acceptance criteria:*
+
+<a id="AC-240"></a>**Installs into the store it is given**
+
+Installing a project whose named store lacks a descriptor sourced from a URL on a local server fetches it into that store, reports it `installed` with its pin, and leaves the store `slcr` uses by default untouched.
+
+<a id="REQ-099"></a>
+#### 3.2.3 Checks as check does
+
+The library MUST check a project given its SLCR directory, its project root, a descriptor store, how many validators may run at once, and whether warnings are denied, as `slcr check --offline` does, never installing a descriptor, and MUST return the report `slcr check --format json` writes. It MUST run on its caller's asynchronous runtime rather than start one of its own, and MUST give its caller each validator's status as soon as `slcr check` would write it, in the same order.
+
+*Depends on:* [Installs and vets before running](#REQ-076), [Runs validators in parallel](#REQ-077), [Reports in JSON](#REQ-079), [Runs validators against the project root](#REQ-094)
+
+*Acceptance criteria:*
+
+<a id="AC-241"></a>**Reports a check as check does**
+
+For a project kept outside its root with green and red validators, the library's report is what `slcr check --offline --format json --project-root ../repo` writes in `app`, apart from each run's duration.
+
+<a id="AC-242"></a>**Runs on its caller's runtime**
+
+A check started from a task on a running multi-threaded tokio runtime completes, without starting a runtime of its own.
+
+<a id="AC-243"></a>**Reports statuses as they finish**
+
+The statuses the caller receives during a check are, in order, the status lines `slcr check` writes for the same project.
+
+<a id="AC-244"></a>**Never installs**
+
+When the store lacks a pinned descriptor, the check reports vet's problem, runs nothing, and sends its source no connection.
+
+<a id="REQ-100"></a>
+#### 3.2.4 Stops when its caller cancels
+
+The library MUST let its caller cancel a check, and on cancellation MUST do what `slcr check` does when interrupted: stop every validator still running, together with every process it started, start no other, and report the check interrupted. It MUST NOT listen for Ctrl-C itself.
+
+*Rationale:* In an application, the user cancels with a button; a library that took over the process's SIGINT would take it from the application too.
+
+*Depends on:* [Stops when interrupted](#REQ-078)
+
+*Acceptance criteria:*
+
+<a id="AC-245"></a>**Stops every validator when cancelled**
+
+On Unix, cancelling while the second of five validators runs `sleep 30` in the background returns an interrupted report with one validator finished, kills the `sleep`, and never starts the third validator.
+
+<a id="REQ-101"></a>
+#### 3.2.5 Runs tools on its caller's PATH
+
+The library MUST let its caller name the `PATH` on which a check finds each tool's program and which each validator inherits, in place of the process's own, and MUST otherwise use the process's own, as `slcr check` does.
+
+*Rationale:* An application started from the macOS Finder or Dock inherits a minimal `PATH` that lacks the tools a developer's shell finds, such as `cargo`.
+
+*Acceptance criteria:*
+
+<a id="AC-246"></a>**Finds tools on the given PATH**
+
+With a tool's program in a directory the process's `PATH` lacks, a check given a `PATH` that holds it runs the validator green and the validator sees that `PATH`, while one given none reports that the program was not found on PATH.
+
+<a id="REQ-102"></a>
+#### 3.2.6 Shares nothing between projects
+
+The library MUST NOT read or change the process's working directory, change its environment, or handle its signals while it works on a project, and MUST NOT read the environment for anything `slcr` itself doesn't read it for: the `PATH` a check falls back to, where git's global excludes are, and a proxy for fetching. A program can then work on several projects at once.
+
+*Acceptance criteria:*
+
+<a id="AC-247"></a>**Checks two projects at once**
+
+Two projects checked at once, from a working directory inside neither, each return the report checking it alone returns.
+
+<a id="REQ-104"></a>
+#### 3.2.7 Creates a project kept anywhere
+
+The library MUST create a specification in an SLCR directory its caller names, and, when that directory holds no `SLCR.toml`, the manifest that lists it, writing what `slcr init --slcr-dir` writes for the same name and title. It MUST NOT overwrite a file or create a directory, and creates both files or neither.
+
+*Depends on:* [Takes the SLCR directory](#REQ-103), [Never overwrites](#REQ-009)
+
+*Terms:* [SLCR directory](#TERM-018), [Project manifest](#TERM-003)
+
+*Acceptance criteria:*
+
+<a id="AC-255"></a>**Creates what init creates**
+
+Creating a project named `shop` in an empty directory writes the bytes `slcr init --slcr-dir` writes there with `--name shop`, and creating it again fails, changing nothing.
+
+<a id="REQ-105"></a>
+#### 3.2.8 Manages tools as tools does
+
+The library MUST declare a tool from a source, update a declared tool, and remove one, in the manifest of an SLCR directory its caller names and with a descriptor store its caller names, as `slcr tools add`, `update`, and `remove` given `--slcr-dir` do: editing the manifest in place, keeping a path source inside the SLCR directory, and changing nothing when they fail. Declaring and updating fetch the descriptor; removing never does.
+
+*Rationale:* An application that keeps a repository's SLCR files manages the repository's tools too, and fetches only when its user asks it to.
+
+*Depends on:* [Declares and installs a descriptor](#REQ-043), [Never replaces a declared tool](#REQ-044), [Accepts only a sound descriptor from a trusted source](#REQ-045), [Re-fetches and re-pins](#REQ-048), [Changes nothing on failure](#REQ-050), [Removes the entry](#REQ-058), [Takes the SLCR directory](#REQ-095)
+
+*Terms:* [Tool](#TERM-014), [Descriptor store](#TERM-009)
+
+*Acceptance criteria:*
+
+<a id="AC-256"></a>**Declares, updates, and removes as tools does**
+
+Declaring a tool sourced from a URL on a local server, updating it once the server serves a new version, and removing it leave the manifest and the named store with the bytes `slcr tools add`, `update`, and `remove` leave after the same steps.
+
+<a id="AC-257"></a>**Changes nothing when it fails**
+
+Declaring a tool whose source serves an invalid descriptor, and one whose path is outside the SLCR directory, each fail and leave the manifest and the store unchanged.
+
 <a id="SEC-002"></a>
 ## 4. Glossary
 
@@ -1902,7 +2178,7 @@ A requirement that no validator checks and nothing refines, whose status is ther
 <dt><a id="TERM-009"></a>Descriptor store</dt>
 <dd>
 
-A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine. Only `slcr tools add`, `update`, and `install`, and `slcr check`, ever fill it.
+A content-addressed store of tool descriptors in `slcr`'s data directory, filed by pin and shared by every project on the machine; a program using the library may name a store of its own. Only `slcr tools add`, `update`, and `install`, `slcr check`, and the library's install, declare, and update ever fill it.
 
 </dd>
 <dt><a id="TERM-005"></a>Finding</dt>
@@ -1920,7 +2196,7 @@ Something vetting reports about a specification. A violation breaks an invariant
 <dt><a id="TERM-004"></a>Project</dt>
 <dd>
 
-The directory tree under a project manifest. A command that works on a project finds it by walking up from the working directory to the nearest `SLCR.toml`, and names files relative to the working directory.
+A project manifest and what it describes: the SLCR files in its SLCR directory, and the code under its project root, which is the same directory unless a command is given `--project-root`. A command that works on a project finds it by walking up from the working directory to the nearest `SLCR.toml`, unless given `--slcr-dir`, and names files relative to the working directory.
 
 </dd>
 <dt><a id="TERM-003"></a>Project manifest</dt>
@@ -1928,7 +2204,13 @@ The directory tree under a project manifest. A command that works on a project f
 
 *Also called:* SLCR.toml
 
-The file `SLCR.toml`, whose directory is a project's root. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run.
+The file `SLCR.toml`, whose directory is a project's SLCR directory. Its `specs` list the project's requirements files as globs relative to that directory, and its `tools` declare and pin the tools that the project's validators run.
+
+</dd>
+<dt><a id="TERM-019"></a>Project root</dt>
+<dd>
+
+The directory a project's validators check: the root of the code its specifications describe. A descriptor names it `{slcr.project_root}` and `cwd = "project"`, and a `nearest` search stops there, and a validator file checks the directory at its own path, relative to the SLCR directory, under the project root. It is the SLCR directory unless a command is given `--project-root`, as when a desktop application keeps a repository's SLCR files in its own data directory.
 
 </dd>
 <dt><a id="TERM-011"></a>Rendering</dt>
@@ -1949,6 +2231,12 @@ A file that holds one specification, in the format its extension names: YAML (`.
 *Also called:* Satisfied, Unsatisfied, Unknown
 
 What `slcr check` concludes about a requirement: satisfied or unsatisfied when its validators and its refiners decide it, and unknown when they leave it open. Statuses combine in strong Kleene logic, so an unknown never hides a result that every possibility agrees on.
+
+</dd>
+<dt><a id="TERM-018"></a>SLCR directory</dt>
+<dd>
+
+The directory that holds a project's manifest, and with it the project's SLCR files: its requirements files, its validator files, and the descriptors it keeps as `{ path }` sources. `specs` patterns and `{ path }` sources are relative to it, and commands find validator files by walking it. Commands find it by walking up from the working directory to the nearest `SLCR.toml`, unless given `--slcr-dir`, and it is the project root unless they are given `--project-root`.
 
 </dd>
 <dt><a id="TERM-012"></a>SLCR query profile</dt>
@@ -1992,7 +2280,7 @@ One entry of a validator file: a qualified requirement, such as `slcr/REQ-002`, 
 <dt><a id="TERM-007"></a>Validator file</dt>
 <dd>
 
-A file named `.validators.slcr.toml`, `.validators.slcr.json`, `.validators.slcr.yaml`, or `.validators.slcr.yml`, holding a list of validators. A directory holds at most one, and commands find every one in the project, so validators can sit beside the code they check.
+A file named `.validators.slcr.toml`, `.validators.slcr.json`, `.validators.slcr.yaml`, or `.validators.slcr.yml`, holding a list of validators. A directory holds at most one, and commands find every one in the SLCR directory. Its path there names the code its validators check, at the same path under the project root, so validators sit beside that code, or mirror its place when the SLCR directory is kept elsewhere.
 
 </dd>
 </dl>

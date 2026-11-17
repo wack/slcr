@@ -16,6 +16,7 @@ use crate::spec::graph::UnvettedDocument;
 
 pub(crate) use discover::discover;
 pub(crate) use index::{IndexedSpec, SpecIndex};
+pub(crate) use layout::Layout;
 pub use problem::Problem;
 pub(crate) use qualified::QualifiedRequirementId;
 
@@ -23,16 +24,20 @@ pub(crate) use qualified::QualifiedRequirementId;
 pub(crate) mod discover;
 /// The project's specifications by name, and resolving qualified IDs.
 pub(crate) mod index;
+/// Where a project is: its SLCR directory and its project root.
+mod layout;
 /// What can be wrong with the project as a whole.
 pub(crate) mod problem;
 /// `<spec-name>/REQ-<n>`: a requirement named from outside its spec.
 pub(crate) mod qualified;
+/// Vetting a project on disk.
+pub(crate) mod vet;
 
-/// A file of a project, found by [discover]: a specification or a
-/// validator file.
+/// A file of a project, found by [discover] in its SLCR directory: a
+/// specification or a validator file.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ProjectFile {
-    /// Relative to the project root, which orders the project's files.
+    /// Relative to the SLCR directory, which orders the project's files.
     relative: PathBuf,
     /// Relative to the working directory: how messages name the file.
     shown: PathBuf,
@@ -40,10 +45,10 @@ pub(crate) struct ProjectFile {
 }
 
 impl ProjectFile {
-    /// The file at `relative` in the project rooted at `root`, named
+    /// The file at `relative` in the SLCR directory `slcr_dir`, named
     /// relative to `cwd`. Both are absolute.
-    pub(crate) fn new(root: &Path, cwd: &Path, relative: PathBuf) -> Self {
-        let absolute = root.join(&relative);
+    pub(crate) fn new(slcr_dir: &Path, cwd: &Path, relative: PathBuf) -> Self {
+        let absolute = slcr_dir.join(&relative);
         Self {
             shown: relative_to(&absolute, cwd),
             relative,
@@ -51,7 +56,7 @@ impl ProjectFile {
         }
     }
 
-    /// The path relative to the project root.
+    /// The path relative to the SLCR directory.
     pub(crate) fn relative(&self) -> &Path {
         &self.relative
     }

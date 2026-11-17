@@ -15,9 +15,9 @@ use crate::validators::is_validator_file;
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Discovery {
     /// The specification files, each once, ordered by their path relative
-    /// to the project root.
+    /// to the SLCR directory.
     pub(crate) files: Vec<ProjectFile>,
-    /// Every validator file in the project, ordered the same way.
+    /// Every validator file in the SLCR directory, ordered the same way.
     pub(crate) validators: Vec<ProjectFile>,
     /// Every pattern that couldn't be honored, every match that isn't a
     /// specification file, and every directory with more than one
@@ -25,17 +25,18 @@ pub(crate) struct Discovery {
     pub(crate) problems: Vec<Problem>,
 }
 
-/// Expand `specs`, the manifest's patterns, in the project rooted at
-/// `root`, and find its validator files, naming files relative to `cwd`.
-/// Both paths are absolute.
+/// Expand `specs`, the manifest's patterns, in the project's SLCR
+/// directory, `slcr_dir`, and find its validator files there, naming files
+/// relative to `cwd`. Both paths are absolute. Nothing is read from the
+/// project root, unless it is the SLCR directory.
 ///
-/// A pattern is a glob relative to the root, in which `*` and `?` never
-/// match a `/` but do match a leading dot, and `**` matches any number of
-/// directories. The walk sees hidden files and directories, other than
-/// `.git`, and skips what git ignores: in a git repository, the
-/// `.gitignore` files of the project and of its parent directories up to
-/// the repository's root, `.git/info/exclude`, and git's global excludes.
-/// Outside a git repository, as for git, nothing is ignored.
+/// A pattern is a glob relative to the SLCR directory, in which `*` and
+/// `?` never match a `/` but do match a leading dot, and `**` matches any
+/// number of directories. The walk sees hidden files and directories,
+/// other than `.git`, and skips what git ignores: in a git repository, the
+/// `.gitignore` files of the SLCR directory and of its parent directories
+/// up to the repository's root, `.git/info/exclude`, and git's global
+/// excludes. Outside a git repository, as for git, nothing is ignored.
 ///
 /// A validator file is any file named `.validators.slcr.<ext>` that the
 /// same walk sees, whether or not a pattern matches it.
@@ -44,17 +45,17 @@ pub(crate) struct Discovery {
 /// matches nothing, a match that is a validator file or has no
 /// specification format's extension, a directory with two validator
 /// files, and a directory that can't be read.
-pub(crate) fn discover(root: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Discovery {
+pub(crate) fn discover(slcr_dir: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Discovery {
     let mut problems = Vec::new();
     let (set, patterns) = compile(specs, &mut problems);
-    let files = walk(root, cwd, &mut problems);
-    classify(root, cwd, files, &set, &patterns, problems)
+    let files = walk(slcr_dir, cwd, &mut problems);
+    classify(slcr_dir, cwd, files, &set, &patterns, problems)
 }
 
 /// [discover] `specs` among `paths`, the files of a project held in memory,
-/// relative to its root, rather than in a directory: nothing is ignored, and
-/// files are named by these paths. Each path that no pattern matches is
-/// returned too, in order.
+/// relative to its SLCR directory, rather than in a directory on disk:
+/// nothing is ignored, and files are named by these paths. Each path that
+/// no pattern matches is returned too, in order.
 pub(crate) fn discover_among(
     paths: impl IntoIterator<Item = PathBuf>,
     specs: &[ProjectGlob],
@@ -68,17 +69,17 @@ pub(crate) fn discover_among(
         .cloned()
         .collect();
     unmatched.sort();
-    // With an empty root and working directory, a file's relative, shown,
-    // and absolute paths are all the path it was given.
+    // With an empty SLCR directory and working directory, a file's
+    // relative, shown, and absolute paths are all the path it was given.
     let root = Path::new("");
     let discovery = classify(root, root, paths, &set, &patterns, problems);
     (discovery, unmatched)
 }
 
-/// Sort `files`, relative to `root`, into what [discover] returns, after
-/// `problems`.
+/// Sort `files`, relative to `slcr_dir`, into what [discover] returns,
+/// after `problems`.
 fn classify(
-    root: &Path,
+    slcr_dir: &Path,
     cwd: &Path,
     files: impl IntoIterator<Item = PathBuf>,
     set: &GlobSet,
@@ -91,7 +92,7 @@ fn classify(
     for relative in files {
         let matched = set.matches(&relative);
         if is_validator_file(&relative) {
-            validators.push(ProjectFile::new(root, cwd, relative.clone()));
+            validators.push(ProjectFile::new(slcr_dir, cwd, relative.clone()));
         }
         if !matched.is_empty() {
             matches.insert(relative, matched);
@@ -104,7 +105,7 @@ fn classify(
         for &index in &matched {
             matched_any[index] = true;
         }
-        let file = ProjectFile::new(root, cwd, relative);
+        let file = ProjectFile::new(slcr_dir, cwd, relative);
         let matched_by = || matched.iter().map(|&i| patterns[i].to_string()).collect();
         if is_validator_file(file.relative()) {
             problems.push(Problem::MatchesValidatorFile {
@@ -156,13 +157,14 @@ fn crowded(validators: &[ProjectFile]) -> Vec<Problem> {
     problems
 }
 
-/// Every file under `root` that the walk sees, as a path relative to it,
-/// in no particular order. A directory that can't be read is a problem.
+/// Every file under `slcr_dir` that the walk sees, as a path relative to
+/// it, in no particular order. A directory that can't be read is a
+/// problem.
 ///
 /// The walk sees hidden files and directories, other than `.git`, and
 /// skips what git ignores, as [discover] describes.
-fn walk(root: &Path, cwd: &Path, problems: &mut Vec<Problem>) -> Vec<PathBuf> {
-    let walk = WalkBuilder::new(root)
+fn walk(slcr_dir: &Path, cwd: &Path, problems: &mut Vec<Problem>) -> Vec<PathBuf> {
+    let walk = WalkBuilder::new(slcr_dir)
         .standard_filters(false)
         .hidden(false)
         .parents(true)
@@ -177,7 +179,7 @@ fn walk(root: &Path, cwd: &Path, problems: &mut Vec<Problem>) -> Vec<PathBuf> {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                unsearchable(&err, root, cwd, problems);
+                unsearchable(&err, slcr_dir, cwd, problems);
                 continue;
             }
         };
@@ -186,8 +188,8 @@ fn walk(root: &Path, cwd: &Path, problems: &mut Vec<Problem>) -> Vec<PathBuf> {
         }
         let relative = entry
             .path()
-            .strip_prefix(root)
-            .expect("the walk stays under its root");
+            .strip_prefix(slcr_dir)
+            .expect("the walk stays under the SLCR directory");
         files.push(relative.to_path_buf());
     }
     files
@@ -232,7 +234,7 @@ fn is_file(entry: &DirEntry) -> bool {
 /// Report a directory the walk couldn't read, which might have held a
 /// match. Other errors, such as a `.gitignore` line that isn't a valid
 /// glob, cost at most a rule, so they are logged and the walk goes on.
-fn unsearchable(err: &ignore::Error, root: &Path, cwd: &Path, problems: &mut Vec<Problem>) {
+fn unsearchable(err: &ignore::Error, slcr_dir: &Path, cwd: &Path, problems: &mut Vec<Problem>) {
     fn visit(err: &ignore::Error, path: &Path, cwd: &Path, problems: &mut Vec<Problem>) {
         match err {
             ignore::Error::Partial(errs) => {
@@ -255,7 +257,7 @@ fn unsearchable(err: &ignore::Error, root: &Path, cwd: &Path, problems: &mut Vec
         }
     }
 
-    visit(err, root, cwd, problems);
+    visit(err, slcr_dir, cwd, problems);
 }
 
 #[cfg(test)]

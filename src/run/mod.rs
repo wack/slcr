@@ -37,12 +37,24 @@ pub(crate) struct Target<'a> {
     pub(crate) descriptor: &'a Descriptor,
     /// The validator entry's `with` object.
     pub(crate) with: &'a Map<String, Value>,
-    /// The directory that holds `SLCR.toml`, as an absolute path.
+    /// The directory the project's validators check, as an absolute path:
+    /// `{slcr.project_root}`, the `project` working directory, and the top
+    /// of a `nearest` search.
     pub(crate) project_root: &'a Path,
-    /// The validator file the entry is in, as an absolute path.
-    pub(crate) validator_file: &'a Path,
+    /// The directory the entry's validator file checks, under the project
+    /// root, as an absolute path (see [Layout::validator_dir]):
+    /// `{slcr.validator_dir}`, the `validator-dir` working directory, and
+    /// where a `nearest` search starts.
+    ///
+    /// [Layout::validator_dir]: crate::project::Layout::validator_dir
+    pub(crate) validator_dir: &'a Path,
     /// The requirement the validator verifies.
     pub(crate) requirement: &'a QualifiedRequirementId,
+    /// The `PATH` the caller names, in place of slcr's own: what the
+    /// program is found on, and what the child inherits, unless the
+    /// descriptor's `env.PATH` overrides it. Without one, slcr's own is
+    /// both.
+    pub(crate) path: Option<&'a OsStr>,
 }
 
 /// A validator, resolved and ready to run: every argument substituted,
@@ -56,6 +68,9 @@ pub(crate) struct Invocation {
     executable: PathBuf,
     args: Vec<OsString>,
     cwd: PathBuf,
+    /// The `PATH` the child inherits in place of slcr's own, if the caller
+    /// named one.
+    path: Option<OsString>,
     /// Set or overridden in the environment the child inherits.
     env: BTreeMap<EnvName, String>,
     timeout: Option<Duration>,
@@ -64,20 +79,21 @@ pub(crate) struct Invocation {
 }
 
 impl Invocation {
-    /// Resolve `target` against slcr's own environment, as the child will
-    /// inherit it. Do this just before running it, so that the program
-    /// found is the one `PATH` names then.
+    /// Resolve `target` against the `PATH` it names, or else slcr's own,
+    /// as the child will inherit it. Do this just before running it, so
+    /// that the program found is the one `PATH` names then. Only without a
+    /// `PATH` of the caller's is slcr's environment read.
     pub(crate) fn new(target: Target<'_>) -> Result<Self, SpawnFailure> {
-        Self::resolve(target, std::env::var_os("PATH").as_deref())
+        match target.path {
+            Some(path) => Self::resolve(target, Some(path)),
+            None => Self::resolve(target, std::env::var_os("PATH").as_deref()),
+        }
     }
 
     /// Resolve `target` as if slcr's `PATH` were `inherited_path`.
     fn resolve(target: Target<'_>, inherited_path: Option<&OsStr>) -> Result<Self, SpawnFailure> {
         let invoke = target.descriptor.invoke();
-        let validator_dir = target
-            .validator_file
-            .parent()
-            .expect("a validator file is in a directory");
+        let validator_dir = target.validator_dir;
         let values = template::Values {
             with: target.with,
             project_root: target.project_root,
@@ -106,6 +122,7 @@ impl Invocation {
             executable,
             args,
             cwd,
+            path: target.path.map(OsStr::to_os_string),
             env: invoke.env().clone(),
             timeout: invoke
                 .timeout()
@@ -134,16 +151,17 @@ pub(crate) enum SpawnFailure {
     #[error("{} holds `{file}`", searched(.start))]
     #[diagnostic(help(
         "the tool runs in the nearest directory that holds `{file}`, searching up from the \
-         validator file's directory and stopping at the project root, the directory of \
-         `SLCR.toml`"
+         directory the validator file checks, at the validator file's own path under the \
+         project root, and stopping at the project root"
     ))]
     NoNearest {
         file: String,
-        /// The validator file's directory, relative to the project root.
+        /// The directory the validator file checks, relative to the
+        /// project root.
         start: PathBuf,
     },
 
-    #[error("the validator file's directory, {}, is outside the project root", shown(.dir))]
+    #[error("the directory the validator file checks, {}, is outside the project root", shown(.dir))]
     OutsideProject {
         /// Relative to the project root.
         dir: PathBuf,
@@ -240,7 +258,7 @@ cwd = "project"
     }
 
     /// A project in a temporary directory, with a validator file in
-    /// `specs/api`.
+    /// `specs/api`, whose project root is its SLCR directory.
     pub(crate) struct Project {
         pub(crate) dir: TempDir,
         pub(crate) requirement: QualifiedRequirementId,
@@ -260,8 +278,9 @@ cwd = "project"
             self.dir.path()
         }
 
-        pub(crate) fn validator_file(&self) -> PathBuf {
-            self.root().join("specs/api/api.validators.slcr.yaml")
+        /// The directory the validator file checks.
+        pub(crate) fn validator_dir(&self) -> PathBuf {
+            self.root().join("specs/api")
         }
 
         /// What running `descriptor` with `with` here resolves to, with
@@ -275,8 +294,9 @@ cwd = "project"
                 descriptor,
                 with: with.as_object().unwrap(),
                 project_root: self.root(),
-                validator_file: &self.validator_file(),
+                validator_dir: &self.validator_dir(),
                 requirement: &self.requirement,
+                path: None,
             })
         }
     }
@@ -321,8 +341,9 @@ cwd = "project"
             descriptor: &descriptor,
             with: &Map::new(),
             project_root: project.root(),
-            validator_file: &project.validator_file(),
+            validator_dir: &project.validator_dir(),
             requirement: &project.requirement,
+            path: None,
         };
         let invocation = Invocation::resolve(target, Some(OsStr::new("/nonexistent"))).unwrap();
         assert_eq!(invocation.executable(), &bin.path().join("only-here"));
@@ -337,6 +358,43 @@ cwd = "project"
         assert_eq!(invocation.executable(), &bin.path().join("only-here"));
         let err = Invocation::resolve(target, Some(OsStr::new("/nonexistent"))).unwrap_err();
         assert!(matches!(err, SpawnFailure::ProgramNotFound { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_descriptors_path_wins_over_the_callers() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let project = Project::new();
+        let (theirs, callers) = (TempDir::new().unwrap(), TempDir::new().unwrap());
+        // Each directory has the program; only the descriptor's passes, and
+        // only if the PATH it sees is the descriptor's.
+        let check = format!("#!/bin/sh\n[ \"$PATH\" = '{}' ]\n", theirs.path().display());
+        for (dir, script) in [
+            (theirs.path(), check.as_str()),
+            (callers.path(), "#!/bin/sh\nexit 7\n"),
+        ] {
+            let program = dir.join("both-have-it");
+            fs::write(&program, script).unwrap();
+            fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let descriptor = descriptor(
+            r#"["both-have-it"]"#,
+            &format!("env = {{ PATH = {:?} }}", theirs.path().to_str().unwrap()),
+            "",
+        );
+        let invocation = Invocation::new(Target {
+            descriptor: &descriptor,
+            with: &Map::new(),
+            project_root: project.root(),
+            validator_dir: &project.validator_dir(),
+            requirement: &project.requirement,
+            path: Some(callers.path().as_os_str()),
+        })
+        .unwrap();
+        assert_eq!(invocation.executable(), &theirs.path().join("both-have-it"));
+        let run = crate::cli::block_on(invocation.run()).unwrap().unwrap();
+        assert_eq!(*run.outcome(), process::Outcome::Green);
     }
 
     #[test]

@@ -1,0 +1,19 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - install
+    - "--slcr-dir"
+    - app
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+sh: installed blake3:19c615ae9011…
+
+----- stderr -----

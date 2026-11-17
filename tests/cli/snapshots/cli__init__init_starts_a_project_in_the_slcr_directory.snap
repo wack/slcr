@@ -1,0 +1,21 @@
+---
+source: tests/cli/init.rs
+info:
+  program: slcr
+  args:
+    - init
+    - "--slcr-dir"
+    - app
+    - "--name"
+    - shop
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: true
+exit_code: 0
+----- stdout -----
+app/SPEC.slcr.toml: created specification shop
+app/SLCR.toml: created project manifest
+
+----- stderr -----
