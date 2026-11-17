@@ -706,9 +706,43 @@ fn creating_a_project_writes_what_slcr_init_writes() {
         let error = created
             .err()
             .unwrap_or_else(|| panic!("{}", file.display()));
-        assert!(
-            error.to_string().contains("is outside"),
-            "{}: {error}",
+        // Joining the project in `app`, its SLCR.toml exists; starting one
+        // in `new`, it would be created.
+        let (message, help) = if slcr_dir == library.path("app") {
+            (
+                format!(
+                    "is outside {}, the directory of SLCR.toml",
+                    slcr_dir.display()
+                ),
+                format!(
+                    "SLCR.toml lists specification files relative to its own directory: \
+                     create the file inside {}",
+                    slcr_dir.display()
+                ),
+            )
+        } else {
+            (
+                format!(
+                    "is outside {}, where SLCR.toml would be created",
+                    slcr_dir.display()
+                ),
+                format!(
+                    "SLCR.toml lists specification files relative to its own directory, {}: \
+                     create the file inside it",
+                    slcr_dir.display()
+                ),
+            )
+        };
+        assert_eq!(
+            error.to_string(),
+            format!("{} {message}", file.display()),
+            "{}",
+            file.display()
+        );
+        assert_eq!(
+            error.help().map(|help| help.to_string()),
+            Some(help),
+            "{}",
             file.display()
         );
     }

@@ -83,7 +83,8 @@ types are the data model or the reports).
   canonicalizes both, looks for `SLCR.toml` in `slcr_dir` alone, and names
   files relative to it, as `slcr` run there does. `Project::create`
   (`slcr init --slcr-dir`, via `cli::init::initialize` with `inside`, so
-  FILE must be inside the SLCR directory even when joining a project),
+  FILE must be inside the SLCR directory even when joining a project:
+  `OutsideExistingSlcrDir`, where starting one fails with `OutsideSlcrDir`),
   `vet` (`slcr vet --project-root`), `install` (`slcr tools install`),
   `add_tool`/`update_tool`/`remove_tool` (`slcr tools …`; a path source is
   relative to the SLCR directory or absolute, and must be inside it), and

@@ -209,7 +209,7 @@ pub(crate) fn initialize(
         && let Ok(project) = &found
         && relative_to(&at, project.slcr_dir()).is_none()
     {
-        return Err(InvalidSpecPath::OutsideSlcrDir {
+        return Err(InvalidSpecPath::OutsideExistingSlcrDir {
             path: path.to_path_buf(),
             dir: slcr_dir.unwrap_or(base).to_path_buf(),
         }
@@ -489,6 +489,16 @@ pub enum InvalidSpecPath {
         .dir.display()
     ))]
     OutsideSlcrDir { path: PathBuf, dir: PathBuf },
+
+    /// Only the library refuses this; `slcr init` warns with
+    /// [Unlisted::Outside] instead.
+    #[error("{} is outside {}, the directory of {MANIFEST}", .path.display(), .dir.display())]
+    #[diagnostic(help(
+        "{MANIFEST} lists specification files relative to its own directory: create the file \
+         inside {}",
+        .dir.display()
+    ))]
+    OutsideExistingSlcrDir { path: PathBuf, dir: PathBuf },
 
     #[error("{} can't be listed in {MANIFEST}, which reads `specs` as globs", .path.display())]
     #[diagnostic(help("choose a path without `*`, `?`, `[`, `]`, `{{`, `}}`, or `\\`"))]
