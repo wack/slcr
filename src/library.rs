@@ -36,10 +36,10 @@ impl Project {
     /// init --slcr-dir` does, and open its project, whose project root is
     /// `project_root`. Both directories must be absolute and exist.
     ///
-    /// If `slcr_dir` holds no `SLCR.toml`, it creates one there that lists
-    /// the file, which must then be inside `slcr_dir`; if it holds one, it
-    /// joins that project, and [Initialized::warning] says if its `specs`
-    /// don't match the file. It never overwrites a file or creates a
+    /// The file must be inside `slcr_dir`. If `slcr_dir` holds no
+    /// `SLCR.toml`, it creates one there that lists the file; if it holds
+    /// one, it joins that project, and [Initialized::warning] says if its
+    /// `specs` don't match the file. It never overwrites a file or creates a
     /// directory, and creates both files or neither.
     pub fn create(
         slcr_dir: impl AsRef<Path>,
@@ -56,6 +56,7 @@ impl Project {
             name: Some(name),
             title,
             slcr_dir: Some(slcr_dir),
+            inside: true,
         };
         let initialized = initialize(&FileSystem::detached(), &resolved, request)?;
         let project = Self::open(slcr_dir, project_root)?;
@@ -156,7 +157,11 @@ impl Project {
     /// It never installs a descriptor: one `store` lacks fails vetting.
     ///
     /// It runs on the caller's tokio runtime, which must have its I/O and
-    /// time drivers enabled, and starts none of its own. `on_status` is
+    /// time drivers enabled, and starts none of its own. Dropping it
+    /// before it completes stops it too: on Unix, every validator's process
+    /// group still alive is killed there and then, whether or not the
+    /// runtime runs again; on Windows, only each validator's own process is
+    /// killed, and only once the runtime next runs its task. `on_status` is
     /// given each validator's status, the line `slcr check` writes for
     /// it, as soon as `slcr check` would write it, in the same order.
     /// When `cancel` completes, the check stops as `slcr check` does when

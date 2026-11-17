@@ -12,16 +12,18 @@ stakeholders read.
 ## Contents
 
 1. [The project manifest, `SLCR.toml`](#the-project-manifest-slcrtoml)
-2. [Tools and descriptors](#tools-and-descriptors)
-3. [Validator files](#validator-files)
-4. [Writing a validator](#writing-a-validator)
-5. [What `slcr check` does](#what-slcr-check-does)
-6. [Fresh clones, CI, and sandboxes](#fresh-clones-ci-and-sandboxes)
+2. [The SLCR directory and the project root](#the-slcr-directory-and-the-project-root)
+3. [Tools and descriptors](#tools-and-descriptors)
+4. [Validator files](#validator-files)
+5. [Writing a validator](#writing-a-validator)
+6. [What `slcr check` does](#what-slcr-check-does)
+7. [Fresh clones, CI, and sandboxes](#fresh-clones-ci-and-sandboxes)
 
 ## The project manifest, `SLCR.toml`
 
-The directory that holds `SLCR.toml` is the project root. `slcr` finds it by
-walking up from the working directory. The file name is case-sensitive, so
+The directory that holds `SLCR.toml` is the SLCR directory. `slcr` finds it
+by walking up from the working directory, unless given `--slcr-dir DIR`,
+which must hold `SLCR.toml` itself. The file name is case-sensitive, so
 `slcr.toml` is an error.
 
 ```toml
@@ -34,13 +36,41 @@ source = { url = "https://example.com/descriptors/cargo-nextest/1.0.0.toml" }
 pin = "blake3:9f2c…"
 ```
 
-- `specs` are globs relative to the root. A pattern that matches nothing, or
+- `specs` are globs relative to the SLCR directory. A pattern that matches nothing, or
   that matches a validator file, is an error. Spec names must be unique
   across the project.
 - `[tools.<name>]` entries are written by `slcr tools add`, `update`, and
   `remove`, which edit the file in place. **Never write or edit a `pin` by
   hand.** It's a BLAKE3 hash of the descriptor's bytes, and `slcr` refuses to
   run a descriptor that doesn't match it.
+
+## The SLCR directory and the project root
+
+Two directories matter, and they are usually the same one:
+
+- The **SLCR directory** holds `SLCR.toml` and every SLCR file: the specs,
+  the validator files, and descriptors kept as `{ path }` sources. `specs`
+  globs and `{ path }` sources are relative to it, and `slcr` finds
+  validator files by walking it, and nothing else.
+- The **project root** is the code the validators check. It is the SLCR
+  directory unless `slcr vet` or `slcr check` is given `--project-root
+  DIR`. The `tools` commands never read it.
+
+A validator file at `d/.validators.slcr.toml` in the SLCR directory checks
+`<project root>/d`, so a detached SLCR directory, such as a desktop app
+keeping a repository's SLCR files in its own data directory, mirrors the
+code's layout. `slcr vet` reports a validator file whose `d` isn't a
+directory under the project root (`missing-counterpart`). When the two
+differ:
+
+| In a descriptor | Means |
+|---|---|
+| `{slcr.project_root}`, `cwd = "project"` | the project root |
+| `{slcr.validator_dir}`, `cwd = "validator-dir"` | `<project root>/d`, never the directory the validator file is in |
+| `cwd = { nearest = "F" }` | the closest of `<project root>/d` and its ancestors holding `F`, no higher than the project root |
+
+Nothing in the SLCR directory is a validator's working directory unless it
+is the project root.
 
 ## Tools and descriptors
 
@@ -71,7 +101,8 @@ pass = [0]                             # exit codes that mean green
 - `argv[0]` is a bare program name, looked up on PATH. Each element is
   exactly one argument, with no shell. `{with.<field>}` substitutes a scalar
   from the validator's `with`, and `{slcr.project_root}`,
-  `{slcr.validator_dir}`, and `{slcr.requirement}` are built-ins.
+  `{slcr.validator_dir}`, and `{slcr.requirement}` are built-ins (see the
+  section above for what the first two mean).
 - Stdin is closed. An exit code in `pass` is green. Any other exit code, a
   signal, or a timeout is red.
 
@@ -81,12 +112,14 @@ Useful commands (check each with `--help` for its options):
 - `slcr tools show NAME`: how a tool runs and the schema its `with` must
   satisfy. **Read this before writing a validator for a tool.**
 - `slcr tools add SOURCE [--as NAME]`: declare a tool from an `https://` URL
-  or a path inside the project.
+  or a path inside the SLCR directory.
 - `slcr tools update NAME`: re-fetch and re-pin, for example after editing a
   descriptor kept in the repository. An edit takes effect only once
   re-pinned.
 - `slcr tools install`: install what the manifest pins, never re-pinning.
 - `slcr tools remove NAME`.
+
+Each takes `--slcr-dir DIR` to work on the manifest there.
 
 If no declared tool can express a check, a descriptor that runs a small script
 committed to the repository is a legitimate tool. Ask before adding tools to
@@ -96,8 +129,9 @@ the project.
 
 - The name is fixed: `.validators.slcr.toml`, `.yaml`, `.yml`, or `.json`.
   There is at most one per directory, and it sits beside the code it checks,
-  so it moves with that code.
-- `slcr` discovers validator files by walking the project root. It sees
+  so it moves with that code, or, in a detached SLCR directory, at the same
+  path as that code.
+- `slcr` discovers validator files by walking the SLCR directory. It sees
   hidden files and skips git-ignored paths.
 - `slcr vet` checks them against the specs, the manifest, and each tool's
   schema without running anything.
@@ -137,8 +171,9 @@ are an error.
    proving. Read its slice first.
 2. Pick the tool with `slcr tools list`, and read `slcr tools show NAME` for
    the exact `with` fields.
-3. Add the entry to the validator file in the directory of the code it checks,
-   creating the file if there isn't one. Keep entries grouped and commented
+3. Add the entry to the validator file in the directory of the code it checks
+   (in a detached SLCR directory, at that directory's path there), creating
+   the file if there isn't one. Keep entries grouped and commented
    the way the file already does.
 4. Write the check (the test, the rule) so that it can fail. A validator that
    always passes proves nothing. Prefer red-green: see it fail before the
@@ -155,6 +190,9 @@ When you rename or move a test, update the validator that names it, or
 revisit the validators that cite it.
 
 ## What `slcr check` does
+
+It works on the project `slcr vet` would, taking the same `--slcr-dir` and
+`--project-root`, and runs each validator against the project root.
 
 1. Installs any pinned descriptor the store lacks, unless `--offline`.
 2. Vets the project. If vetting fails, nothing runs.

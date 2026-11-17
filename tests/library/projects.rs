@@ -702,6 +702,32 @@ fn creating_a_project_writes_what_slcr_init_writes() {
     assert_eq!(after, before);
     let entries = std::fs::read_dir(library.path("app")).unwrap().count();
     assert_eq!(entries, 2);
+
+    // A file outside the SLCR directory is refused, whether it would join
+    // the project there or start one, and nothing is written.
+    let outside = Workspace::new();
+    std::fs::create_dir_all(outside.path("new")).unwrap();
+    std::fs::create_dir_all(outside.path("repo")).unwrap();
+    for (slcr_dir, file) in [
+        (library.path("app"), PathBuf::from("../repo/evil.slcr.toml")),
+        (library.path("app"), outside.path("repo/evil.slcr.toml")),
+        (outside.path("new"), PathBuf::from("../repo/evil.slcr.toml")),
+    ] {
+        let name = slcr::SpecName::try_from("evil".to_owned()).unwrap();
+        let created = Project::create(&slcr_dir, library.path("repo"), &file, name, None);
+        let error = created
+            .err()
+            .unwrap_or_else(|| panic!("{}", file.display()));
+        assert!(
+            error.to_string().contains("is outside"),
+            "{}: {error}",
+            file.display()
+        );
+    }
+    assert_eq!(std::fs::read_dir(library.path("repo")).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(outside.path("repo")).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(outside.path("new")).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(library.path("app")).unwrap().count(), 2);
 }
 
 #[test]
@@ -713,9 +739,9 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
             .file("app/SLCR.toml", manifest)
             .file("app/SPEC.slcr.yml", TODO_API_YAML);
     }
-    // Only where `slcr` lets the environment name a certificate authority
-    // can it fetch from the local server; elsewhere, the library's steps
-    // are checked alone.
+    // On every platform, each step leaves the bytes it should. Only where
+    // `slcr` lets the environment name a certificate authority can it
+    // fetch from the local server, to compare with what it leaves too.
     let compare = cfg!(target_os = "linux");
     let newer = SH.replace("version = \"1.0.0\"", "version = \"1.1.0\"");
     let project = Project::open(library.path("app"), library.path("app")).unwrap();
@@ -728,6 +754,24 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
         let fetcher = server.fetcher();
         let url = server.url("/sh.toml");
         let key = || slcr::ToolKey::try_from("sh".to_owned()).unwrap();
+        // The manifest declaring `descriptor`, at `version`, from the
+        // server, as `slcr tools add` writes the entry.
+        let declaring = |version: &str, descriptor: &str| {
+            format!(
+                "{manifest}\n[tools.sh]\nversion = \"{version}\"\nsource = {{ url = \"{url}\" }}\n\
+                 pin = \"blake3:{}\"\n",
+                hex(descriptor)
+            )
+        };
+        // What the store holds: each of `descriptors`, filed by its hash.
+        let filed = |descriptors: &[&str]| {
+            let mut filed: Vec<(String, String)> = descriptors
+                .iter()
+                .map(|text| (format!("{}.toml", hex(text)), (*text).to_owned()))
+                .collect();
+            filed.sort();
+            filed
+        };
         // The same step, by the library and by `slcr`, leaves the same.
         let same = |step: &str| {
             assert_eq!(
@@ -743,10 +787,8 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
             .await
             .unwrap();
         assert_eq!(added.to_string(), "SLCR.toml: added tool sh 1.0.0");
-        assert_eq!(
-            library.stored(),
-            [(format!("{}.toml", hex(SH)), SH.to_owned())]
-        );
+        assert_eq!(library.read("app/SLCR.toml"), declaring("1.0.0", SH));
+        assert_eq!(library.stored(), filed(&[SH]));
         if compare {
             let args = ["tools", "add", &url, "--slcr-dir", "app"];
             assert!(cli.slcr(&args, Some(&authority)));
@@ -759,7 +801,8 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
             updated.to_string(),
             "SLCR.toml: updated tool sh 1.0.0 -> 1.1.0"
         );
-        assert!(library.read("app/SLCR.toml").contains(&hex(&newer)));
+        assert_eq!(library.read("app/SLCR.toml"), declaring("1.1.0", &newer));
+        assert_eq!(library.stored(), filed(&[SH, &newer]));
         if compare {
             let args = ["tools", "update", "sh", "--slcr-dir", "app"];
             assert!(cli.slcr(&args, Some(&authority)));
@@ -770,6 +813,8 @@ fn tools_are_managed_as_slcr_tools_manages_them() {
         let removed = project.remove_tool(key()).unwrap();
         assert_eq!(removed.to_string(), "SLCR.toml: removed tool sh 1.1.0");
         assert_eq!(library.read("app/SLCR.toml"), manifest);
+        // The store keeps both, which other projects may pin.
+        assert_eq!(library.stored(), filed(&[SH, &newer]));
         if compare {
             let args = ["tools", "remove", "sh", "--slcr-dir", "app"];
             assert!(cli.slcr(&args, Some(&authority)));

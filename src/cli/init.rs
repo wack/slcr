@@ -97,6 +97,7 @@ impl Init {
             name,
             title,
             slcr_dir: slcr_dir.as_deref(),
+            inside: false,
         };
         let initialized = initialize(&FileSystem::new()?, &cwd, request)?;
         self.terminal.write_stdout_line(&initialized.to_string())?;
@@ -118,6 +119,10 @@ pub(crate) struct Request<'a> {
     /// base directory or absolute. Without one, it is the project's that
     /// holds the base directory, or else the base directory.
     pub(crate) slcr_dir: Option<&'a Path>,
+    /// Whether the file must be inside the directory of `SLCR.toml` even
+    /// when that manifest exists, as the library requires; `slcr init`
+    /// only warns then.
+    pub(crate) inside: bool,
 }
 
 /// What `slcr init` did, which displays as its status lines, e.g.
@@ -175,6 +180,7 @@ pub(crate) fn initialize(
         name,
         title,
         slcr_dir,
+        inside,
     } = request;
     let file = RequirementsFile::new(path.to_path_buf())?;
     let name = match name {
@@ -199,6 +205,16 @@ pub(crate) fn initialize(
         },
         Some(dir) => Project::in_dir(dir, base)?,
     };
+    if inside
+        && let Ok(project) = &found
+        && relative_to(&at, project.slcr_dir()).is_none()
+    {
+        return Err(InvalidSpecPath::OutsideSlcrDir {
+            path: path.to_path_buf(),
+            dir: slcr_dir.unwrap_or(base).to_path_buf(),
+        }
+        .into());
+    }
     let (manifest, new_manifest) = match found {
         Ok(project) => (ManifestStatus::Existing(project), None),
         Err(dir) => {

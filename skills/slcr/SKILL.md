@@ -87,9 +87,11 @@ Two words have fixed meanings here. **vet** means "is it well-formed?" (like
 use one to mean the other.
 
 `slcr` finds the project by walking up from the working directory to the
-nearest `SLCR.toml`. Commands that take a FILE default to `SPEC.slcr.toml`, so
-in a project whose specs live elsewhere, pass the file. `SLCR.toml`'s `specs`
-globs list every spec.
+nearest `SLCR.toml`, unless given `--slcr-dir DIR`. Commands that take a FILE
+default to `SPEC.slcr.toml`, so in a project whose specs live elsewhere, pass
+the file. `SLCR.toml`'s `specs` globs list every spec. When the SLCR files are
+kept apart from the code (`--project-root`), read the SLCR directory and
+project root section of `references/validators.md`.
 
 ## Workflows
 

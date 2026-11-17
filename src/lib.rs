@@ -14,8 +14,9 @@
 //! - [render], [slice()], and [query()] produce what `slcr render`, `slcr
 //!   slice`, and `slcr query --format json` write.
 //! - [Manifest] is a project's `SLCR.toml`, read with [Manifest::parse]
-//!   and written with [Manifest::to_toml]. Nothing in the library fetches
-//!   a tool's descriptor from its [Source].
+//!   and written with [Manifest::to_toml]. Reading, writing, and vetting a
+//!   manifest never fetch a tool's descriptor from its [Source]; only the
+//!   calls below that install, add, and update tools do.
 //! - [check::Report] reads back the document `slcr check --format json`
 //!   writes.
 //!
@@ -43,10 +44,54 @@
 //!   with a [Fetcher], as `slcr tools install` does. It, adding a tool, and
 //!   updating one are all that fetch.
 //! - [Project::check] checks the project as `slcr check --offline` does,
-//!   asynchronously on the caller's runtime, reporting each
-//!   [check::ValidatorStatus] as it would be written, stopping when the
-//!   caller cancels it, and running tools on the `PATH`
-//!   [check::Options] names. It returns a [check::Report].
+//!   asynchronously on the caller's tokio runtime, which must have its I/O
+//!   and time drivers enabled, reporting each [check::ValidatorStatus] as
+//!   it would be written, stopping when the caller cancels it, and running
+//!   tools on the `PATH` [check::Options] names. It returns a
+//!   [check::Report]. On Unix, dropping the check kills its validators at
+//!   once, with everything they started.
+//!
+//! [Project::install], [Project::add_tool], and [Project::update_tool]
+//! need a tokio runtime too; the rest are synchronous.
+//!
+//! # Getting started
+//!
+//! A desktop application that tracks a user's repositories keeps each
+//! one's SLCR files in a directory of its own, and checks the repository
+//! on its own runtime:
+//!
+//! ```no_run
+//! use slcr::check::Options;
+//! use slcr::{DescriptorStore, Fetcher, Project, SpecName};
+//!
+//! # async fn example() -> miette::Result<()> {
+//! // The application's directory for this repository's SLCR files, and
+//! // the repository itself, which its validators check.
+//! let slcr_dir = "/home/me/.local/share/my-app/projects/shop";
+//! let repository = "/home/me/src/shop";
+//! let project = match Project::open(slcr_dir, repository) {
+//!     Ok(project) => project,
+//!     // No `SLCR.toml` yet: start the project.
+//!     Err(_) => {
+//!         let name = SpecName::try_from("shop".to_owned())?;
+//!         let (project, _) = Project::create(slcr_dir, repository, "SPEC.slcr.toml", name, None)?;
+//!         project
+//!     }
+//! };
+//! // Where the application installs descriptors, for every project.
+//! let store = DescriptorStore::at("/home/me/.local/share/my-app/descriptors");
+//! // Fetching happens only here, when the application allows it.
+//! let installed = project.install(&store, &Fetcher::new()).await?;
+//! println!("{installed}");
+//! // Completes when the user presses Cancel.
+//! let cancelled = std::future::pending::<()>();
+//! let report = project
+//!     .check(&store, &Options::default(), |status| println!("{status}"), cancelled)
+//!     .await;
+//! println!("passed: {}", report.passed);
+//! # Ok(())
+//! # }
+//! ```
 //!
 //! None of these read or change the process's working directory or its
 //! signal handlers, or change its environment, so that a program can work
@@ -66,13 +111,17 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 pub use cli::init::Initialized;
+/// The binary's command line, which only `slcr` itself needs.
+#[doc(hidden)]
 pub use config::Cli;
 pub use fs::format::{Format, ParseError};
 pub use query::{Cell, InvalidQuery, Rows};
 pub use spec::graph::{FormatVersion, SCHEMA_URL, SlcrRequirementsDocument, UnvettedDocument};
 pub use spec::id::{CriterionId, RequirementId, SectionId, TermId};
-pub use spec::text::SpecName;
+pub use spec::text::{SpecName, Title};
 pub use spec::vet::Report;
+/// The binary's output, which only `slcr` itself needs.
+#[doc(hidden)]
 pub use terminal::Terminal;
 pub use tools::add::Added as ToolAdded;
 pub use tools::install::Installed;
