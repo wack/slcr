@@ -17,7 +17,7 @@ use crate::fs::FileSystem;
 /// and projects that pin different descriptors for the same tool can't
 /// conflict. Nothing in the store relies on a descriptor's name or
 /// version.
-pub(crate) struct DescriptorStore {
+pub struct DescriptorStore {
     dir: PathBuf,
 }
 
@@ -53,9 +53,13 @@ impl DescriptorStore {
         Self::at(fs.data_dir().join("descriptors").join("blake3"))
     }
 
-    /// The store filed under `dir`.
-    pub(crate) fn at(dir: PathBuf) -> Self {
-        Self { dir }
+    /// The store that files each descriptor in `dir`, as
+    /// `<dir>/<hex>.toml`, under the hexadecimal BLAKE3 hash of its
+    /// bytes. `slcr` itself uses `descriptors/blake3` in its data
+    /// directory. The directory is created when a descriptor is first
+    /// installed.
+    pub fn at(dir: impl Into<PathBuf>) -> Self {
+        Self { dir: dir.into() }
     }
 
     /// Where the descriptor pinned by `pin` is filed.

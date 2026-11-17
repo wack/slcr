@@ -15,5 +15,5 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-Error:   × the directory given for SLCR.toml, missing, does not exist
-  help: the directory given for SLCR.toml must be an existing directory
+Error:   × the SLCR directory, missing, does not exist
+  help: name the directory that holds SLCR.toml

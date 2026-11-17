@@ -28,8 +28,9 @@ const APPLICATION_NAME: &str = "slcr";
 pub struct FileSystem {
     /// OS-specific file locations for standard operations,
     /// respecting $XDG_CONFIG and similar variables, and falling
-    /// back to OS defaults.
-    xdg_dirs: ProjectDirs,
+    /// back to OS defaults; none for the library's, which names every
+    /// directory it uses.
+    xdg_dirs: Option<ProjectDirs>,
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -106,7 +107,23 @@ impl FileSystem {
     pub fn new() -> Result<Self, MissingHomeDirectory> {
         let dirs = ProjectDirs::from("", "", APPLICATION_NAME);
         let xdg_dirs = dirs.ok_or(MissingHomeDirectory)?;
-        Ok(Self { xdg_dirs })
+        Ok(Self {
+            xdg_dirs: Some(xdg_dirs),
+        })
+    }
+
+    /// A file system with no data or cache directory, which never reads
+    /// the environment to find one: the library's, whose caller names the
+    /// directories it works in.
+    pub(crate) fn detached() -> Self {
+        Self { xdg_dirs: None }
+    }
+
+    /// The platform's directories, which only the CLI's file system has.
+    fn xdg_dirs(&self) -> &ProjectDirs {
+        self.xdg_dirs
+            .as_ref()
+            .expect("only the CLI uses the platform's data and cache directories")
     }
 
     /// Returns `Ok(true)` if the file existed and was deleted.
@@ -269,13 +286,13 @@ impl FileSystem {
     /// is unset; on macOS, `~/Library/Application Support/slcr`. It may not
     /// exist yet.
     pub(crate) fn data_dir(&self) -> PathBuf {
-        self.xdg_dirs.data_dir().to_path_buf()
+        self.xdg_dirs().data_dir().to_path_buf()
     }
 
     /// Returns the expected directory for this particular file type.
     fn dir(&self, typ: DirectoryType) -> Result<PathBuf> {
         match typ {
-            DirectoryType::Cache => Ok(self.xdg_dirs.cache_dir().to_path_buf()),
+            DirectoryType::Cache => Ok(self.xdg_dirs().cache_dir().to_path_buf()),
             DirectoryType::Pwd => std::env::current_dir().into_diagnostic(),
             DirectoryType::Data => Ok(self.data_dir()),
         }

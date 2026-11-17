@@ -458,16 +458,24 @@ fn check_runs_validators_in_the_project_root() {
     for (key, text) in &tools {
         workspace.file(&format!("app/tools/{key}.toml"), text);
     }
-    // Each validator passes only if `$1` is `repo`, `$2` is `repo/src`,
-    // and it runs where its tool says; then it leaves a mark there. Only
-    // `repo` holds the Cargo.toml a `nearest` search finds.
-    let check = |key: &str, cwd: &str| {
+    // Each validator passes only if `$1` is exactly `repo`, `$2` exactly
+    // `repo/src`, and it runs where its tool says, each as the canonical
+    // path a working directory is; then it leaves a mark there. Only
+    // `repo` holds the Cargo.toml a `nearest` search finds. The paths are
+    // in the scripts only, which the output never shows.
+    workspace.dir("repo/src");
+    let repo = workspace.path("repo").canonicalize().unwrap();
+    let src = repo.join("src");
+    let check = |key: &str, cwd: &std::path::Path| {
         format!(
             "\n[[validator]]\nrequirement = \"shop/REQ-002\"\ntool = \"{key}\"\n\
              with = {{ script = {:?} }}\n",
             format!(
-                "[ \"$(basename \"$1\")\" = repo ] && [ \"$2\" = \"$1/src\" ] && \
-                 [ \"$(pwd -P)\" = \"{cwd}\" ] && touch {key}.ran"
+                "[ \"$1\" = '{}' ] && [ \"$2\" = '{}' ] && [ \"$(pwd -P)\" = '{}' ] && \
+                 touch {key}.ran",
+                repo.display(),
+                src.display(),
+                cwd.display(),
             )
         )
     };
@@ -477,14 +485,13 @@ fn check_runs_validators_in_the_project_root() {
             "app/src/.validators.slcr.toml",
             format!(
                 "formatVersion = \"1\"\n{}{}{}",
-                check("in-validator-dir", "$2"),
-                check("in-project", "$1"),
-                check("in-nearest", "$1"),
+                check("in-validator-dir", &src),
+                check("in-project", &repo),
+                check("in-nearest", &repo),
             ),
         )
         .file("app/src/Cargo.toml", "")
-        .file("repo/Cargo.toml", "")
-        .dir("repo/src");
+        .file("repo/Cargo.toml", "");
     assert_cmd_snapshot!(workspace.slcr(&[
         "check",
         "--slcr-dir",

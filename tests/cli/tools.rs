@@ -970,6 +970,12 @@ fn tools_subcommands_take_the_slcr_directory_but_not_the_project_root() {
             )
         );
     }
+    // `slcr tools` itself takes no `--slcr-dir`, so no value can silently
+    // replace another.
+    assert_cmd_snapshot!(
+        "slcr_dir_before_the_subcommand",
+        workspace.slcr(&["tools", "--slcr-dir", "app", "list"])
+    );
     // Nothing was changed or installed.
     assert!(store_is_empty(&workspace));
 }

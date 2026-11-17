@@ -16,4 +16,4 @@ exit_code: 1
 
 ----- stderr -----
 Error:   × the project root, missing, does not exist
-  help: the project root must be an existing directory
+  help: name the directory the validators check

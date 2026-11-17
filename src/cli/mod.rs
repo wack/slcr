@@ -10,7 +10,7 @@ pub use version::Version;
 pub use vet::{Vet, VetArgs};
 
 mod check;
-mod findings;
+pub(crate) mod findings;
 mod init;
 mod project;
 mod query;

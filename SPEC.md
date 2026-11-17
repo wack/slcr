@@ -2115,7 +2115,7 @@ With a tool's program in a directory the process's `PATH` lacks, a check given a
 <a id="REQ-102"></a>
 #### 3.2.6 Shares nothing between projects
 
-The library MUST NOT read or change the process's working directory, its environment apart from the `PATH` a check falls back to, or its signal handlers while it works on a project, so that a program can work on several projects at once.
+The library MUST NOT read or change the process's working directory, change its environment, or handle its signals while it works on a project, and MUST NOT read the environment for anything `slcr` itself doesn't read it for: the `PATH` a check falls back to, where git's global excludes are, and a proxy for fetching. A program can then work on several projects at once.
 
 *Acceptance criteria:*
 

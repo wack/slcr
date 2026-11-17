@@ -1,0 +1,25 @@
+---
+source: tests/cli/tools.rs
+info:
+  program: slcr
+  args:
+    - tools
+    - "--slcr-dir"
+    - app
+    - list
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: unexpected argument '--slcr-dir' found
+
+  tip: 'list --slcr-dir' exists
+
+Usage: slcr tools [OPTIONS] <COMMAND>
+
+For more information, try '--help'.

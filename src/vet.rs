@@ -6,8 +6,9 @@
 //! [document] vets one already read. [project] vets a project as `slcr
 //! vet` with no FILE vets one on disk, from its manifest and its
 //! specifications' paths, without the validator files and descriptor store
-//! that only a checkout of the project has. [json] writes the outcomes as
-//! `slcr vet --format json` does.
+//! that only a checkout of the project has; [crate::Project::vet] vets a
+//! project on disk, with them. [json] writes the outcomes as `slcr vet
+//! --format json` does.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -50,7 +51,8 @@ pub fn document(path: impl Into<PathBuf>, document: &UnvettedDocument) -> Outcom
 
 /// Vet a project held in memory, as `slcr vet` with no FILE vets a project
 /// on disk: `manifest`, its `SLCR.toml`, and `specs`, each specification
-/// with its path relative to the project root.
+/// with its path relative to the SLCR directory, the directory of
+/// `SLCR.toml`.
 ///
 /// The manifest's `specs` patterns are matched against those paths as
 /// against the files of a project on disk, and each problem `slcr vet`

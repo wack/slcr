@@ -7,68 +7,17 @@ use std::fmt::{self, Display};
 
 use miette::{Diagnostic, LabeledSpan, Severity, SourceCode};
 
-use super::schedule::{Finished, Job};
-use super::verdict::Evaluated;
+use crate::check::schedule::Job;
+use crate::check::status::{Name, why};
+use crate::check::verdict::Evaluated;
 use crate::cli::findings::counted;
 use crate::run::SpawnFailure;
-use crate::run::process::{Captured, Outcome, Red, Run};
+use crate::run::process::{Captured, Red, Run};
 use crate::satisfaction::{Finding, Severity as FindingSeverity};
 
 /// How many of the last lines of each output stream of a red validator
 /// are shown.
 const TAIL: usize = 20;
-
-/// A validator as `check` names it: its file, its position in the file,
-/// what it checks, and its tool, e.g.
-/// `src/.validators.slcr.toml validator 1 (todo-api/REQ-002, cargo-nextest)`.
-pub(super) struct Name<'a>(pub(super) Job<'a>);
-
-impl Display for Name<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Job {
-            file,
-            position,
-            validator,
-        } = self.0;
-        let path = file.file().shown().display();
-        write!(
-            f,
-            "{path} validator {position} ({}",
-            validator.requirement()
-        )?;
-        if let Some(criterion) = validator.criterion() {
-            write!(f, " {criterion}")?;
-        }
-        write!(f, ", {})", validator.tool())
-    }
-}
-
-/// A validator's status line: `green`, `red` and why, `could not be run`,
-/// or, if it hadn't finished, `interrupted`.
-pub(super) fn status(job: Job<'_>, finished: Option<&Finished>) -> String {
-    let outcome = match finished {
-        None => "interrupted".to_owned(),
-        Some(Err(_)) => "could not be run".to_owned(),
-        Some(Ok(run)) => match run.outcome() {
-            Outcome::Green => "green".to_owned(),
-            Outcome::Red(red) => format!("red ({})", why(red)),
-        },
-    };
-    format!("{}: {outcome}", Name(job))
-}
-
-/// Why a validator is red, in a few words.
-fn why(red: &Red) -> String {
-    match red {
-        Red::ExitCode(code) => format!("exit {code}"),
-        Red::Terminated {
-            signal: Some(signal),
-        } => format!("killed by signal {signal}"),
-        Red::Terminated { signal: None } => "terminated".to_owned(),
-        Red::TimedOut => "timed out".to_owned(),
-        Red::Lost { reason } => format!("lost track of it: {reason}"),
-    }
-}
 
 /// A validator that couldn't be run, labeled in its validator file.
 #[derive(Debug)]
@@ -294,9 +243,10 @@ pub(super) fn summary(spec: &Evaluated<'_>) -> String {
 mod tests {
     use std::{path::Path, sync::Arc};
 
-    use super::super::schedule::{Plan, Ran, run_all, tests::plan};
-    use super::super::verdict::{evaluate_all, verdicts};
     use super::*;
+    use crate::check::schedule::{Plan, Ran, run_all, tests::plan};
+    use crate::check::status::ValidatorStatus;
+    use crate::check::verdict::{evaluate_all, verdicts};
     use crate::cli::block_on;
     use crate::project::ProjectFile;
     use crate::spec::graph::UnvettedDocument;
@@ -325,7 +275,7 @@ mod tests {
         let statuses: Vec<String> = plan
             .jobs()
             .zip(&ran.results)
-            .map(|(job, finished)| status(job, finished.as_ref()))
+            .map(|(job, finished)| ValidatorStatus::new(job, finished.as_ref()).to_string())
             .collect();
         assert_eq!(
             statuses,
@@ -336,7 +286,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            status(plan.job(0), None),
+            ValidatorStatus::new(plan.job(0), None).to_string(),
             ".validators.slcr.toml validator 1 (todo-api/REQ-001, sh): interrupted"
         );
     }

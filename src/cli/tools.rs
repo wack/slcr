@@ -22,9 +22,6 @@ use crate::tools::{
 pub struct ToolsArgs {
     #[command(subcommand)]
     command: ToolsCommand,
-
-    #[command(flatten)]
-    slcr_dir: SlcrDirArg,
 }
 
 /// The subcommands of `slcr tools`, which edit and read the `[tools]`
@@ -40,7 +37,7 @@ pub enum ToolsCommand {
     /// Install every descriptor SLCR.toml pins that isn't installed yet:
     /// fetch it from its source and check it against its pin, never
     /// re-pinning it
-    Install,
+    Install(InstallArgs),
     /// Remove a tool from SLCR.toml
     Remove(KeyArgs),
     /// List the tools SLCR.toml declares, and whether each one's descriptor
@@ -63,6 +60,9 @@ pub struct AddArgs {
     /// Defaults to the descriptor's own name.
     #[arg(long = "as", value_name = "NAME", value_parser = parse_key)]
     key: Option<ToolKey>,
+
+    #[command(flatten)]
+    slcr_dir: SlcrDirArg,
 }
 
 /// The arguments to `slcr tools update` and `slcr tools remove`.
@@ -71,6 +71,16 @@ pub struct KeyArgs {
     /// The name the tool is declared under in SLCR.toml.
     #[arg(value_name = "NAME", value_parser = parse_key)]
     key: ToolKey,
+
+    #[command(flatten)]
+    slcr_dir: SlcrDirArg,
+}
+
+/// The arguments to `slcr tools install`.
+#[derive(Args, Clone, Debug)]
+pub struct InstallArgs {
+    #[command(flatten)]
+    slcr_dir: SlcrDirArg,
 }
 
 /// The arguments to `slcr tools list`.
@@ -79,6 +89,9 @@ pub struct ListArgs {
     /// How to write the tools.
     #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
     format: OutputFormat,
+
+    #[command(flatten)]
+    slcr_dir: SlcrDirArg,
 }
 
 /// The arguments to `slcr tools show`.
@@ -91,6 +104,23 @@ pub struct ShowArgs {
     /// How to write the tool.
     #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
     format: OutputFormat,
+
+    #[command(flatten)]
+    slcr_dir: SlcrDirArg,
+}
+
+impl ToolsCommand {
+    /// Where the subcommand's project is.
+    fn slcr_dir(&self) -> &SlcrDirArg {
+        match self {
+            Self::Add(AddArgs { slcr_dir, .. })
+            | Self::Update(KeyArgs { slcr_dir, .. })
+            | Self::Install(InstallArgs { slcr_dir })
+            | Self::Remove(KeyArgs { slcr_dir, .. })
+            | Self::List(ListArgs { slcr_dir, .. })
+            | Self::Show(ShowArgs { slcr_dir, .. }) => slcr_dir,
+        }
+    }
 }
 
 /// How `slcr tools list` and `slcr tools show` write what they find.
@@ -136,7 +166,7 @@ impl Tools {
         let store = DescriptorStore::new(&fs);
         let fetcher = Fetcher::new();
         let cwd = std::env::current_dir().into_diagnostic()?;
-        let project = self.args.slcr_dir.locate(&cwd)?;
+        let project = self.args.command.slcr_dir().locate(&cwd)?;
         let env = Environment {
             fs: &fs,
             store: &store,
@@ -145,12 +175,14 @@ impl Tools {
             project,
         };
         let status = match self.args.command {
-            ToolsCommand::Add(AddArgs { source, key }) => {
+            ToolsCommand::Add(AddArgs { source, key, .. }) => {
                 block_on(add(&env, source, key))??.to_string()
             }
-            ToolsCommand::Update(KeyArgs { key }) => block_on(update(&env, key))??.to_string(),
-            ToolsCommand::Remove(KeyArgs { key }) => remove(&fs, &env.project, key)?.to_string(),
-            ToolsCommand::Install => {
+            ToolsCommand::Update(KeyArgs { key, .. }) => block_on(update(&env, key))??.to_string(),
+            ToolsCommand::Remove(KeyArgs { key, .. }) => {
+                remove(&fs, &env.project, key)?.to_string()
+            }
+            ToolsCommand::Install(_) => {
                 // Each tool that failed is a diagnostic; every tool gets a
                 // status line, and any failure fails the command.
                 let installed = block_on(install(&env))??;
@@ -160,10 +192,10 @@ impl Tools {
                 self.terminal.write_stdout_line(&installed.to_string())?;
                 return Ok(installed.verdict()?);
             }
-            ToolsCommand::List(ListArgs { format }) => {
+            ToolsCommand::List(ListArgs { format, .. }) => {
                 format.write(&list(&fs, &store, &env.project)?)
             }
-            ToolsCommand::Show(ShowArgs { key, format }) => {
+            ToolsCommand::Show(ShowArgs { key, format, .. }) => {
                 format.write(&show(&fs, &store, &env.project, key)?)
             }
         };

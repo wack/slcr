@@ -30,6 +30,8 @@ mod layout;
 pub(crate) mod problem;
 /// `<spec-name>/REQ-<n>`: a requirement named from outside its spec.
 pub(crate) mod qualified;
+/// Vetting a project on disk.
+pub(crate) mod vet;
 
 /// A file of a project, found by [discover] in its SLCR directory: a
 /// specification or a validator file.

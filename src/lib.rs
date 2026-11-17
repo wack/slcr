@@ -19,6 +19,33 @@
 //! - [check::Report] reads back the document `slcr check --format json`
 //!   writes.
 //!
+//! A program that keeps a project's SLCR files apart from its code, such
+//! as a desktop application that keeps each repository's in a directory
+//! of its own, works on the project on disk, as `slcr` does with
+//! `--slcr-dir` and `--project-root`:
+//!
+//! - [Project::open] names a project by its SLCR directory, which holds
+//!   `SLCR.toml`, its specifications, and its validator files, and its
+//!   project root, the code its validators check. A validator file checks
+//!   the directory at its own path, relative to the SLCR directory, under
+//!   the project root. Files are named relative to the SLCR directory.
+//! - [DescriptorStore::at] names where the project's tools' descriptors are
+//!   installed.
+//! - [Project::vet] vets the project as `slcr vet` does, validator files
+//!   and pinned descriptors included; [vet::json] writes what it found.
+//! - [Project::install] installs every descriptor the store lacks, fetched
+//!   with a [Fetcher], as `slcr tools install` does. It, and nothing else
+//!   here, fetches.
+//! - [Project::check] checks the project as `slcr check --offline` does,
+//!   asynchronously on the caller's runtime, reporting each
+//!   [check::ValidatorStatus] as it would be written, stopping when the
+//!   caller cancels it, and running tools on the `PATH`
+//!   [check::Options] names. It returns a [check::Report].
+//!
+//! None of these read or change the process's working directory, its
+//! environment (but for the `PATH` a check falls back to), or its signal
+//! handlers, so that a program can work on several projects at once.
+//!
 //! [Pin] spells a BLAKE3 hash as SLCR does everywhere: `blake3:` and 64
 //! lowercase hexadecimal digits.
 
@@ -37,9 +64,13 @@ pub use spec::id::{CriterionId, RequirementId, SectionId, TermId};
 pub use spec::text::SpecName;
 pub use spec::vet::Report;
 pub use terminal::Terminal;
-pub use tools::manifest::{MANIFEST, Manifest, ProjectGlob, ToolEntry};
+pub use tools::install::Installed;
+pub use tools::manifest::{
+    DirectoryProblem, Given, MANIFEST, Manifest, Project, ProjectError, ProjectGlob, ToolEntry,
+};
 pub use tools::pin::Pin;
-pub use tools::source::{HttpsUrl, ProjectPath, Source};
+pub use tools::source::{Fetcher, HttpsUrl, ProjectPath, Source, SourceError};
+pub use tools::store::DescriptorStore;
 pub use tools::{DescriptorVersion, ToolKey};
 
 pub mod check;
@@ -52,6 +83,8 @@ pub(crate) mod cli;
 mod config;
 /// An abstraction over the user's filesystem, respecting $XDG_CONFIG.
 mod fs;
+/// What a program does with a project on disk: vet, install, check.
+mod library;
 /// A project's specifications: discovering, loading, and indexing them.
 mod project;
 pub mod query;

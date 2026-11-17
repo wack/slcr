@@ -53,9 +53,9 @@ pub(crate) fn discover(slcr_dir: &Path, cwd: &Path, specs: &[ProjectGlob]) -> Di
 }
 
 /// [discover] `specs` among `paths`, the files of a project held in memory,
-/// relative to its root, rather than in a directory: nothing is ignored, and
-/// files are named by these paths. Each path that no pattern matches is
-/// returned too, in order.
+/// relative to its SLCR directory, rather than in a directory on disk:
+/// nothing is ignored, and files are named by these paths. Each path that
+/// no pattern matches is returned too, in order.
 pub(crate) fn discover_among(
     paths: impl IntoIterator<Item = PathBuf>,
     specs: &[ProjectGlob],
@@ -69,8 +69,8 @@ pub(crate) fn discover_among(
         .cloned()
         .collect();
     unmatched.sort();
-    // With an empty root and working directory, a file's relative, shown,
-    // and absolute paths are all the path it was given.
+    // With an empty SLCR directory and working directory, a file's
+    // relative, shown, and absolute paths are all the path it was given.
     let root = Path::new("");
     let discovery = classify(root, root, paths, &set, &patterns, problems);
     (discovery, unmatched)

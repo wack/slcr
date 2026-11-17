@@ -36,7 +36,7 @@ pub struct SlcrDirArg {
     /// SLCR.toml, never its parents, and path sources are relative to it
     /// [default: the nearest directory, from the working directory up,
     /// that holds SLCR.toml].
-    #[arg(long, value_name = "DIR", global = true)]
+    #[arg(long, value_name = "DIR")]
     slcr_dir: Option<PathBuf>,
 }
 

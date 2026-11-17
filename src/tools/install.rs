@@ -150,11 +150,11 @@ pub enum InstallError {
     },
 }
 
-/// What [install] did with each declared tool. It displays as the status
+/// What installing did with each declared tool. It displays as the status
 /// lines `slcr tools install` writes, one per tool, e.g.
 /// `cargo-nextest: installed blake3:af1349b9f5f9…`.
 #[derive(Debug)]
-pub(crate) struct Installed {
+pub struct Installed {
     /// The manifest's path relative to the working directory.
     manifest: PathBuf,
     tools: Vec<ToolInstall>,
@@ -217,6 +217,26 @@ impl Installed {
         self.tools
             .iter()
             .filter_map(|tool| tool.outcome.as_ref().err())
+    }
+
+    /// Whether every tool's descriptor is installed: none failed.
+    pub fn passed(&self) -> bool {
+        self.verdict().is_ok()
+    }
+
+    /// Why each tool that failed did, in the order of their keys: the
+    /// diagnostics `slcr tools install` writes to stderr.
+    pub fn failures(&self) -> impl Iterator<Item = &Report> {
+        self.errors()
+    }
+
+    /// What installing each declared tool's descriptor did, in the order
+    /// of their keys, as `slcr check --format json` reports it in its
+    /// `descriptors`.
+    pub fn descriptors(&self) -> Vec<crate::check::Descriptor> {
+        let json = serde_json::to_value(crate::check::json::descriptors(self))
+            .expect("what installing did serializes to JSON");
+        serde_json::from_value(json).expect("`check::Descriptor` reads what `check` writes")
     }
 
     /// Success, unless a tool failed.

@@ -133,6 +133,10 @@ impl Invocation {
     /// the future kills the run.
     pub(crate) async fn run(&self) -> Result<Run, SpawnFailure> {
         let mut command = Command::new(&self.executable);
+        if let Some(path) = self.path() {
+            // Set first, so that the descriptor's own `env.PATH` wins.
+            command.env("PATH", path);
+        }
         command
             .args(&self.args)
             .current_dir(&self.cwd)

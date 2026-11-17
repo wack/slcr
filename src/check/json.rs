@@ -93,28 +93,28 @@ use crate::tools::install::{Damage, Installed, Status as InstallStatus};
 
 /// Everything `check` did, as far as it got.
 #[derive(Default, Serialize)]
-pub(super) struct Document<'a> {
-    pub(super) passed: bool,
-    pub(super) interrupted: bool,
+pub(crate) struct Document<'a> {
+    pub(crate) passed: bool,
+    pub(crate) interrupted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) descriptors: Option<Vec<DescriptorJson<'a>>>,
+    pub(crate) descriptors: Option<Vec<DescriptorJson<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) vet: Option<VetDocument<'a>>,
+    pub(crate) vet: Option<VetDocument<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) validators: Option<Vec<ValidatorJson<'a>>>,
+    pub(crate) validators: Option<Vec<ValidatorJson<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) specs: Option<Vec<SpecJson<'a>>>,
+    pub(crate) specs: Option<Vec<SpecJson<'a>>>,
 }
 
 impl Document<'_> {
-    pub(super) fn to_json(&self) -> String {
+    pub(crate) fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("what `check` did serializes to JSON")
     }
 }
 
 /// What installing one declared tool's descriptor did.
 #[derive(Serialize)]
-pub(super) struct DescriptorJson<'a> {
+pub(crate) struct DescriptorJson<'a> {
     tool: &'a ToolKey,
     status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -126,7 +126,7 @@ pub(super) struct DescriptorJson<'a> {
 }
 
 /// What installing each declared tool's descriptor did.
-pub(super) fn descriptors(installed: &Installed) -> Vec<DescriptorJson<'_>> {
+pub(crate) fn descriptors(installed: &Installed) -> Vec<DescriptorJson<'_>> {
     installed
         .tools()
         .map(|(tool, outcome)| {
@@ -159,7 +159,7 @@ pub(super) fn descriptors(installed: &Installed) -> Vec<DescriptorJson<'_>> {
 /// One validator, and how running it ended.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ValidatorJson<'a> {
+pub(crate) struct ValidatorJson<'a> {
     /// Relative to the working directory.
     file: String,
     position: usize,
@@ -230,7 +230,7 @@ impl StreamJson {
 }
 
 /// Every validator of `plan`, and how running it ended.
-pub(super) fn validators<'a>(
+pub(crate) fn validators<'a>(
     plan: &'a Plan,
     results: &'a [Option<Finished>],
 ) -> Vec<ValidatorJson<'a>> {
@@ -280,7 +280,7 @@ pub(super) fn validators<'a>(
 /// One specification, evaluated.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct SpecJson<'a> {
+pub(crate) struct SpecJson<'a> {
     name: &'a SpecName,
     /// Relative to the working directory.
     file: String,
@@ -309,7 +309,7 @@ struct FindingJson<'a> {
 }
 
 /// Every specification, evaluated.
-pub(super) fn specs<'a>(evaluated: &'a [Evaluated<'a>], deny_warnings: bool) -> Vec<SpecJson<'a>> {
+pub(crate) fn specs<'a>(evaluated: &'a [Evaluated<'a>], deny_warnings: bool) -> Vec<SpecJson<'a>> {
     evaluated
         .iter()
         .map(|spec| {

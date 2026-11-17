@@ -3,6 +3,7 @@
 
 use std::{
     collections::BTreeMap,
+    ffi::OsString,
     future::{Future, poll_fn},
     num::NonZeroUsize,
     pin::pin,
@@ -20,13 +21,13 @@ use crate::validators::{ValidatorFile, file::Validator};
 
 /// How running one validator ended: green or red, or why it couldn't be
 /// run.
-pub(super) type Finished = Result<Run, SpawnFailure>;
+pub(crate) type Finished = Result<Run, SpawnFailure>;
 
 /// Every validator of a project that vetted cleanly, in the order `check`
 /// reports them: by validator file, in the order of their paths, then by
 /// position in the file.
 #[derive(Debug)]
-pub(super) struct Plan {
+pub(crate) struct Plan {
     /// Where the project is: the validator files are in its SLCR
     /// directory, and the validators run against its project root.
     layout: Layout,
@@ -35,24 +36,28 @@ pub(super) struct Plan {
     descriptors: BTreeMap<ToolKey, Descriptor>,
     /// Each validator, as the index of its file and its index in the file.
     order: Vec<(usize, usize)>,
+    /// The `PATH` tools are found on and validators inherit, in place of
+    /// the process's own.
+    path: Option<OsString>,
 }
 
 /// One validator of a [Plan].
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Job<'a> {
-    pub(super) file: &'a ValidatorFile,
+pub(crate) struct Job<'a> {
+    pub(crate) file: &'a ValidatorFile,
     /// The validator's position in the file, from 1, as `vet` numbers it.
-    pub(super) position: usize,
-    pub(super) validator: &'a Validator,
+    pub(crate) position: usize,
+    pub(crate) validator: &'a Validator,
 }
 
 impl Plan {
     /// Every validator in `files`. Vetting guarantees `descriptors` holds
     /// the descriptor of each one's tool.
-    pub(super) fn new(
+    pub(crate) fn new(
         layout: Layout,
         files: Vec<ValidatorFile>,
         descriptors: BTreeMap<ToolKey, Descriptor>,
+        path: Option<OsString>,
     ) -> Self {
         let order = files
             .iter()
@@ -64,15 +69,16 @@ impl Plan {
             files,
             descriptors,
             order,
+            path,
         }
     }
 
-    pub(super) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.order.len()
     }
 
     /// The validator at `index` in the plan's order.
-    pub(super) fn job(&self, index: usize) -> Job<'_> {
+    pub(crate) fn job(&self, index: usize) -> Job<'_> {
         let (file, validator) = self.order[index];
         let file = &self.files[file];
         Job {
@@ -83,7 +89,7 @@ impl Plan {
     }
 
     /// Every validator, in the plan's order.
-    pub(super) fn jobs(&self) -> impl Iterator<Item = Job<'_>> {
+    pub(crate) fn jobs(&self) -> impl Iterator<Item = Job<'_>> {
         (0..self.len()).map(|index| self.job(index))
     }
 
@@ -108,17 +114,18 @@ impl Plan {
             project_root: self.layout.project_root(),
             validator_dir: &self.layout.validator_dir(job.file.file()),
             requirement: job.validator.requirement(),
+            path: self.path.as_deref(),
         })
     }
 }
 
 /// What [run_all] came to.
 #[derive(Debug)]
-pub(super) struct Ran {
+pub(crate) struct Ran {
     /// Each validator's result, in the plan's order: `None` for one that
     /// hadn't finished when the run was interrupted.
-    pub(super) results: Vec<Option<Finished>>,
-    pub(super) interrupted: bool,
+    pub(crate) results: Vec<Option<Finished>>,
+    pub(crate) interrupted: bool,
 }
 
 /// Run every validator of `plan`, at most `jobs` at once, starting them in
@@ -130,7 +137,7 @@ pub(super) struct Ran {
 /// is dropped, which kills its process group, and `report` is called for
 /// each validator not yet reported, with `None` for those that hadn't
 /// finished.
-pub(super) async fn run_all<E>(
+pub(crate) async fn run_all<E>(
     plan: Arc<Plan>,
     jobs: NonZeroUsize,
     interrupt: impl Future<Output = ()>,
@@ -187,7 +194,7 @@ pub(super) async fn run_all<E>(
 }
 
 #[cfg(all(test, unix))]
-pub(super) mod tests {
+pub(crate) mod tests {
     use std::{convert::Infallible, ffi::OsString, path::Path};
 
     use tempfile::TempDir;
@@ -242,6 +249,7 @@ timeout = 30
             Layout::single(dir.path().to_path_buf()),
             vec![file],
             BTreeMap::from([(key, descriptor)]),
+            None,
         );
         (dir, plan)
     }
@@ -297,6 +305,7 @@ timeout = 30
             Layout::new(slcr_dir, repo.clone()),
             files.into(),
             descriptors,
+            None,
         );
         // Each argument and working directory, spelled exactly: `Path`'s
         // `==` would ignore a trailing separator.

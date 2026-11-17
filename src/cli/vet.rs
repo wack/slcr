@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     fmt::{self, Display},
     path::{Path, PathBuf},
 };
@@ -12,15 +11,12 @@ use super::ProjectArgs;
 use super::findings::{FileFindings, ValidatorFindings, counted, passes, tally};
 use crate::Terminal;
 use crate::fs::FileSystem;
-use crate::project::{IndexedSpec, Layout, Problem, ProjectFile, SpecIndex, discover, relative_to};
+use crate::project::Problem;
+use crate::project::vet::vet_project;
 use crate::spec::file::RequirementsFile;
-use crate::spec::graph::UnvettedDocument;
 use crate::spec::vet::Report;
-use crate::tools::descriptor::Descriptor;
-use crate::tools::manifest::{ManifestFile, Project};
-use crate::tools::{ToolKey, pinned, store::DescriptorStore};
-use crate::validators::vet::{Context, vet as vet_validators};
-use crate::validators::{Finding, ValidatorFile};
+use crate::tools::store::DescriptorStore;
+use crate::validators::Finding;
 
 pub(crate) mod json;
 
@@ -183,151 +179,6 @@ pub(super) fn write_statuses(
     Ok(())
 }
 
-/// What vetting a project found, and the parts of it that loaded.
-#[derive(Debug)]
-pub(super) struct VettedProject {
-    pub(super) project: ProjectOutcome,
-    /// What vetting each specification file found, in the order of their
-    /// paths.
-    pub(super) outcomes: Vec<Outcome>,
-    pub(super) loaded: Loaded,
-}
-
-/// The parts of a project that loaded, which `slcr check` runs and
-/// evaluates once the project vets cleanly; then nothing is missing.
-#[derive(Debug)]
-pub(super) struct Loaded {
-    /// Where the project is: what its validators run against.
-    pub(super) layout: Layout,
-    /// Each specification that loaded, in the order of their paths.
-    pub(super) specs: Vec<(ProjectFile, UnvettedDocument)>,
-    /// Each validator file that loaded, in the order of their paths.
-    pub(super) validators: Vec<ValidatorFile>,
-    /// The descriptor of each declared tool that the store holds.
-    pub(super) descriptors: BTreeMap<ToolKey, Descriptor>,
-}
-
-/// Vet `project`, naming its files relative to `cwd`, an absolute path:
-/// read its manifest, and check the descriptor each declared tool pins as
-/// `store` holds it; discover its specification files and validator files
-/// in its SLCR directory; vet each specification, check that their names
-/// are unique, then vet each validator file against them.
-pub(super) fn vet_project(
-    fs: &FileSystem,
-    store: &DescriptorStore,
-    project: &Project,
-    cwd: &Path,
-) -> VettedProject {
-    let layout = project.layout().clone();
-    let manifest = project.shown_manifest().to_path_buf();
-    tracing::debug!(manifest = %manifest.display(), "vetting a project");
-    let file = match ManifestFile::load(project) {
-        Ok(file) => file,
-        Err(error) => {
-            let result = Err(error);
-            let project = ProjectOutcome {
-                manifest,
-                result,
-                validators: Vec::new(),
-            };
-            return VettedProject {
-                project,
-                outcomes: Vec::new(),
-                loaded: Loaded {
-                    layout,
-                    specs: Vec::new(),
-                    validators: Vec::new(),
-                    descriptors: BTreeMap::new(),
-                },
-            };
-        }
-    };
-    let discovery = discover(layout.slcr_dir(), cwd, file.manifest().specs());
-    let mut problems = discovery.problems;
-    problems.extend(discovery.validators.iter().filter_map(|file| {
-        let counterpart = layout.validator_dir(file);
-        (!counterpart.is_dir()).then(|| Problem::MissingCounterpart {
-            path: file.shown().to_path_buf(),
-            counterpart: relative_to(&counterpart, cwd),
-        })
-    }));
-    let loaded: Vec<_> = discovery
-        .files
-        .into_iter()
-        .map(|file| {
-            tracing::debug!(path = %file.shown().display(), "vetting a requirements file");
-            let document = file.load_spec(fs);
-            (file, document)
-        })
-        .collect();
-    let (index, duplicates) = SpecIndex::new(loaded.iter().filter_map(|(file, document)| {
-        let document = document.as_ref().ok()?;
-        Some(IndexedSpec { file, document })
-    }));
-    problems.extend(duplicates);
-
-    let (descriptors, unusable) = pinned::load_all(fs, store, file.manifest().tools());
-    problems.extend(unusable.into_iter().map(Problem::Descriptor));
-    // Each loaded descriptor's schema compiled when it was checked.
-    let schemas = descriptors
-        .iter()
-        .filter_map(|(key, descriptor)| {
-            let schema = jsonschema::draft202012::new(descriptor.schema()).ok()?;
-            Some((key.clone(), schema))
-        })
-        .collect();
-    let cx = Context {
-        specs: &index,
-        complete: loaded.iter().all(|(_, document)| document.is_ok()),
-        manifest: &file,
-        schemas: &schemas,
-    };
-    let mut validator_files = Vec::new();
-    let validators = discovery
-        .validators
-        .into_iter()
-        .map(|file| {
-            tracing::debug!(path = %file.shown().display(), "vetting a validator file");
-            let path = file.shown().to_path_buf();
-            let result = ValidatorFile::load(file).map(|file| {
-                let findings = vet_validators(&file, &cx);
-                validator_files.push(file);
-                findings
-            });
-            ValidatorOutcome { path, result }
-        })
-        .collect();
-    // It borrows `loaded`, which is taken apart next.
-    drop(index);
-
-    let mut specs = Vec::new();
-    let mut outcomes = Vec::new();
-    for (file, document) in loaded {
-        let path = file.shown().to_path_buf();
-        let result = document.map(|document| {
-            let report = document.report();
-            specs.push((file, document));
-            report
-        });
-        outcomes.push(Outcome { path, result });
-    }
-    let project_outcome = ProjectOutcome {
-        manifest,
-        result: Ok(problems),
-        validators,
-    };
-    VettedProject {
-        project: project_outcome,
-        outcomes,
-        loaded: Loaded {
-            layout,
-            specs,
-            validators: validator_files,
-            descriptors,
-        },
-    }
-}
-
 /// What vetting the project as a whole found.
 #[derive(Debug)]
 pub struct ProjectOutcome {
@@ -351,6 +202,11 @@ pub struct ValidatorOutcome {
 }
 
 impl ValidatorOutcome {
+    /// The outcome of vetting the validator file at `path`.
+    pub(crate) fn new(path: PathBuf, result: Result<Vec<Finding>, ErrorReport>) -> Self {
+        Self { path, result }
+    }
+
     /// Whether the file passes. Its problems are never warnings.
     fn passes(&self) -> bool {
         self.result.as_ref().is_ok_and(Vec::is_empty)
@@ -386,6 +242,12 @@ impl ProjectOutcome {
             result,
             validators: Vec::new(),
         }
+    }
+
+    /// This outcome, with what vetting each validator file found, in the
+    /// order of their paths.
+    pub(crate) fn with_validators(self, validators: Vec<ValidatorOutcome>) -> Self {
+        Self { validators, ..self }
     }
 
     /// Every problem with the project, or why its manifest couldn't be
@@ -457,7 +319,7 @@ impl Outcome {
     }
 
     /// How many warnings the file has; none if it couldn't be loaded.
-    pub(super) fn warnings(&self) -> usize {
+    pub(crate) fn warnings(&self) -> usize {
         self.result
             .as_ref()
             .map_or(0, |report| report.warnings().len())
@@ -495,7 +357,7 @@ fn vet_file(fs: &FileSystem, path: &Path) -> Outcome {
 /// Succeed if the project, when there is one, and every file pass, or fail
 /// naming how many didn't. The project's manifest and its validator files
 /// count as files.
-pub(super) fn verdict(
+pub(crate) fn verdict(
     project: Option<&ProjectOutcome>,
     outcomes: &[Outcome],
     deny_warnings: bool,
@@ -528,7 +390,7 @@ pub(super) fn verdict(
 /// The error `slcr vet` fails with when any file fails.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("vetting failed for {failed} of {total} {}", if *.total == 1 { "file" } else { "files" })]
-pub(super) struct VetFailed {
+pub(crate) struct VetFailed {
     failed: usize,
     total: usize,
     /// Whether a file failed only because its warnings are denied.
@@ -556,9 +418,11 @@ mod tests {
     use crate::Cli;
     use crate::config::command::SlcrCommand;
     use crate::fs::format::ParseError;
+    use crate::project::Layout;
     use crate::spec::file::UnsupportedFormat;
     use crate::spec::graph::UnvettedDocument;
     use crate::terminal::render_plain;
+    use crate::tools::manifest::Project;
     use crate::tools::manifest::ProjectError;
 
     const TODO_API_JSON: &str = include_str!("../../tests/fixtures/todo-api.spec.json");

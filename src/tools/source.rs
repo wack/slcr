@@ -127,7 +127,7 @@ impl HttpsUrl {
 /// it loads the platform's certificate authorities, which a project that
 /// keeps its descriptors in the repository never needs.
 #[derive(Default)]
-pub(crate) struct Fetcher {
+pub struct Fetcher {
     /// The only authority to trust, in place of the platform's, for a
     /// test server.
     authority: Option<reqwest::Certificate>,
@@ -135,8 +135,19 @@ pub(crate) struct Fetcher {
 
 impl Fetcher {
     /// A fetcher that trusts the platform's certificate authorities.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A fetcher that trusts only the certificate authority in `pem`, a
+    /// PEM-encoded certificate, in place of the platform's: for a server
+    /// whose certificate a private authority signed.
+    pub fn trusting_only(pem: &[u8]) -> Result<Self, SourceError> {
+        let authority = reqwest::Certificate::from_pem(pem)
+            .map_err(|source| SourceError::Client(Box::new(source)))?;
+        Ok(Self {
+            authority: Some(authority),
+        })
     }
 
     /// A fetcher that trusts only `authority`, for a test server.

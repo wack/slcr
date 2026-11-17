@@ -50,6 +50,11 @@ pub(crate) struct Target<'a> {
     pub(crate) validator_dir: &'a Path,
     /// The requirement the validator verifies.
     pub(crate) requirement: &'a QualifiedRequirementId,
+    /// The `PATH` the caller names, in place of slcr's own: what the
+    /// program is found on, and what the child inherits, unless the
+    /// descriptor's `env.PATH` overrides it. Without one, slcr's own is
+    /// both.
+    pub(crate) path: Option<&'a OsStr>,
 }
 
 /// A validator, resolved and ready to run: every argument substituted,
@@ -63,6 +68,9 @@ pub(crate) struct Invocation {
     executable: PathBuf,
     args: Vec<OsString>,
     cwd: PathBuf,
+    /// The `PATH` the child inherits in place of slcr's own, if the caller
+    /// named one.
+    path: Option<OsString>,
     /// Set or overridden in the environment the child inherits.
     env: BTreeMap<EnvName, String>,
     timeout: Option<Duration>,
@@ -71,11 +79,15 @@ pub(crate) struct Invocation {
 }
 
 impl Invocation {
-    /// Resolve `target` against slcr's own environment, as the child will
-    /// inherit it. Do this just before running it, so that the program
-    /// found is the one `PATH` names then.
+    /// Resolve `target` against the `PATH` it names, or else slcr's own,
+    /// as the child will inherit it. Do this just before running it, so
+    /// that the program found is the one `PATH` names then. Only without a
+    /// `PATH` of the caller's is slcr's environment read.
     pub(crate) fn new(target: Target<'_>) -> Result<Self, SpawnFailure> {
-        Self::resolve(target, std::env::var_os("PATH").as_deref())
+        match target.path {
+            Some(path) => Self::resolve(target, Some(path)),
+            None => Self::resolve(target, std::env::var_os("PATH").as_deref()),
+        }
     }
 
     /// Resolve `target` as if slcr's `PATH` were `inherited_path`.
@@ -110,6 +122,7 @@ impl Invocation {
             executable,
             args,
             cwd,
+            path: target.path.map(OsStr::to_os_string),
             env: invoke.env().clone(),
             timeout: invoke
                 .timeout()
@@ -283,6 +296,7 @@ cwd = "project"
                 project_root: self.root(),
                 validator_dir: &self.validator_dir(),
                 requirement: &self.requirement,
+                path: None,
             })
         }
     }
@@ -329,6 +343,7 @@ cwd = "project"
             project_root: project.root(),
             validator_dir: &project.validator_dir(),
             requirement: &project.requirement,
+            path: None,
         };
         let invocation = Invocation::resolve(target, Some(OsStr::new("/nonexistent"))).unwrap();
         assert_eq!(invocation.executable(), &bin.path().join("only-here"));

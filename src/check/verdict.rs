@@ -22,7 +22,7 @@ use crate::spec::text::SpecName;
 /// The verdicts of each specification's validators: every green or red
 /// run, under its validator's requirement, whichever criterion it checks.
 /// A validator that couldn't be run, or hadn't finished, gives none.
-pub(super) fn verdicts(plan: &Plan, results: &[Option<Finished>]) -> BTreeMap<SpecName, Verdicts> {
+pub(crate) fn verdicts(plan: &Plan, results: &[Option<Finished>]) -> BTreeMap<SpecName, Verdicts> {
     let mut verdicts: BTreeMap<SpecName, Verdicts> = BTreeMap::new();
     for (job, finished) in plan.jobs().zip(results) {
         let Some(Ok(run)) = finished else {
@@ -43,15 +43,15 @@ pub(super) fn verdicts(plan: &Plan, results: &[Option<Finished>]) -> BTreeMap<Sp
 
 /// One specification of the project, evaluated.
 #[derive(Debug)]
-pub(super) struct Evaluated<'a> {
-    pub(super) file: &'a ProjectFile,
-    pub(super) name: &'a SpecName,
-    pub(super) evaluation: Evaluation,
+pub(crate) struct Evaluated<'a> {
+    pub(crate) file: &'a ProjectFile,
+    pub(crate) name: &'a SpecName,
+    pub(crate) evaluation: Evaluation,
 }
 
 impl Evaluated<'_> {
     /// The severity of the finding on `requirement`, if it has one.
-    pub(super) fn severity(&self, requirement: RequirementId) -> Option<Severity> {
+    pub(crate) fn severity(&self, requirement: RequirementId) -> Option<Severity> {
         self.evaluation
             .findings()
             .iter()
@@ -62,7 +62,7 @@ impl Evaluated<'_> {
 
 /// The severity of the finding on `requirement`, if its specification is
 /// among `evaluated` and it has one.
-pub(super) fn severity(
+pub(crate) fn severity(
     evaluated: &[Evaluated<'_>],
     requirement: &QualifiedRequirementId,
 ) -> Option<Severity> {
@@ -74,7 +74,7 @@ pub(super) fn severity(
 
 /// Evaluate each of `specs`, which vetted cleanly, from `verdicts`, in
 /// order.
-pub(super) fn evaluate_all<'a>(
+pub(crate) fn evaluate_all<'a>(
     specs: &'a [(ProjectFile, UnvettedDocument)],
     verdicts: &BTreeMap<SpecName, Verdicts>,
 ) -> Vec<Evaluated<'a>> {
@@ -97,19 +97,19 @@ pub(super) fn evaluate_all<'a>(
 /// What decides whether `check` passes, once vetting has and every
 /// validator has finished.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct Tally {
+pub(crate) struct Tally {
     /// Validators that couldn't be run.
-    pub(super) unrunnable: usize,
+    pub(crate) unrunnable: usize,
     /// Unsatisfied MUST and MUST NOT requirements whose failure isn't
     /// absorbed.
-    pub(super) violations: usize,
+    pub(crate) violations: usize,
     /// Vetting's warnings and satisfaction's: unsatisfied SHOULD and
     /// SHOULD NOT requirements, and absorbed failures.
-    pub(super) warnings: usize,
+    pub(crate) warnings: usize,
 }
 
 impl Tally {
-    pub(super) fn new(
+    pub(crate) fn new(
         vet_warnings: usize,
         results: &[Option<Finished>],
         evaluated: &[Evaluated<'_>],
@@ -131,7 +131,7 @@ impl Tally {
     /// Succeed unless a validator couldn't be run, a requirement is a
     /// violation, or, if they are denied, there are warnings. Informational
     /// findings and unknown requirements never fail it.
-    pub(super) fn verdict(self, deny_warnings: bool) -> Result<(), CheckFailed> {
+    pub(crate) fn verdict(self, deny_warnings: bool) -> Result<(), CheckFailed> {
         let warnings = if deny_warnings { self.warnings } else { 0 };
         if self.unrunnable == 0 && self.violations == 0 && warnings == 0 {
             return Ok(());
@@ -146,7 +146,7 @@ impl Tally {
 
 /// The error `slcr check` fails with once every validator has finished.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-pub(super) struct CheckFailed {
+pub(crate) struct CheckFailed {
     unrunnable: usize,
     violations: usize,
     /// Warnings, counted only when they are denied.
@@ -188,18 +188,18 @@ impl Diagnostic for CheckFailed {
     "every validator still running was stopped, with what it had started; no requirement was \
      evaluated"
 ))]
-pub(super) struct Interrupted {
-    pub(super) finished: usize,
-    pub(super) total: usize,
+pub(crate) struct Interrupted {
+    pub(crate) finished: usize,
+    pub(crate) total: usize,
 }
 
 /// The error `slcr check` fails with when the project doesn't vet cleanly.
 #[derive(Clone, Debug, Error, Diagnostic, PartialEq, Eq)]
 #[error("the project doesn't vet cleanly, so no validator was run")]
 #[diagnostic(help("`slcr vet` reports the same problems; fix them, then check again"))]
-pub(super) struct NotVetted {
+pub(crate) struct NotVetted {
     #[source]
-    pub(super) failed: VetFailed,
+    pub(crate) failed: VetFailed,
 }
 
 #[cfg(all(test, unix))]
@@ -214,7 +214,7 @@ mod tests {
     use crate::satisfaction::Status;
     use crate::terminal::render_plain;
 
-    const TODO_API_JSON: &str = include_str!("../../../tests/fixtures/todo-api.spec.json");
+    const TODO_API_JSON: &str = include_str!("../../tests/fixtures/todo-api.spec.json");
 
     /// Run every validator of `plan`, uninterrupted.
     fn ran(plan: Plan) -> (std::sync::Arc<Plan>, Ran) {

@@ -558,6 +558,11 @@ fn vet_rejects_a_directory_that_does_not_exist() {
         "missing_slcr_dir",
         workspace.slcr(&["vet", "--slcr-dir", "missing"])
     );
+    // The manifest itself, named in place of its directory.
+    assert_cmd_snapshot!(
+        "manifest_as_slcr_dir",
+        workspace.slcr(&["vet", "--slcr-dir", "app/SLCR.toml"])
+    );
 }
 
 #[test]
