@@ -22,8 +22,11 @@ jobs:
     needs:
       - "format"
       - "build"
+      - "grafeo"
+      - "turso"
       - "dist-plan"
       - "dist-build"
+      - "publish-dry-run"
       - "specification"
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
@@ -66,6 +69,39 @@ jobs:
       - name: Cargo Make
         run: cargo make ci-flow
 
+  # Validates `slcr-gql`'s `grafeo` feature: clippy plus its full test suite
+  # with the feature on, which adds the differential oracle against Grafeo
+  # (crates/gql/tests/oracle.rs). A separate job from `build` so it runs in
+  # parallel instead of serializing after `build`'s docs + coverage steps.
+  grafeo:
+    name: Validate Grafeo Feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-grafeo
+      - name: Cargo Make
+        run: cargo make ci-grafeo-flow
+
+  # Validates `slcr-gql`'s `turso` feature: clippy plus its full test suite
+  # with the feature on, which adds crates/gql/tests/turso.rs and runs the TCK
+  # gate against the Turso backend (TCK_STORE=turso, set by test-turso).
+  turso:
+    name: Validate Turso Feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-turso
+      - name: Cargo Make
+        run: cargo make ci-turso-flow
+
   # The repository's own SLCR specification (see "Self-hosting" in
   # CLAUDE.md). The committed SPEC.md must be exactly what SPEC.slcr.toml
   # renders to, and `slcr check` must find every requirement satisfied:
@@ -87,6 +123,24 @@ jobs:
       - name: Requirements are satisfied
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: cargo make self-check
+
+  # Gating crates.io publish. release.yml publishes both crates to crates.io
+  # on a version tag (publish-crates-io.yml), after the release's artifacts
+  # are uploaded, and a published version can't be replaced. So every
+  # merge-queue candidate is packaged and built from its packages here,
+  # uploading nothing, and trunk never holds a commit crates.io would refuse.
+  publish-dry-run:
+    name: Package crates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-package
+      - name: Package crates
+        run: cargo make publish-dry-run
 
   # ───────────────────────────────────────────────────────────────────────────
   # Gating release build. Every merge-queue candidate is built for all Linux

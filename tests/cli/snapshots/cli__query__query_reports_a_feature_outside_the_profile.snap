@@ -5,6 +5,9 @@ info:
   args:
     - query
     - OPTIONAL MATCH (r) RETURN r
+  env:
+    HOME: "[HOME]"
+    XDG_DATA_HOME: "[DATA_HOME]"
 ---
 success: false
 exit_code: 1
@@ -18,4 +21,4 @@ Error:   × `OPTIONAL` is outside the SLCR query profile
    ·     ╰── not supported
    ╰────
   help: queries use a read-only subset of GQL, specified at
-        https://github.com/wack/gql-rust/blob/trunk/PROFILE.md
+        https://github.com/wack/slcr/blob/trunk/crates/gql/PROFILE.md

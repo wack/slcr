@@ -10,6 +10,7 @@ cargo make check-format        # Format check (CI runs this)
 cargo make clippy              # Lint — canonical blocking gate (== CI and bacon)
 cargo make test                # Run all tests (== CI's nextest run)
 cargo make test-doc            # Compile and run the doc examples (nextest skips them)
+cargo make test-gql            # Run slcr-gql's suite (crates/gql), including the TCK gate
 cargo nextest run --locked <filter>   # Run a single test / matching tests by name substring
 cargo make monitor             # Headless bacon for Claude Code's Monitor tool
 cargo insta review             # Review snapshot changes after a failing run (see Testing)
@@ -34,6 +35,58 @@ CI would reject.
 
 The toolchain is pinned in `rust-toolchain.toml`; the crate is edition 2024 and
 forbids `unsafe_code`.
+
+## Workspace
+
+The repository is a Cargo workspace of two packages: `slcr`, at the root,
+and `slcr-gql`, the query engine, in `crates/gql` (see its own `CLAUDE.md`).
+They share `Cargo.lock`, `rust-toolchain.toml`, `Makefile.toml`, and CI.
+
+- The root package is the workspace's default member, so `cargo build`,
+  `cargo run`, `cargo make test`, and `cargo make test-doc` are `slcr`'s
+  alone, as before. `cargo make clippy` and the format tasks cover both
+  packages.
+- `cargo make test-gql` (`cargo test --package slcr-gql --locked`) runs
+  `slcr-gql`'s suite, in `ci-flow` after `test-doc`. Never run it under
+  nextest, or pass nextest `--workspace`: the TCK gate has its own `main`.
+- `slcr-gql`'s `grafeo` and `turso` features are off by default and `slcr`
+  never enables them. `cargo make clippy-grafeo`/`test-grafeo` and
+  `clippy-turso`/`test-turso` cover them, as CI jobs of their own (the
+  clippy ones in `on-push.yml`, `grafeo` and `turso` in `on-merge.yml`).
+- What both packages depend on (`serde`, `serde_json`, `thiserror`) is
+  declared once, in the root's `[workspace.dependencies]`, and each takes
+  it with `workspace = true`. Declare a dependency there as soon as both
+  need it. `slcr-gql` itself is declared there too, by `path` and
+  `version`: the path is what builds here, the version what a published
+  `slcr` would require. Keep the version the crate's own.
+- Only `slcr` is released as a binary: `crates/gql/Cargo.toml` sets
+  `dist = false`, so `dist` builds no `slcr-query` archive or installer.
+  Both are published to crates.io (see Releases).
+
+## Releases
+
+A version tag runs `release.yml`, which `dist` generates from
+`dist-workspace.toml`: never edit it by hand, run `dist generate` after
+changing the config (`dist` fails the release if the two disagree).
+
+- Once the artifacts are built and uploaded, its publish jobs run: the
+  Homebrew formula, and `publish-crates-io.yml`, a custom job
+  (`publish-jobs`, with `github-custom-job-permissions`) that publishes
+  `slcr-gql`, then `slcr`, to crates.io. It skips a version crates.io
+  already has, so a rerun is safe, and a release that leaves `slcr-gql`
+  alone publishes only `slcr`. Neither job runs for a prerelease tag.
+- It authenticates by Trusted Publishing, with no stored token. crates.io
+  matches the workflow that started the run, so each crate's Trusted
+  Publisher names `release.yml`.
+- Bump `slcr-gql`'s version (and the one in `[workspace.dependencies]`)
+  in any release that changes `crates/gql`. Otherwise its change isn't
+  published, and the published `slcr` is built against the old one.
+- Each crate's `include` list is what crates.io gets: sources, README,
+  and license, no tests. A new file that `src` embeds from outside it
+  (`include_str!`) in non-test code must be added to the list.
+- `cargo make publish-dry-run` (`cargo publish --workspace --dry-run
+  --locked`) packages both and builds each from its package; it gates the
+  merge queue (`publish-dry-run` in `on-merge.yml`).
 
 # Architecture
 
@@ -609,7 +662,7 @@ crate-private pipeline `slcr check` and `Project::check` share.
 
 ## Queries (`src/query/`)
 
-`slcr-gql` (a git dependency on `wack/gql-rust`, pinned by `rev`) parses and
+`slcr-gql` (the workspace crate in `crates/gql`, see Workspace) parses and
 runs queries against any `GraphStore`. Its `PROFILE.md` specifies the query
 language and the graph a specification maps to.
 

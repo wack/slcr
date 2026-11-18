@@ -5,7 +5,7 @@ use miette::{Diagnostic, LabeledSpan, NamedSource, SourceCode};
 use slcr_gql::Error;
 
 /// Where the query profile is specified.
-const PROFILE: &str = "https://github.com/wack/gql-rust/blob/trunk/PROFILE.md";
+const PROFILE: &str = "https://github.com/wack/slcr/blob/trunk/crates/gql/PROFILE.md";
 
 /// The error returned when a query can't be run, or fails while running.
 ///
