@@ -28,7 +28,14 @@ install-updater = true
 # A GitHub repo to push Homebrew formulas to
 tap = "wack/homebrew-tap"
 # Publish jobs to run in CI
-publish-jobs = ["homebrew"]
+# "./publish-crates-io" is .github/workflows/publish-crates-io.yml, which
+# publishes the workspace's crates to crates.io.
+publish-jobs = ["homebrew", "./publish-crates-io"]
+# What release.yml grants that job, in place of dist's default for custom
+# publish jobs (`id-token` and `packages`, both "write"): a called workflow
+# can't have more than its caller grants, and it needs `contents` to check
+# out, and `id-token` for crates.io Trusted Publishing.
+github-custom-job-permissions = { "publish-crates-io" = { id-token = "write", contents = "read" } }
 
 # Override the default runner image. Ubuntu-20.04 builds
 # with too old of a C compiler, and breaks some cryptography

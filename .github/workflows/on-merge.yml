@@ -26,6 +26,7 @@ jobs:
       - "turso"
       - "dist-plan"
       - "dist-build"
+      - "publish-dry-run"
       - "specification"
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
@@ -122,6 +123,24 @@ jobs:
       - name: Requirements are satisfied
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: cargo make self-check
+
+  # Gating crates.io publish. release.yml publishes both crates to crates.io
+  # on a version tag (publish-crates-io.yml), after the release's artifacts
+  # are uploaded, and a published version can't be replaced. So every
+  # merge-queue candidate is packaged and built from its packages here,
+  # uploading nothing, and trunk never holds a commit crates.io would refuse.
+  publish-dry-run:
+    name: Package crates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-package
+      - name: Package crates
+        run: cargo make publish-dry-run
 
   # ───────────────────────────────────────────────────────────────────────────
   # Gating release build. Every merge-queue candidate is built for all Linux

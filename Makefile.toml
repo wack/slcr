@@ -218,6 +218,18 @@ workspace = false
 command = "cargo"
 args = ["run", "--locked", "--", "check", "--deny-warnings"]
 
+# What a release publishes to crates.io (see publish-crates-io.yml), short
+# of uploading it: both crates are packaged, and each is built from its
+# package alone, `slcr` against the packaged `slcr-gql`. It fails on what
+# would fail the release, such as a dependency crates.io can't serve or a
+# source file the `include` lists leave out.
+[tasks.publish-dry-run]
+description = "Package both crates as a release would publish them, and build the packages."
+category = "Development"
+workspace = false
+command = "cargo"
+args = ["publish", "--workspace", "--dry-run", "--locked"]
+
 [tasks.install-hooks]
 description = "Have git run the repository's hooks, in .githooks/."
 category = "Development"

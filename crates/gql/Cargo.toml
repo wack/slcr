@@ -7,6 +7,19 @@ description = "Read-only GQL query profile for the SLCR specification graph"
 homepage = "https://slcr.dev"
 repository = "https://github.com/wack/slcr"
 readme = "README.md"
+keywords = ["gql", "graph", "query", "opencypher", "slcr"]
+categories = ["database", "parser-implementations"]
+# What crates.io gets: the library, `slcr-query`, the examples, and the
+# canon spec they and the doc examples embed, without the test suites and
+# the conformance suites vendored in `tck`.
+include = [
+  "/src",
+  "/examples",
+  "/tests/data",
+  "/README.md",
+  "/PROFILE.md",
+  "/LICENSE",
+]
 
 # Only `slcr` is released as a binary; `slcr-query` is a development tool,
 # so `dist` leaves this crate out of releases.

@@ -1,0 +1,66 @@
+# Publishes the workspace's crates to crates.io. `dist` calls this from
+# release.yml as a custom publish job (`publish-jobs` in
+# dist-workspace.toml), once every release artifact is built and uploaded,
+# so a tag that can't be built publishes nothing.
+#
+# It authenticates by crates.io Trusted Publishing: no token is stored in
+# this repository. crates.io checks the workflow that *started* the run, so
+# each crate's Trusted Publisher names `release.yml`, not this file:
+#
+#   crates.io > the crate > Settings > Trusted Publishing > Add
+#   owner `wack`, repository `slcr`, workflow `release.yml`, no environment
+#
+# for both `slcr` and `slcr-gql`.
+name: Publish to crates.io
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish crates
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      # Lets the job ask GitHub for the OIDC token crates.io exchanges.
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+      - name: Authenticate with crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      # Dependencies first: `slcr` requires the `slcr-gql` it is built with,
+      # and `cargo publish` returns only once the index serves the crate. A
+      # version crates.io already has is skipped, so a release that doesn't
+      # change `slcr-gql` republishes nothing, and a rerun of a release that
+      # half-published picks up where it stopped.
+      - name: Publish
+        shell: bash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          set -euo pipefail
+          for crate in slcr-gql slcr; do
+            version=$(cargo metadata --locked --no-deps --format-version 1 \
+              | jq -r --arg crate "$crate" '.packages[] | select(.name == $crate) | .version')
+            status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --user-agent "publish-crates-io workflow" \
+              "https://crates.io/api/v1/crates/${crate}/${version}")
+            case "$status" in
+              200) echo "${crate} ${version} is already on crates.io; skipping" ;;
+              404) cargo publish --locked --package "$crate" ;;
+              *) echo "crates.io answered ${status} for ${crate} ${version}" >&2; exit 1 ;;
+            esac
+          done

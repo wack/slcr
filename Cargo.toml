@@ -8,6 +8,11 @@ description = "Write requirements as a graph and check them with validators"
 homepage = "https://slcr.dev"
 license = "MIT"
 repository = "https://github.com/wack/slcr"
+keywords = ["requirements", "specification", "validation", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+# What crates.io gets: the library and the binary, without the test suites
+# and their snapshots, or the repository's own specification and CI.
+include = ["/src", "/README.md", "/LICENSE"]
 
 # `slcr-gql`, the query engine, lives in `crates/gql`.
 [workspace]

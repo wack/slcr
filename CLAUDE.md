@@ -59,8 +59,34 @@ They share `Cargo.lock`, `rust-toolchain.toml`, `Makefile.toml`, and CI.
   need it. `slcr-gql` itself is declared there too, by `path` and
   `version`: the path is what builds here, the version what a published
   `slcr` would require. Keep the version the crate's own.
-- Only `slcr` is released: `crates/gql/Cargo.toml` sets `dist = false`, so
-  `dist` builds no `slcr-query` archive or installer.
+- Only `slcr` is released as a binary: `crates/gql/Cargo.toml` sets
+  `dist = false`, so `dist` builds no `slcr-query` archive or installer.
+  Both are published to crates.io (see Releases).
+
+## Releases
+
+A version tag runs `release.yml`, which `dist` generates from
+`dist-workspace.toml`: never edit it by hand, run `dist generate` after
+changing the config (`dist` fails the release if the two disagree).
+
+- Once the artifacts are built and uploaded, its publish jobs run: the
+  Homebrew formula, and `publish-crates-io.yml`, a custom job
+  (`publish-jobs`, with `github-custom-job-permissions`) that publishes
+  `slcr-gql`, then `slcr`, to crates.io. It skips a version crates.io
+  already has, so a rerun is safe, and a release that leaves `slcr-gql`
+  alone publishes only `slcr`. Neither job runs for a prerelease tag.
+- It authenticates by Trusted Publishing, with no stored token. crates.io
+  matches the workflow that started the run, so each crate's Trusted
+  Publisher names `release.yml`.
+- Bump `slcr-gql`'s version (and the one in `[workspace.dependencies]`)
+  in any release that changes `crates/gql`. Otherwise its change isn't
+  published, and the published `slcr` is built against the old one.
+- Each crate's `include` list is what crates.io gets: sources, README,
+  and license, no tests. A new file that `src` embeds from outside it
+  (`include_str!`) in non-test code must be added to the list.
+- `cargo make publish-dry-run` (`cargo publish --workspace --dry-run
+  --locked`) packages both and builds each from its package; it gates the
+  merge queue (`publish-dry-run` in `on-merge.yml`).
 
 # Architecture
 
