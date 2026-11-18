@@ -53,9 +53,12 @@ They share `Cargo.lock`, `rust-toolchain.toml`, `Makefile.toml`, and CI.
   never enables them. `cargo make clippy-grafeo`/`test-grafeo` and
   `clippy-turso`/`test-turso` cover them, as CI jobs of their own (the
   clippy ones in `on-push.yml`, `grafeo` and `turso` in `on-merge.yml`).
-- `slcr` depends on `slcr-gql` by `path` and `version`: the path is what
-  builds here, the version what a published `slcr` would require. Keep the
-  version the crate's own.
+- What both packages depend on (`serde`, `serde_json`, `thiserror`) is
+  declared once, in the root's `[workspace.dependencies]`, and each takes
+  it with `workspace = true`. Declare a dependency there as soon as both
+  need it. `slcr-gql` itself is declared there too, by `path` and
+  `version`: the path is what builds here, the version what a published
+  `slcr` would require. Keep the version the crate's own.
 - Only `slcr` is released: `crates/gql/Cargo.toml` sets `dist = false`, so
   `dist` builds no `slcr-query` archive or installer.
 

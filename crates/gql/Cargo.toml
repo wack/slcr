@@ -21,9 +21,9 @@ grafeo = { version = "=0.5.42", default-features = false, features = ["gql", "lp
 petgraph = "=0.8.3"
 # Minimal executor for the slcr-query CLI; the library itself is runtime-agnostic.
 pollster = { version = "1.0.1", default-features = false }
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-thiserror = "2"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
 # Default features are off: they install mimalloc as the global allocator,
 # which a library must not impose on its users.
 turso = { version = "=0.8.2", default-features = false, optional = true }
