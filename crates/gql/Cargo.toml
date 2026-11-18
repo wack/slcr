@@ -1,0 +1,41 @@
+[package]
+name = "slcr-gql"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Read-only GQL query profile for the SLCR specification graph"
+homepage = "https://slcr.dev"
+repository = "https://github.com/wack/slcr"
+readme = "README.md"
+
+# Only `slcr` is released as a binary; `slcr-query` is a development tool,
+# so `dist` leaves this crate out of releases.
+[package.metadata.dist]
+dist = false
+
+[dependencies]
+async-lock = { version = "3.4.2", optional = true }
+async-trait = "0.1.92"
+chumsky = "=0.13.0"
+grafeo = { version = "=0.5.42", default-features = false, features = ["gql", "lpg"], optional = true }
+petgraph = "=0.8.3"
+# Minimal executor for the slcr-query CLI; the library itself is runtime-agnostic.
+pollster = { version = "1.0.1", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2"
+# Default features are off: they install mimalloc as the global allocator,
+# which a library must not impose on its users.
+turso = { version = "=0.8.2", default-features = false, optional = true }
+
+[[test]]
+name = "tck"
+harness = false
+
+[features]
+grafeo = ["dep:grafeo"]
+turso = ["dep:turso", "dep:async-lock"]
+
+[[example]]
+name = "turso"
+required-features = ["turso"]

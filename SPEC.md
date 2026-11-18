@@ -2242,7 +2242,7 @@ The directory that holds a project's manifest, and with it the project's SLCR fi
 <dt><a id="TERM-012"></a>SLCR query profile</dt>
 <dd>
 
-The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `PROFILE.md` in `wack/gql-rust` specifies it.
+The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `crates/gql/PROFILE.md` specifies it.
 
 </dd>
 <dt><a id="TERM-013"></a>Slice</dt>

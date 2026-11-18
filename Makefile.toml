@@ -26,6 +26,7 @@ dependencies = [
   "post-docs",
   "test-flow",
   "test-doc",
+  "test-gql",
 ]
 
 # Canonical clippy command — the single source of truth shared by CI
@@ -49,6 +50,48 @@ args = [
   "warnings",
 ]
 
+# `slcr-gql` (crates/gql) keeps two backends behind Cargo features that are
+# off by default, so they rot unless CI also lints and tests them: the
+# Grafeo differential oracle (tests/oracle.rs, `grafeo`) and the Turso store
+# (src/store/turso_store.rs, `turso`). Each task is [tasks.clippy] for that
+# crate alone plus its feature, kept separate so the feature sets stay
+# independently attributable in CI output.
+[tasks.clippy-grafeo]
+description = "Canonical clippy command for slcr-gql's grafeo feature."
+category = "Development"
+workspace = false
+command = "cargo"
+args = [
+  "clippy",
+  "--all-targets",
+  "--package",
+  "slcr-gql",
+  "--locked",
+  "--features",
+  "grafeo",
+  "--",
+  "-D",
+  "warnings",
+]
+
+[tasks.clippy-turso]
+description = "Canonical clippy command for slcr-gql's turso feature."
+category = "Development"
+workspace = false
+command = "cargo"
+args = [
+  "clippy",
+  "--all-targets",
+  "--package",
+  "slcr-gql",
+  "--locked",
+  "--features",
+  "turso",
+  "--",
+  "-D",
+  "warnings",
+]
+
 [tasks.ci-flow]
 dependencies = [
   "pre-ci-flow",
@@ -63,12 +106,15 @@ dependencies = [
   "post-docs",
   "test-flow",
   "test-doc",
+  "test-gql",
   "coverage-flow",
   "post-ci-flow",
 ]
 
+# `slcr`'s suite alone: the workspace's default member is the root package.
+# `slcr-gql` is tested by `test-gql`, since nextest can't run it.
 [tasks.test]
-workspace = true
+workspace = false
 description = "Run our test suite"
 command = "cargo"
 args = [
@@ -87,6 +133,72 @@ category = "Test"
 workspace = false
 command = "cargo"
 args = ["test", "--doc", "--locked"]
+
+# `slcr-gql`'s suite (unit, profile, spec, doc examples, and the TCK gate)
+# runs under the built-in libtest runner rather than cargo-nextest: the TCK
+# gate (crates/gql/tests/tck, `harness = false`) has its own `main` and can't
+# answer nextest's `--list` probe, so nextest refuses to run the suite at all.
+[tasks.test-gql]
+description = "Run slcr-gql's test suite, including the TCK gate."
+category = "Test"
+workspace = false
+command = "cargo"
+args = [
+  "test",
+  "--package",
+  "slcr-gql",
+  "--locked",
+  "@@remove-empty(CARGO_MAKE_CARGO_VERBOSE_FLAGS)",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+]
+
+# The same suite with the `grafeo` feature, which additionally runs the
+# differential oracle against Grafeo. The oracle fails on any disagreement
+# not triaged into KNOWN_DIVERGENCES, so this is a real gate.
+[tasks.test-grafeo]
+description = "Run slcr-gql's test suite with the grafeo feature (adds the Grafeo oracle)."
+category = "Test"
+workspace = false
+command = "cargo"
+args = [
+  "test",
+  "--package",
+  "slcr-gql",
+  "--locked",
+  "--features",
+  "grafeo",
+  "@@remove-empty(CARGO_MAKE_CARGO_VERBOSE_FLAGS)",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+]
+
+# The same suite with the `turso` feature, which adds tests/turso.rs (Turso
+# vs the reference backend, persistence) and runs the TCK gate against an
+# in-memory TursoStore (TCK_STORE=turso) instead of PetgraphStore, which
+# `test-gql` already covers.
+[tasks.test-turso]
+description = "Run slcr-gql's test suite with the turso feature, with the TCK on TursoStore."
+category = "Test"
+workspace = false
+env = { TCK_STORE = "turso" }
+command = "cargo"
+args = [
+  "test",
+  "--package",
+  "slcr-gql",
+  "--locked",
+  "--features",
+  "turso",
+  "@@remove-empty(CARGO_MAKE_CARGO_VERBOSE_FLAGS)",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+]
+
+# One task each for CI's grafeo and turso jobs (see on-merge.yml), kept out
+# of `ci-flow` so they run as parallel jobs instead of serializing after it.
+[tasks.ci-grafeo-flow]
+dependencies = ["clippy-grafeo", "test-grafeo"]
+
+[tasks.ci-turso-flow]
+dependencies = ["clippy-turso", "test-turso"]
 
 # The repository's own specification (see "Self-hosting" in CLAUDE.md).
 # Both tasks run the checked-out `slcr`, never an installed one, so the
@@ -154,7 +266,6 @@ command = "bacon"
 args = [
   "nextest",
   "--",
-  "--workspace",
   "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
 ]
 

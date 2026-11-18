@@ -10,6 +10,7 @@ cargo make check-format        # Format check (CI runs this)
 cargo make clippy              # Lint — canonical blocking gate (== CI and bacon)
 cargo make test                # Run all tests (== CI's nextest run)
 cargo make test-doc            # Compile and run the doc examples (nextest skips them)
+cargo make test-gql            # Run slcr-gql's suite (crates/gql), including the TCK gate
 cargo nextest run --locked <filter>   # Run a single test / matching tests by name substring
 cargo make monitor             # Headless bacon for Claude Code's Monitor tool
 cargo insta review             # Review snapshot changes after a failing run (see Testing)
@@ -34,6 +35,29 @@ CI would reject.
 
 The toolchain is pinned in `rust-toolchain.toml`; the crate is edition 2024 and
 forbids `unsafe_code`.
+
+## Workspace
+
+The repository is a Cargo workspace of two packages: `slcr`, at the root,
+and `slcr-gql`, the query engine, in `crates/gql` (see its own `CLAUDE.md`).
+They share `Cargo.lock`, `rust-toolchain.toml`, `Makefile.toml`, and CI.
+
+- The root package is the workspace's default member, so `cargo build`,
+  `cargo run`, `cargo make test`, and `cargo make test-doc` are `slcr`'s
+  alone, as before. `cargo make clippy` and the format tasks cover both
+  packages.
+- `cargo make test-gql` (`cargo test --package slcr-gql --locked`) runs
+  `slcr-gql`'s suite, in `ci-flow` after `test-doc`. Never run it under
+  nextest, or pass nextest `--workspace`: the TCK gate has its own `main`.
+- `slcr-gql`'s `grafeo` and `turso` features are off by default and `slcr`
+  never enables them. `cargo make clippy-grafeo`/`test-grafeo` and
+  `clippy-turso`/`test-turso` cover them, as CI jobs of their own (the
+  clippy ones in `on-push.yml`, `grafeo` and `turso` in `on-merge.yml`).
+- `slcr` depends on `slcr-gql` by `path` and `version`: the path is what
+  builds here, the version what a published `slcr` would require. Keep the
+  version the crate's own.
+- Only `slcr` is released: `crates/gql/Cargo.toml` sets `dist = false`, so
+  `dist` builds no `slcr-query` archive or installer.
 
 # Architecture
 
@@ -609,7 +633,7 @@ crate-private pipeline `slcr check` and `Project::check` share.
 
 ## Queries (`src/query/`)
 
-`slcr-gql` (a git dependency on `wack/gql-rust`, pinned by `rev`) parses and
+`slcr-gql` (the workspace crate in `crates/gql`, see Workspace) parses and
 runs queries against any `GraphStore`. Its `PROFILE.md` specifies the query
 language and the graph a specification maps to.
 

@@ -2623,7 +2623,7 @@ definition = "The canonical Markdown of a specification: a comment saying that `
 kind = "term"
 id = "TERM-012"
 title = "SLCR query profile"
-definition = "The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `PROFILE.md` in `wack/gql-rust` specifies it."
+definition = "The read-only subset of GQL that `slcr query` runs, and the property graph a specification maps to: nodes labeled `Section`, `Requirement`, `AcceptanceCriterion`, and `Term`, carrying their fields as properties, and edges `CONTAINS` and `HAS_CRITERION` (each with a `position`), `REFINES`, `DEPENDS_ON`, and `USES_TERM`. `crates/gql/PROFILE.md` specifies it."
 
 [[glossary.terms]]
 kind = "term"

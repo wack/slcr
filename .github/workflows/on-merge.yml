@@ -22,6 +22,8 @@ jobs:
     needs:
       - "format"
       - "build"
+      - "grafeo"
+      - "turso"
       - "dist-plan"
       - "dist-build"
       - "specification"
@@ -65,6 +67,39 @@ jobs:
           extra-tools: cargo-nextest,cargo-llvm-cov
       - name: Cargo Make
         run: cargo make ci-flow
+
+  # Validates `slcr-gql`'s `grafeo` feature: clippy plus its full test suite
+  # with the feature on, which adds the differential oracle against Grafeo
+  # (crates/gql/tests/oracle.rs). A separate job from `build` so it runs in
+  # parallel instead of serializing after `build`'s docs + coverage steps.
+  grafeo:
+    name: Validate Grafeo Feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-grafeo
+      - name: Cargo Make
+        run: cargo make ci-grafeo-flow
+
+  # Validates `slcr-gql`'s `turso` feature: clippy plus its full test suite
+  # with the feature on, which adds crates/gql/tests/turso.rs and runs the TCK
+  # gate against the Turso backend (TCK_STORE=turso, set by test-turso).
+  turso:
+    name: Validate Turso Feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-turso
+      - name: Cargo Make
+        run: cargo make ci-turso-flow
 
   # The repository's own SLCR specification (see "Self-hosting" in
   # CLAUDE.md). The committed SPEC.md must be exactly what SPEC.slcr.toml

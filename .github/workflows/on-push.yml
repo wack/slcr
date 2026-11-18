@@ -35,6 +35,8 @@ jobs:
     needs:
       - "format"
       - "clippy"
+      - "clippy-grafeo"
+      - "clippy-turso"
       - "specification"
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
@@ -76,6 +78,35 @@ jobs:
         uses: "wack/gh-actions/setup-rust@trunk"
       - name: Clippy
         run: cargo make clippy
+
+  # `slcr-gql` (crates/gql) keeps the Grafeo differential oracle and the
+  # Turso store behind the `grafeo` and `turso` features, off by default, so
+  # the clippy job above never compiles them. These lint each one.
+  clippy-grafeo:
+    name: Clippy (grafeo feature)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-grafeo
+      - name: Clippy (grafeo feature)
+        run: cargo make clippy-grafeo
+
+  clippy-turso:
+    name: Clippy (turso feature)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-turso
+      - name: Clippy (turso feature)
+        run: cargo make clippy-turso
 
   # The repository's own SLCR specification (see "Self-hosting" in
   # CLAUDE.md). The committed SPEC.md must be exactly what SPEC.slcr.toml
