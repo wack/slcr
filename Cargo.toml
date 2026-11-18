@@ -1,6 +1,6 @@
 [package]
 name = "slcr"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 edition = "2024"
 # `description`, `homepage`, and `license` are the Homebrew formula's
 # `desc`, `homepage`, and `license`, which `dist` generates from them.
