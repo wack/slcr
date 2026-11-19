@@ -1,0 +1,110 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<Initialized>())"
+---
+{
+  "$defs": {
+    "ErrorJson": {
+      "additionalProperties": false,
+      "description": "Why a file couldn't be loaded, or any other error, as JSON: the one shape `slcr` writes an error in. It has the error's `message`, the `causes` beneath it, outermost first, its `help`, and its `labels`, which locate the problem in the source the error carries, if it carries one.",
+      "properties": {
+        "causes": {
+          "description": "The errors that caused this one, outermost first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "help": {
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "$ref": "#/$defs/ErrorLabel"
+          },
+          "type": "array"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "ErrorLabel": {
+      "additionalProperties": false,
+      "description": "A place in a file's source that an error points at.",
+      "properties": {
+        "column": {
+          "description": "1-based, in characters.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length": {
+          "description": "In bytes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line": {
+          "description": "1-based.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "offset": {
+          "description": "In bytes from the start of the file.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "line",
+        "column",
+        "offset",
+        "length"
+      ],
+      "type": "object"
+    },
+    "SpecName": {
+      "description": "A specification's name: lowercase ASCII letters and digits in dash-separated words.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What `slcr init` did: the specification it created and the project manifest it created or found, and a warning if that manifest doesn't list the specification.",
+  "properties": {
+    "createdManifest": {
+      "description": "Whether it created the project manifest, rather than finding one.",
+      "type": "boolean"
+    },
+    "name": {
+      "$ref": "#/$defs/SpecName",
+      "description": "The specification's name."
+    },
+    "spec": {
+      "description": "The specification file, as the request named it.",
+      "type": "string"
+    },
+    "warning": {
+      "$ref": "#/$defs/ErrorJson",
+      "description": "Why the existing manifest doesn't list the new specification, if it\ndoesn't."
+    }
+  },
+  "required": [
+    "spec",
+    "name",
+    "createdManifest"
+  ],
+  "title": "Initialized",
+  "type": "object"
+}

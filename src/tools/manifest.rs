@@ -624,8 +624,24 @@ pub(crate) struct ManifestFile {
 /// It serializes like a [crate::project::Problem], with the `code`
 /// `tool-not-declared`.
 #[derive(Debug, Error, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "NotDeclared",
+        deny_unknown_fields,
+        inline,
+        transform = crate::schema::tagged("code", "tool-not-declared"),
+    )
+)]
 #[serde(tag = "code", rename = "tool-not-declared")]
 #[error("{} declares no tool named {key}", .manifest.display())]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "The manifest declares no tool under a name: `code` is `tool-not-declared`."
+    )
+)]
 pub struct NotDeclared {
     #[serde(serialize_with = "display")]
     manifest: PathBuf,

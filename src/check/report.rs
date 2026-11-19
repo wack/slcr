@@ -7,6 +7,12 @@
 //! or a value of the wrong type fails. The `vet` document `check` embeds,
 //! and the `error` of a validator that couldn't run or a descriptor that
 //! couldn't be installed, are kept as JSON objects, unread.
+//!
+//! With the `schemars` feature, the schema of [Report] says what those
+//! objects are: a [crate::vet::Report] and a [crate::vet::ErrorJson], which
+//! is all `check` writes there. Like the rest of the schema, it describes
+//! what `check` writes: a field that is left out is optional and never
+//! `null`, though a reader reads a `null` as an absent field.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -21,7 +27,12 @@ use crate::tools::pin::Pin;
 
 /// Everything `slcr check` did, as far as it got.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "CheckReport", transform = crate::schema::omitted_not_null)
+)]
 pub struct Report {
     /// The command's verdict.
     pub passed: bool,
@@ -32,6 +43,10 @@ pub struct Report {
     pub descriptors: Option<Vec<Descriptor>>,
     /// The document `slcr vet --format json` writes for the project.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(with = "Option<crate::vet::Report<'static>>")
+    )]
     pub vet: Option<Map<String, Value>>,
     /// Every validator, by validator file, then by position in the file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -51,7 +66,12 @@ impl Report {
 
 /// What installing one declared tool's descriptor did.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(transform = crate::schema::omitted_not_null)
+)]
 pub struct Descriptor {
     pub tool: ToolKey,
     pub status: InstallStatus,
@@ -63,11 +83,13 @@ pub struct Descriptor {
     pub replaced: Option<Damage>,
     /// Why it couldn't be installed, shaped like an error of `vet`'s.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<crate::vet::ErrorJson>"))]
     pub error: Option<Map<String, Value>>,
 }
 
 /// Whether a descriptor was installed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum InstallStatus {
     AlreadyInstalled,
@@ -77,6 +99,7 @@ pub enum InstallStatus {
 
 /// What was wrong with a descriptor the store held.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum Damage {
     Corrupted,
@@ -85,7 +108,12 @@ pub enum Damage {
 
 /// One validator, and how running it ended.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(transform = crate::schema::omitted_not_null)
+)]
 pub struct Validator {
     /// The validator file, relative to the working directory.
     pub file: String,
@@ -110,11 +138,13 @@ pub struct Validator {
     /// Why a validator that couldn't run couldn't, shaped like an error of
     /// `vet`'s.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<crate::vet::ErrorJson>"))]
     pub error: Option<Map<String, Value>>,
 }
 
 /// How running a validator ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum RunOutcome {
     Green,
@@ -125,7 +155,12 @@ pub enum RunOutcome {
 
 /// Why a validator is red.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "code", rename_all = "kebab-case", deny_unknown_fields)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(transform = crate::schema::omitted_not_null)
+)]
 pub enum Reason {
     ExitCode,
     Terminated {
@@ -140,6 +175,7 @@ pub enum Reason {
 
 /// What slcr kept of one of a run's output streams.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Stream {
     /// The last 64 KiB, with bytes that aren't UTF-8 replaced.
@@ -152,6 +188,7 @@ pub struct Stream {
 
 /// One specification, evaluated.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Spec {
     pub name: SpecName,
@@ -169,6 +206,7 @@ pub struct Spec {
 /// How many requirements have each status, and how many findings each
 /// severity.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Summary {
     pub satisfied: usize,
@@ -182,6 +220,7 @@ pub struct Summary {
 
 /// One requirement's status.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct RequirementStatus {
     pub id: RequirementId,
@@ -190,7 +229,12 @@ pub struct RequirementStatus {
 
 /// An unsatisfied requirement.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "CheckFinding", transform = crate::schema::omitted_not_null)
+)]
 pub struct Finding {
     pub code: FindingCode,
     pub requirement: RequirementId,
@@ -207,7 +251,12 @@ pub struct Finding {
 
 /// What kind of finding a [Finding] is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(description = "What kind of finding a finding of `slcr check` is.")
+)]
 pub enum FindingCode {
     Unsatisfied,
     Absorbed,

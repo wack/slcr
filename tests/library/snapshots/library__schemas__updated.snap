@@ -1,0 +1,71 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<ToolUpdated>())"
+---
+{
+  "$defs": {
+    "DescriptorVersion": {
+      "description": "A descriptor's SemVer 2.0.0 version, such as `1.2.0`.",
+      "pattern": "^(?:0|[1-9][0-9]{0,19})\\.(?:0|[1-9][0-9]{0,19})\\.(?:0|[1-9][0-9]{0,19})(?:-(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?$",
+      "type": "string"
+    },
+    "ToolKey": {
+      "description": "The key a tool is declared under in the manifest: lowercase ASCII letters and digits in dash-separated words.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "ToolUpdatedChange": {
+      "description": "What updating a tool did to the manifest.",
+      "oneOf": [
+        {
+          "const": "updated",
+          "description": "It pinned a descriptor with another version.",
+          "type": "string"
+        },
+        {
+          "const": "repinned",
+          "description": "It pinned a descriptor with the same version but other bytes, such\nas a descriptor kept in the project that was edited.",
+          "type": "string"
+        },
+        {
+          "const": "up-to-date",
+          "description": "The entry already pinned what its source serves.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What updating a tool did, which displays as the status `slcr tools update`\nreports, e.g. `SLCR.toml: updated tool cargo-nextest 1.0.0 -> 1.1.0`.\n\nIt serializes as an object with the `manifest` as it displays, the\n`tool`'s key, the version it was declared as (`from`) and is now (`to`),\nand the `change`: `updated`, `repinned`, or `up-to-date`.",
+  "properties": {
+    "change": {
+      "$ref": "#/$defs/ToolUpdatedChange"
+    },
+    "from": {
+      "$ref": "#/$defs/DescriptorVersion",
+      "description": "The version the manifest declared."
+    },
+    "manifest": {
+      "description": "The manifest's path relative to the working directory.",
+      "type": "string"
+    },
+    "to": {
+      "$ref": "#/$defs/DescriptorVersion",
+      "description": "The version it declares now."
+    },
+    "tool": {
+      "$ref": "#/$defs/ToolKey",
+      "description": "The key the tool is declared under."
+    }
+  },
+  "required": [
+    "manifest",
+    "tool",
+    "from",
+    "to",
+    "change"
+  ],
+  "title": "ToolUpdated",
+  "type": "object"
+}

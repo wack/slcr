@@ -81,6 +81,25 @@ impl From<Pin> for String {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Pin {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Pin".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::Pin").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::string(
+            "The BLAKE3 hash of a descriptor's bytes: `blake3:` and 64 lowercase hexadecimal \
+             digits.",
+            "^blake3:[0-9a-f]{64}$",
+        )
+    }
+}
+
 impl Display for Pin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{PREFIX}{}", self.0.to_hex())

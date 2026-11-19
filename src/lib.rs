@@ -19,6 +19,11 @@
 //!   calls below that install, add, and update tools do.
 //! - [check::Report] reads back the document `slcr check --format json`
 //!   writes.
+//! - [Initialized], [ToolAdded], [ToolUpdated], [ToolRemoved], and
+//!   [Installed], what creating a project and managing its tools return,
+//!   serialize as JSON, and [vet::ErrorJson] writes any error a call
+//!   returns, as `slcr vet --format json` writes an error (see "JSON
+//!   Schemas").
 //!
 //! A program that keeps a project's SLCR files apart from its code, such
 //! as a desktop application that keeps each repository's in a directory
@@ -117,6 +122,37 @@
 //!
 //! [Pin] spells a BLAKE3 hash as SLCR does everywhere: `blake3:` and 64
 //! lowercase hexadecimal digits.
+//!
+//! # JSON Schemas
+//!
+//! A program that passes these documents to code in another language, and
+//! generates that language's types from the Rust ones, enables the
+//! `schemars` feature, which is off by default and which the `slcr` binary
+//! never uses. The types of every JSON document the library reads and
+//! writes then implement `schemars::JsonSchema` (`schemars` 1.x):
+//!
+//! - [vet::Report], the document `slcr vet --format json` writes, with
+//!   every finding and problem it holds, and [check::Report], the document
+//!   `slcr check --format json` writes, whose `vet` is that document and
+//!   whose `error`s are [vet::ErrorJson];
+//! - [Initialized], [ToolAdded], [ToolUpdated], [ToolRemoved], and
+//!   [Installed], which serialize as objects with camelCase keys, and
+//!   [vet::ErrorJson], which any error a call returns writes as, through
+//!   [vet::ErrorJson::of] or [vet::ErrorJson::new];
+//! - the strings they hold, such as [SpecName], [ToolKey], [Pin],
+//!   [DescriptorVersion], and each kind of ID, as strings with the pattern
+//!   their parser enforces.
+//!
+//! A schema describes exactly the JSON its type serializes to: a field the
+//! writer leaves out is optional, and never `null`, an object the writer
+//! writes with a fixed set of fields rejects any other (an object that
+//! flattens a `code` and its fields, as a finding does, does it with
+//! `unevaluatedProperties`), and a string's pattern accepts what its parser
+//! reads. It is the same whether it describes how a type is read or how it
+//! is written. A pattern says exactly what its parser accepts but for the
+//! numbers of a [DescriptorVersion], which it limits to 20 digits, not to
+//! what a `u64` holds. Only the types of these documents have schemas: the
+//! specification graph, [Manifest], and the rows of a query have none.
 
 #![allow(dead_code)]
 
@@ -172,6 +208,9 @@ mod render;
 mod run;
 /// Whether each requirement is satisfied, from its validators' verdicts.
 mod satisfaction;
+/// What the hand-written JSON Schemas share.
+#[cfg(feature = "schemars")]
+mod schema;
 /// What the agent slice of one requirement includes.
 mod slice;
 pub mod spec;

@@ -4,6 +4,7 @@ use std::{
 };
 
 use miette::Result;
+use serde::Serialize;
 
 use super::{
     DescriptorVersion, Environment, ToolKey,
@@ -11,6 +12,7 @@ use super::{
     manifest::ManifestFile,
     pin::Pin,
 };
+use crate::project::problem::display;
 
 /// Re-fetch the descriptor of the tool declared under `key` from its
 /// source, validate it, install it in the descriptor store, and re-pin the
@@ -58,7 +60,14 @@ pub(crate) async fn update(env: &Environment<'_>, key: ToolKey) -> Result<Update
 }
 
 /// What [update] did to the manifest.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename = "ToolUpdatedChange"))]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(description = "What updating a tool did to the manifest.")
+)]
 pub(crate) enum Change {
     /// It pinned a descriptor with another version.
     Updated,
@@ -71,10 +80,22 @@ pub(crate) enum Change {
 
 /// What updating a tool did, which displays as the status `slcr tools update`
 /// reports, e.g. `SLCR.toml: updated tool cargo-nextest 1.0.0 -> 1.1.0`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// It serializes as an object with the `manifest` as it displays, the
+/// `tool`'s key, the version it was declared as (`from`) and is now (`to`),
+/// and the `change`: `updated`, `repinned`, or `up-to-date`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "ToolUpdated", deny_unknown_fields)
+)]
 pub struct Updated {
     /// The manifest's path relative to the working directory.
+    #[serde(serialize_with = "display")]
     manifest: PathBuf,
+    /// The key the tool is declared under.
+    #[serde(rename = "tool")]
     key: ToolKey,
     /// The version the manifest declared.
     from: DescriptorVersion,

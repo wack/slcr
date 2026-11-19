@@ -66,6 +66,30 @@ impl From<QualifiedRequirementId> for String {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for QualifiedRequirementId {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "QualifiedRequirementId".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::QualifiedRequirementId").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        use crate::spec::id::{Kind, kind};
+        crate::schema::string(
+            "A requirement named from outside its specification: the specification's name, a \
+             slash, and the requirement's ID, such as `todo-api/REQ-002`.",
+            &format!(
+                "^{}/{}$",
+                crate::schema::SLUG,
+                crate::schema::id(kind::Requirement::PREFIX)
+            ),
+        )
+    }
+}
+
 impl Display for QualifiedRequirementId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.spec, self.requirement)

@@ -16,6 +16,11 @@ use crate::tools::{ToolKey, manifest::NotDeclared};
 /// It serializes like a [crate::project::Problem]: an object whose `code`
 /// names the problem in kebab-case, alongside the variant's fields.
 #[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "ValidatorProblem", deny_unknown_fields)
+)]
 #[serde(
     tag = "code",
     rename_all = "kebab-case",

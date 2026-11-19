@@ -133,6 +133,15 @@ pub(crate) fn document(
 /// The JSON document `slcr vet` writes, which `slcr check --format json`
 /// embeds.
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(
+        rename = "VetReport",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null
+    )
+)]
 pub struct Document<'a> {
     /// Whether the project, if any, and every file passed.
     passed: bool,
@@ -181,6 +190,11 @@ impl<'a> Document<'a> {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "VetValidatorFile", deny_unknown_fields)
+)]
 struct ValidatorFileJson<'a> {
     /// The path, relative to the working directory.
     path: String,
@@ -209,6 +223,11 @@ impl<'a> ValidatorFileJson<'a> {
 
 #[derive(Serialize)]
 #[serde(untagged)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "VetValidatorFileResult")
+)]
 enum ValidatorResult<'a> {
     Vetted {
         problems: Vec<ValidatorProblemJson<'a>>,
@@ -219,6 +238,21 @@ enum ValidatorResult<'a> {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(
+        rename = "VetValidatorProblem",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null
+    )
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "One way a validator breaks an invariant of the validator schema: the validator's `validator` position in its file, from 1, a kebab-case `code` and the fields that go with it, its `message` and any `help`, and `labels` that locate the validator in the file."
+    )
+)]
 struct ValidatorProblemJson<'a> {
     /// The validator's position in the file, from 1.
     validator: usize,
@@ -229,6 +263,7 @@ struct ValidatorProblemJson<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     help: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     labels: Vec<LabelJson>,
 }
 
@@ -251,6 +286,11 @@ impl<'a> ValidatorProblemJson<'a> {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "VetProject", deny_unknown_fields)
+)]
 struct ProjectJson<'a> {
     /// The manifest's path, relative to the working directory.
     manifest: String,
@@ -279,12 +319,32 @@ impl<'a> ProjectJson<'a> {
 
 #[derive(Serialize)]
 #[serde(untagged)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "VetProjectResult")
+)]
 enum ProjectResult<'a> {
     Vetted { problems: Vec<ProblemJson<'a>> },
     Unloadable { error: ErrorJson },
 }
 
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(
+        rename = "VetProjectProblem",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null
+    )
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "Something wrong with the project as a whole, rather than inside one of its files: a `specs` pattern that can't be honored, two specifications with the same name, two validator files in one directory, a validator file with nothing to check, or a declared tool whose descriptor can't be used. Paths are relative to the working directory. It is an object whose kebab-case `code` names the problem, alongside the variant's fields, then its `message` and any `help`."
+    )
+)]
 struct ProblemJson<'a> {
     /// The `code` and the fields that go with it.
     #[serde(flatten)]
@@ -305,6 +365,11 @@ impl<'a> ProblemJson<'a> {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "VetFile", deny_unknown_fields)
+)]
 struct File<'a> {
     /// The path, as given on the command line.
     path: String,
@@ -335,6 +400,11 @@ impl<'a> File<'a> {
 
 #[derive(Serialize)]
 #[serde(untagged)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "VetFileResult")
+)]
 enum FileResult<'a> {
     Vetted {
         violations: usize,
@@ -347,6 +417,21 @@ enum FileResult<'a> {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(
+        rename = "VetFinding",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null
+    )
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "One thing vetting found in a specification, a broken invariant or a warning: its kebab-case `code` and the fields that go with it, its `severity`, its `message`, and any `help`."
+    )
+)]
 struct FindingJson<'a> {
     /// The `code` and the fields that go with it.
     #[serde(flatten)]
@@ -374,30 +459,65 @@ impl<'a> FindingJson<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(rename = "VetSeverity")
+)]
 enum Severity {
     Error,
     Warning,
 }
 
-/// Why a file couldn't be loaded, or any other error, as JSON.
+/// Why a file couldn't be loaded, or any other error, as JSON: the one
+/// shape `slcr` writes an error in, wherever a document has one (the
+/// `error` of a file, a manifest, a validator file, a descriptor, or a
+/// validator that couldn't run).
+///
+/// A program that calls the library builds one from any error a call
+/// returns, with [ErrorJson::of] for a typed error such as
+/// [crate::ProjectError], or [ErrorJson::new] for a [miette::Report], and
+/// serializes it. It has the error's `message`, the `causes` beneath it,
+/// outermost first, its `help`, and its `labels`, which locate the problem
+/// in the source the error carries, if it carries one.
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(
+        rename = "ErrorJson",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null
+    )
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "Why a file couldn't be loaded, or any other error, as JSON: the one shape `slcr` writes an error in. It has the error's `message`, the `causes` beneath it, outermost first, its `help`, and its `labels`, which locate the problem in the source the error carries, if it carries one."
+    )
+)]
 pub struct ErrorJson {
     message: String,
     /// The errors that caused this one, outermost first.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     causes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     help: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     labels: Vec<LabelJson>,
 }
 
 impl ErrorJson {
+    /// `error`, a report such as a file that couldn't be read fails with,
+    /// with the errors that caused it.
     pub fn new(error: &ErrorReport) -> Self {
         Self::of(error.as_ref())
     }
 
-    /// `diagnostic`, with the errors that caused it.
+    /// `diagnostic`, any error of the library's, with the errors that
+    /// caused it.
     pub fn of(diagnostic: &dyn Diagnostic) -> Self {
         let labels = diagnostic
             .labels()
@@ -417,6 +537,15 @@ impl ErrorJson {
 
 /// A place in a file's source that an error points at.
 #[derive(Serialize)]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(
+        rename = "ErrorLabel",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null
+    )
+)]
 struct LabelJson {
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,

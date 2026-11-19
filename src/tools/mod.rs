@@ -105,6 +105,25 @@ impl From<ToolKey> for String {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ToolKey {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ToolKey".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ToolKey").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::string(
+            "The key a tool is declared under in the manifest: lowercase ASCII letters and \
+             digits in dash-separated words.",
+            &format!("^{}$", crate::schema::SLUG),
+        )
+    }
+}
+
 impl Display for ToolKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -139,6 +158,29 @@ impl TryFrom<String> for DescriptorVersion {
 impl From<DescriptorVersion> for String {
     fn from(version: DescriptorVersion) -> Self {
         version.to_string()
+    }
+}
+
+/// SemVer 2.0.0's grammar, as semver.org gives it as a regular expression.
+/// The one thing it can't say as exactly as the `semver` crate that reads a
+/// version is the size of the three numbers: the crate keeps each in a
+/// `u64`, and the pattern limits each to 20 digits, so it also accepts a
+/// number with 20 digits that exceeds `u64::MAX`.
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for DescriptorVersion {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "DescriptorVersion".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::DescriptorVersion").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::string(
+            "A descriptor's SemVer 2.0.0 version, such as `1.2.0`.",
+            &crate::schema::semver(),
+        )
     }
 }
 

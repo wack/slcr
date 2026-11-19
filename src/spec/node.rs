@@ -218,6 +218,7 @@ pub struct Requirement {
 
 /// An RFC 2119 requirement level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum Modality {
     #[serde(rename = "MUST")]
     Must,

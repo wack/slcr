@@ -1,0 +1,11 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<SpecName>())"
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A specification's name: lowercase ASCII letters and digits in dash-separated words.",
+  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+  "title": "SpecName",
+  "type": "string"
+}

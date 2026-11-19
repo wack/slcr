@@ -24,6 +24,7 @@ jobs:
       - "build"
       - "grafeo"
       - "turso"
+      - "schemars"
       - "dist-plan"
       - "dist-build"
       - "publish-dry-run"
@@ -101,6 +102,24 @@ jobs:
           shared-key: rust-ci-turso
       - name: Cargo Make
         run: cargo make ci-turso-flow
+
+  # Validates `slcr`'s `schemars` feature: clippy plus the whole of its test
+  # suite with the feature on, which adds the schema tests of the library
+  # suite (tests/library/schemas.rs). A separate job from `build`, as the
+  # two above are, so it runs in parallel.
+  schemars:
+    name: Validate Schemars Feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-schemars
+          extra-tools: cargo-nextest
+      - name: Cargo Make
+        run: cargo make ci-schemars-flow
 
   # The repository's own SLCR specification (see "Self-hosting" in
   # CLAUDE.md). The committed SPEC.md must be exactly what SPEC.slcr.toml

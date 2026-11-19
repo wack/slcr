@@ -1,0 +1,155 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<Installed>())"
+---
+{
+  "$defs": {
+    "Damage": {
+      "description": "What was wrong with a descriptor the store held.",
+      "enum": [
+        "corrupted",
+        "unreadable"
+      ],
+      "type": "string"
+    },
+    "Descriptor": {
+      "additionalProperties": false,
+      "description": "What installing one declared tool's descriptor did.",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorJson",
+          "description": "Why it couldn't be installed, shaped like an error of `vet`'s."
+        },
+        "pin": {
+          "$ref": "#/$defs/Pin",
+          "description": "The pin it was installed under, if it was installed."
+        },
+        "replaced": {
+          "$ref": "#/$defs/Damage",
+          "description": "The damaged copy it replaced, if any."
+        },
+        "status": {
+          "$ref": "#/$defs/InstallStatus"
+        },
+        "tool": {
+          "$ref": "#/$defs/ToolKey"
+        }
+      },
+      "required": [
+        "tool",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ErrorJson": {
+      "additionalProperties": false,
+      "description": "Why a file couldn't be loaded, or any other error, as JSON: the one shape `slcr` writes an error in. It has the error's `message`, the `causes` beneath it, outermost first, its `help`, and its `labels`, which locate the problem in the source the error carries, if it carries one.",
+      "properties": {
+        "causes": {
+          "description": "The errors that caused this one, outermost first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "help": {
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "$ref": "#/$defs/ErrorLabel"
+          },
+          "type": "array"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "ErrorLabel": {
+      "additionalProperties": false,
+      "description": "A place in a file's source that an error points at.",
+      "properties": {
+        "column": {
+          "description": "1-based, in characters.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length": {
+          "description": "In bytes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line": {
+          "description": "1-based.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "offset": {
+          "description": "In bytes from the start of the file.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "line",
+        "column",
+        "offset",
+        "length"
+      ],
+      "type": "object"
+    },
+    "InstallStatus": {
+      "description": "Whether a descriptor was installed.",
+      "enum": [
+        "already-installed",
+        "installed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "Pin": {
+      "description": "The BLAKE3 hash of a descriptor's bytes: `blake3:` and 64 lowercase hexadecimal digits.",
+      "pattern": "^blake3:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "ToolKey": {
+      "description": "The key a tool is declared under in the manifest: lowercase ASCII letters and digits in dash-separated words.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What installing did with each declared tool: whether every descriptor is installed, and what happened to each.",
+  "properties": {
+    "descriptors": {
+      "description": "What installing each declared tool's descriptor did, in the order\nof their keys, as `slcr check --format json` reports it.",
+      "items": {
+        "$ref": "#/$defs/Descriptor"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "description": "Whether every tool's descriptor is installed: none failed.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "passed",
+    "descriptors"
+  ],
+  "title": "Installed",
+  "type": "object"
+}

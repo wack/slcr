@@ -5,3 +5,8 @@ specs = ["SPEC.slcr.toml"]
 version = "1.0.0"
 source = { path = "tools/cargo-insta.toml" }
 pin = "blake3:5938a1a1f330618c38a831ff3651a55303f1e4f1460a3e91b02f4447df9d2414"
+
+[tools.cargo-insta-features]
+version = "1.0.0"
+source = { path = "tools/cargo-insta-features.toml" }
+pin = "blake3:9fdb1905ef296afdbf1d3bb7f180bdf28f7cd29a0e2160b91564a789ab406ddd"

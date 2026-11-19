@@ -6,10 +6,13 @@ use std::{
 
 use clap::Args;
 use miette::{Diagnostic, IntoDiagnostic, Result};
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::Terminal;
+use crate::cli::vet::json::ErrorJson;
 use crate::fs::{File, FileSystem};
+use crate::project::problem::display;
 use crate::project::{discover, relative_to as relative_to_dir};
 use crate::spec::file::{DEFAULT_FILE, RequirementsFile, base_name};
 use crate::spec::graph::SlcrRequirementsDocument;
@@ -151,6 +154,69 @@ impl Initialized {
         self.unlisted
             .as_ref()
             .map(|unlisted| unlisted as &(dyn Diagnostic + Send + Sync + 'static))
+    }
+}
+
+/// It serializes as an object with the `spec` file as it displays, its
+/// `name`, whether it `createdManifest`, and, if the project's manifest
+/// doesn't list the specification, the `warning`, as [Initialized::warning]
+/// returns it, in the JSON of any error.
+impl Serialize for Initialized {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        InitializedJson {
+            spec: &self.spec,
+            name: &self.name,
+            created_manifest: self.created_manifest(),
+            warning: self.warning().map(|warning| ErrorJson::of(warning)),
+        }
+        .serialize(serializer)
+    }
+}
+
+/// What [Initialized] serializes as, which its schema describes.
+#[derive(Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "Initialized",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null
+    )
+)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "What `slcr init` did: the specification it created and the project manifest it created or found, and a warning if that manifest doesn't list the specification."
+    )
+)]
+struct InitializedJson<'a> {
+    /// The specification file, as the request named it.
+    #[serde(serialize_with = "display")]
+    spec: &'a Path,
+    /// The specification's name.
+    name: &'a SpecName,
+    /// Whether it created the project manifest, rather than finding one.
+    created_manifest: bool,
+    /// Why the existing manifest doesn't list the new specification, if it
+    /// doesn't.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warning: Option<ErrorJson>,
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Initialized {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        <InitializedJson as schemars::JsonSchema>::schema_name()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        <InitializedJson as schemars::JsonSchema>::schema_id()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        <InitializedJson as schemars::JsonSchema>::json_schema(generator)
     }
 }
 

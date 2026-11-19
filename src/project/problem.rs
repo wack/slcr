@@ -17,6 +17,11 @@ use crate::tools::pinned::DescriptorProblem;
 /// It serializes like a [crate::spec::vet::Violation]: an object whose
 /// `code` names the problem in kebab-case, alongside the variant's fields.
 #[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "ProjectProblem", deny_unknown_fields)
+)]
 #[serde(
     tag = "code",
     rename_all = "kebab-case",

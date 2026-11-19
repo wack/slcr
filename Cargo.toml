@@ -32,6 +32,13 @@ thiserror = "2.0"
 name = "slcr"
 path = "src/bin/main.rs"
 
+# `schemars` adds a `schemars::JsonSchema` implementation to the types of the
+# JSON documents the library reads and writes. It is off by default, so the
+# `slcr` binary and a library caller that doesn't generate schemas never build
+# it.
+[features]
+schemars = ["dep:schemars"]
+
 [dependencies]
 blake3 = "1.8.7"
 clap = { version = "4", features = ["derive", "env"] }
@@ -47,6 +54,9 @@ reqwest = { version = "0.13.5", default-features = false, features = [
   "http2",
   "system-proxy",
 ] }
+# Optional: derives each public report type's JSON Schema, for programs that
+# generate types from them (see the `schemars` feature).
+schemars = { version = "1", optional = true }
 semver = "1.0.28"
 serde.workspace = true
 serde-saphyr = "1.3"
