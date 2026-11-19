@@ -43,6 +43,8 @@ fn list(violations: &[Violation]) -> String {
 /// It serializes as an object whose `code` names the invariant in
 /// kebab-case, e.g. `dangling-reference`, alongside the variant's fields.
 #[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(deny_unknown_fields, inline))]
 #[serde(
     tag = "code",
     rename_all = "kebab-case",
@@ -88,6 +90,7 @@ fn arrows(path: &[RequirementId]) -> String {
 
 /// A cross edge between nodes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum Relation {
     Refines,
@@ -109,10 +112,18 @@ impl Display for Relation {
 ///
 /// It serializes like a [Violation].
 #[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(deny_unknown_fields, inline))]
 #[serde(
     tag = "code",
     rename_all = "kebab-case",
     rename_all_fields = "camelCase"
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "A finding that doesn't make the graph invalid. It serializes like a violation: an object whose `code` names the invariant in kebab-case, alongside the variant's fields."
+    )
 )]
 pub enum Warning {
     #[error("the body of {requirement} does not contain its modality keyword, {modality}")]
@@ -133,7 +144,13 @@ pub enum Warning {
 /// One thing vetting found, borrowed from its [Report]: a broken invariant
 /// or a warning. It serializes as what it wraps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename = "SpecFinding"))]
 #[serde(untagged)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(description = "One thing vetting found: a broken invariant or a warning.")
+)]
 pub enum Finding<'a> {
     Violation(&'a Violation),
     Warning(&'a Warning),

@@ -37,6 +37,7 @@ jobs:
       - "clippy"
       - "clippy-grafeo"
       - "clippy-turso"
+      - "clippy-schemars"
       - "specification"
     steps:
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
@@ -107,6 +108,21 @@ jobs:
           shared-key: rust-ci-turso
       - name: Clippy (turso feature)
         run: cargo make clippy-turso
+
+  # `slcr` keeps the JSON Schemas of its documents behind the `schemars`
+  # feature, off by default, so the clippy job above never compiles them.
+  clippy-schemars:
+    name: Clippy (schemars feature)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: "wack/gh-actions/setup-rust@trunk"
+        with:
+          shared-key: rust-ci-schemars
+      - name: Clippy (schemars feature)
+        run: cargo make clippy-schemars
 
   # The repository's own SLCR specification (see "Self-hosting" in
   # CLAUDE.md). The committed SPEC.md must be exactly what SPEC.slcr.toml

@@ -1,0 +1,77 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<ErrorJson>())"
+---
+{
+  "$defs": {
+    "ErrorLabel": {
+      "additionalProperties": false,
+      "description": "A place in a file's source that an error points at.",
+      "properties": {
+        "column": {
+          "description": "1-based, in characters.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length": {
+          "description": "In bytes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line": {
+          "description": "1-based.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "offset": {
+          "description": "In bytes from the start of the file.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "line",
+        "column",
+        "offset",
+        "length"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Why a file couldn't be loaded, or any other error, as JSON: the one shape `slcr` writes an error in. It has the error's `message`, the `causes` beneath it, outermost first, its `help`, and its `labels`, which locate the problem in the source the error carries, if it carries one.",
+  "properties": {
+    "causes": {
+      "description": "The errors that caused this one, outermost first.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "help": {
+      "type": "string"
+    },
+    "labels": {
+      "items": {
+        "$ref": "#/$defs/ErrorLabel"
+      },
+      "type": "array"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message"
+  ],
+  "title": "ErrorJson",
+  "type": "object"
+}

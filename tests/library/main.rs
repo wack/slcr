@@ -17,6 +17,8 @@ use tempfile::TempDir;
 
 mod https;
 mod projects;
+#[cfg(feature = "schemars")]
+mod schemas;
 
 const TODO_API_YAML: &str = include_str!("../fixtures/todo-api.spec.yaml");
 const TODO_API_JSON: &str = include_str!("../fixtures/todo-api.spec.json");
@@ -559,4 +561,32 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
         .build()
         .unwrap()
         .block_on(future)
+}
+
+// Features
+
+#[test]
+fn schemars_is_an_optional_dependency_that_is_off_by_default() {
+    let cargo: toml::Table = include_str!("../../Cargo.toml").parse().unwrap();
+    // The feature turns the optional dependency on, and nothing else.
+    assert_eq!(
+        cargo["features"]["schemars"],
+        toml_strings(["dep:schemars"])
+    );
+    assert_eq!(cargo["dependencies"]["schemars"]["optional"], true.into());
+    // No other feature, and in particular no default one, turns it on, and
+    // only `slcr` needs it, so the workspace doesn't declare it.
+    let features = cargo["features"].as_table().unwrap();
+    assert_eq!(features.keys().collect::<Vec<_>>(), ["schemars"]);
+    assert!(
+        !cargo["workspace"]["dependencies"]
+            .as_table()
+            .unwrap()
+            .contains_key("schemars")
+    );
+}
+
+/// A TOML array of `strings`.
+fn toml_strings<const N: usize>(strings: [&str; N]) -> toml::Value {
+    toml::Value::Array(strings.into_iter().map(Into::into).collect())
 }

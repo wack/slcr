@@ -2159,6 +2159,106 @@ Declaring a tool sourced from a URL on a local server, updating it once the serv
 
 Declaring a tool whose source serves an invalid descriptor, and one whose path is outside the SLCR directory, each fail and leave the manifest and the store unchanged.
 
+<a id="REQ-106"></a>
+### 3.3 Describes its documents with JSON Schemas
+
+When built with its `schemars` feature, the `slcr` crate MUST implement `schemars::JsonSchema` for the types of the JSON documents it reads and writes (the `vet` and `check` reports, the results of `init` and of managing tools, the JSON of an error, and the strings they hold), and each schema MUST describe exactly the JSON its type serializes to.
+
+*Rationale:* A desktop application written partly in Rust and partly in another language passes these documents between the two, and generates the other language's types from the Rust ones, so that a change to a document can't leave the two disagreeing.
+
+All of the following must hold:
+
+- [Describes the vet and check reports](#REQ-107)
+- [Describes each validated string by its grammar](#REQ-108)
+- [Writes the results of init and tools as JSON](#REQ-109)
+- [Writes any error as one JSON shape](#REQ-110)
+- [Is off by default](#REQ-111)
+
+*Acceptance criteria:*
+
+<a id="AC-266"></a>**Keeps each schema in a committed snapshot**
+
+The schemas of the `vet` and `check` reports, of an error, of the results of `init` and of managing tools, and of each validated string are committed as snapshots, so that a change to one fails its test until the new schema is reviewed and accepted.
+
+<a id="AC-267"></a>**Has a schema for every type of the documents**
+
+Each type of the `check` report, the `vet` report, the invariants, warnings, and relations of a specification, and the problems of a project generates a root schema with a name of its own, and the schema of an invariant or a problem, which a document writes more beside, rejects a field it doesn't name.
+
+<a id="REQ-107"></a>
+#### 3.3.1 Describes the vet and check reports
+
+The schemas of the `vet` and `check` reports MUST accept every document `slcr vet --format json` and `slcr check --format json` write, with every kind of finding, problem, and outcome they hold, and MUST reject a document with a field they don't name, a value of the wrong type, or a `code` they don't know.
+
+*Depends on:* [Vets as vet does](#REQ-087), [Reads check reports](#REQ-092)
+
+*Acceptance criteria:*
+
+<a id="AC-258"></a>**Accepts what vet writes**
+
+Every document the CLI's snapshot tests hold for `slcr vet --format json`, one for each kind of finding and problem the library reports, and those the library writes, validate against the schema of the `vet` report.
+
+<a id="AC-259"></a>**Accepts what check writes**
+
+Every document the CLI's snapshot tests hold for `slcr check --format json`, one for a check with a red validator and one that can't run another, and the reports the library returns for a check that finishes and for one that is cancelled, validate against the schema of the `check` report, which agrees with the reader of AC-227 on valid and invalid documents.
+
+<a id="AC-260"></a>**Rejects every other document**
+
+A `vet` or `check` document with an unknown field added to any object, any value replaced by an array or an object, a required field removed, or a `code`, status, or outcome the schema doesn't know, is rejected.
+
+<a id="REQ-108"></a>
+#### 3.3.2 Describes each validated string by its grammar
+
+The schema of each validated string, a specification name, a tool key, a title, a pin, a descriptor version, and the ID of a requirement, an acceptance criterion, a section, or a term, and a qualified requirement ID, MUST be a string with a pattern that accepts exactly the strings its parser reads, or, where no pattern says it exactly, one that rejects nothing the parser accepts and says what else it accepts.
+
+*Rationale:* A schema that described only a string's type would lose the grammar, and the program that generates types from it would accept what `slcr` rejects.
+
+*Acceptance criteria:*
+
+<a id="AC-261"></a>**Has the pattern its parser enforces**
+
+For samples of each of these strings that are valid, malformed, in another spelling, or at the edge of a limit, the pattern accepts a string if and only if the parser reads it, except a version number of 20 digits above the largest `u64`, which the schema says the pattern accepts and the parser rejects.
+
+<a id="REQ-109"></a>
+#### 3.3.3 Writes the results of init and tools as JSON
+
+The results the library returns for creating a project, and for declaring, updating, removing, and installing tools, MUST serialize as JSON objects with camelCase keys, naming the manifest or specification as the path its status line shows and the other fields that line names, and MUST each have a schema that describes them.
+
+*Depends on:* [Creates a project kept anywhere](#REQ-104), [Manages tools as tools does](#REQ-105), [Installs descriptors only when asked](#REQ-098)
+
+*Acceptance criteria:*
+
+<a id="AC-262"></a>**Serializes what init reports**
+
+Creating a project serializes with the `spec`, its `name`, and `createdManifest`; joining a project whose manifest doesn't list the file adds the `warning`, with the message and help of the diagnostic `slcr init` writes; each validates against the schema.
+
+<a id="AC-263"></a>**Serializes what tools reports**
+
+Declaring a tool twice, updating it to a newer version, re-pinning it, updating it again, and removing it serialize with their `change` and `version`s, and installing into a store that holds the descriptor, one that lacks it, and for a source that serves other bytes serializes with each tool's descriptor status; each validates against its schema.
+
+<a id="REQ-110"></a>
+#### 3.3.4 Writes any error as one JSON shape
+
+The library MUST let a program write any error it returns as the JSON object `slcr vet --format json` writes for an error, with its `message`, `causes`, `help`, and `labels`, and MUST give that object a schema.
+
+*Depends on:* [Vets as vet does](#REQ-087)
+
+*Acceptance criteria:*
+
+<a id="AC-264"></a>**Writes an error as vet does**
+
+The JSON of the error of reading a malformed file is the `error` that `slcr vet --format json` writes for that file, and a project error, an error report, a slice error, and a query error each write their message and help, and validate against the schema.
+
+<a id="REQ-111"></a>
+#### 3.3.5 Is off by default
+
+The `schemars` feature MUST NOT be enabled by default, and `schemars` MUST be an optional dependency of the `slcr` package, so that the `slcr` binary, and a program that uses the library without the feature, build without it.
+
+*Acceptance criteria:*
+
+<a id="AC-265"></a>**Is optional and off**
+
+`Cargo.toml` declares `schemars` as an optional dependency of the package, a feature of that name enables it and nothing else does, and the workspace declares no dependency on it.
+
 <a id="SEC-002"></a>
 ## 4. Glossary
 

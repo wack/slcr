@@ -45,6 +45,26 @@ impl From<Title> for String {
     }
 }
 
+/// The schema's own pattern, which JSON Schema validators match as
+/// ECMA-262 does: `\S` there is the complement of `is_ecma_whitespace`.
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Title {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Title".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::Title").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::string(
+            "A node's human-facing name: a single line with no leading or trailing whitespace.",
+            r"^\S(?:[^\r\n]*\S)?$",
+        )
+    }
+}
+
 impl Display for Title {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -148,6 +168,24 @@ impl TryFrom<String> for SpecName {
 impl From<SpecName> for String {
     fn from(name: SpecName) -> Self {
         name.0
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for SpecName {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "SpecName".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::SpecName").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::string(
+            "A specification's name: lowercase ASCII letters and digits in dash-separated words.",
+            &format!("^{}$", crate::schema::SLUG),
+        )
     }
 }
 

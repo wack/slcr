@@ -20,6 +20,8 @@ use crate::fs::FileSystem;
 /// It serializes like a [crate::project::Problem]: an object whose `code`
 /// names the problem in kebab-case, alongside the variant's fields.
 #[derive(Debug, Error, Diagnostic, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(deny_unknown_fields, inline))]
 #[serde(
     tag = "code",
     rename_all = "kebab-case",
@@ -58,6 +60,7 @@ pub enum DescriptorProblem {
         #[source]
         #[diagnostic_source]
         #[serde(rename = "problems", serialize_with = "messages")]
+        #[cfg_attr(feature = "schemars", schemars(with = "Vec<String>"))]
         error: InvalidDescriptor,
     },
 

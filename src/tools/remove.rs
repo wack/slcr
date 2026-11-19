@@ -4,12 +4,14 @@ use std::{
 };
 
 use miette::Result;
+use serde::Serialize;
 
 use super::{
     DescriptorVersion, ToolKey,
     manifest::{ManifestFile, Project},
 };
 use crate::fs::FileSystem;
+use crate::project::problem::display;
 
 /// Remove the tool declared under `key` from the manifest of `project`.
 ///
@@ -28,10 +30,21 @@ pub(crate) fn remove(fs: &FileSystem, project: &Project, key: ToolKey) -> Result
 
 /// What removing a tool did, which displays as the status `slcr tools remove`
 /// reports, e.g. `SLCR.toml: removed tool cargo-nextest 1.0.0`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// It serializes as an object with the `manifest` as it displays, the
+/// `tool`'s key, and the `version` it declared.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "ToolRemoved", deny_unknown_fields)
+)]
 pub struct Removed {
     /// The manifest's path relative to the working directory.
+    #[serde(serialize_with = "display")]
     manifest: PathBuf,
+    /// The key the tool was declared under.
+    #[serde(rename = "tool")]
     key: ToolKey,
     version: DescriptorVersion,
 }

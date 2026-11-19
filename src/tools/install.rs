@@ -4,6 +4,7 @@ use std::{
 };
 
 use miette::{Diagnostic, Report, Result};
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use super::{
@@ -250,6 +251,55 @@ impl Installed {
                 total: self.tools.len(),
             })
         }
+    }
+}
+
+/// It serializes as an object with whether it `passed`, and the
+/// `descriptors`: what installing each declared tool's descriptor did, as
+/// [Installed::descriptors] returns it.
+impl Serialize for Installed {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        InstalledJson {
+            passed: self.passed(),
+            descriptors: self.descriptors(),
+        }
+        .serialize(serializer)
+    }
+}
+
+/// What [Installed] serializes as, which its schema describes.
+#[derive(Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "Installed", deny_unknown_fields)
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "What installing did with each declared tool: whether every descriptor is installed, and what happened to each."
+    )
+)]
+struct InstalledJson {
+    /// Whether every tool's descriptor is installed: none failed.
+    passed: bool,
+    /// What installing each declared tool's descriptor did, in the order
+    /// of their keys, as `slcr check --format json` reports it.
+    descriptors: Vec<crate::check::Descriptor>,
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Installed {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        <InstalledJson as schemars::JsonSchema>::schema_name()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        <InstalledJson as schemars::JsonSchema>::schema_id()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        <InstalledJson as schemars::JsonSchema>::json_schema(generator)
     }
 }
 

@@ -11,6 +11,8 @@ cargo make clippy              # Lint — canonical blocking gate (== CI and bac
 cargo make test                # Run all tests (== CI's nextest run)
 cargo make test-doc            # Compile and run the doc examples (nextest skips them)
 cargo make test-gql            # Run slcr-gql's suite (crates/gql), including the TCK gate
+cargo make clippy-schemars     # Lint slcr with its `schemars` feature on
+cargo make test-schemars       # Run slcr's suite with its `schemars` feature on
 cargo nextest run --locked <filter>   # Run a single test / matching tests by name substring
 cargo make monitor             # Headless bacon for Claude Code's Monitor tool
 cargo insta review             # Review snapshot changes after a failing run (see Testing)
@@ -53,6 +55,11 @@ They share `Cargo.lock`, `rust-toolchain.toml`, `Makefile.toml`, and CI.
   never enables them. `cargo make clippy-grafeo`/`test-grafeo` and
   `clippy-turso`/`test-turso` cover them, as CI jobs of their own (the
   clippy ones in `on-push.yml`, `grafeo` and `turso` in `on-merge.yml`).
+- `slcr`'s own `schemars` feature is off by default too, and the binary
+  never enables it. `cargo make clippy-schemars` and `test-schemars` (the
+  latter `slcr`'s whole suite under nextest, plus the schema tests the
+  feature adds) cover it, as CI jobs of their own (`clippy-schemars` in
+  `on-push.yml`, `schemars` in `on-merge.yml`).
 - What both packages depend on (`serde`, `serde_json`, `thiserror`) is
   declared once, in the root's `[workspace.dependencies]`, and each takes
   it with `workspace = true`. Declare a dependency there as soon as both
@@ -149,6 +156,42 @@ types are the data model or the reports).
   `Fetcher::trusting_only(pem)` (one PEM authority, `InvalidAuthority`
   otherwise). They use `FileSystem::detached`. Only `install`, `add_tool`,
   and `update_tool` fetch.
+- With the `schemars` feature (off by default; `schemars` is an optional
+  dependency of `slcr` alone, so it isn't in `[workspace.dependencies]`),
+  the types of every JSON document the library reads and writes implement
+  `schemars::JsonSchema` (`src/schema.rs` holds what the hand-written
+  implementations share), for a program that generates another language's
+  types from them: `vet::Report` and `check::Report` with everything they
+  nest, `Initialized`, `ToolAdded`, `ToolUpdated`, `ToolRemoved`,
+  `Installed`, `vet::ErrorJson`, and the validated strings. Rules for them:
+  - A schema describes exactly the JSON its type serializes to, and is the
+    same for `Contract::Serialize` and `Contract::Deserialize`
+    (`schema_of` in `tests/library/schemas.rs` asserts it). A derive gets
+    some of it wrong, and the fix is an attribute, never a hand-edited
+    snapshot: `omitted_not_null` (a `skip_serializing_if` field is
+    optional and not nullable), `#[schemars(default)]` on a skipped
+    `Vec` (it is optional to a reader too), `tagged` (a struct with a
+    serde `tag`, which the derive ignores), `with` (a `serialize_with`
+    field, or a `Map` field that holds a typed document), and
+    `rename` (the schema's name; the serde `rename` of a tagged struct is
+    its `code`).
+  - An object the writer writes with a fixed set of fields is
+    `deny_unknown_fields`. A `code` enum that a writer flattens beside
+    other fields (`Violation`, `Warning`, `Problem`, and the like) is
+    `inline`, so that flattening drops its own `additionalProperties` and
+    the writer's `unevaluatedProperties` closes the whole; a `$ref` to it
+    would close it before the sibling fields.
+  - A validated string's pattern is its parser's grammar, in `[0-9]`, never
+    `\d`. One that can't be exact (`DescriptorVersion`'s numbers) says so
+    in its doc comment; the library test table that holds it to its
+    parser lists the gap.
+  - A type that serializes through a hand-written `Serialize`
+    (`Installed`, `Initialized`) serializes through a private struct that
+    derives both `Serialize` and `JsonSchema`, and borrows its schema, so
+    the two can't drift.
+  - A schema name is unique (`schemars(rename)`): `CheckReport`,
+    `VetReport`, `ProjectProblem`, `ValidatorProblem`, and so on. Each
+    root schema is committed as an insta snapshot.
 - The library never reads or changes the working directory or signal
   handlers, nor changes the environment (REQ-102). It reads only what
   `slcr` reads: the `PATH` a check falls back to (`Invocation::new`), the
@@ -732,6 +775,14 @@ Three layers, all run by `cargo make test` (the doc examples are run by
   the library against bytes it builds itself everywhere, and against the
   CLI on Linux. Their runtimes enable tokio's I/O and time drivers, which
   checks need.
+  `schemas.rs` is compiled only with the `schemars` feature, so `cargo make
+  test-schemars` runs it, and its validators run through
+  `cargo-insta-features`, named `schemas::<test>`. It validates the
+  schemas against the documents the CLI's own snapshot tests hold (it reads
+  `tests/cli/snapshots`) and against what the library and `slcr` write
+  for every kind of finding, problem, and outcome, rejects each corruption
+  of them, holds each string's pattern to its parser, and snapshots every
+  root schema. Review a changed schema snapshot as any other.
 
 ## CLI snapshot tests (`tests/cli/`)
 
@@ -800,6 +851,13 @@ lists it and declares the tools its validators use. `slcr check` from the
 repository root runs them, and needs `cargo-insta` and `cargo-nextest`
 installed (`cargo install --locked cargo-insta cargo-nextest`).
 
+- `tools/cargo-insta-features.toml` — `cargo-insta` with a required
+  `features`, for a test that exists only with a Cargo feature on, such as
+  the library's schema tests (`schemars`). A descriptor can pass an
+  argument only if every validator gives it (a `{with.<field>}` names a
+  required property), so the feature-less `cargo-insta` stays as it was
+  and this is its variant. Keep the two in step, and re-pin it with
+  `slcr tools update cargo-insta-features`.
 - `tools/cargo-insta.toml` — a descriptor that runs one test of an
   integration test target with `cargo insta test --check` under nextest:
   green when the test passes and its snapshots match. It never writes a

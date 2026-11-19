@@ -1,0 +1,11 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<Pin>())"
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The BLAKE3 hash of a descriptor's bytes: `blake3:` and 64 lowercase hexadecimal digits.",
+  "pattern": "^blake3:[0-9a-f]{64}$",
+  "title": "Pin",
+  "type": "string"
+}

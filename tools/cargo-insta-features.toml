@@ -1,0 +1,50 @@
+# Runs one test of a Rust package's integration test target with
+# `cargo insta test`, as `cargo-insta` does, with Cargo features enabled:
+# for a test that only exists when a feature is, such as the library's
+# `schemars` suite. It is `cargo-insta` with one more argument,
+# `--features`, which a descriptor can only pass when its validators must
+# give it: `cargo-insta`'s validators never name features, so they don't.
+formatVersion = "1"
+name = "cargo-insta-features"
+version = "1.0.0"
+
+[validator.schema]
+type = "object"
+required = ["target", "test", "features"]
+additionalProperties = false
+
+[validator.schema.properties.target]
+type = "string"
+minLength = 1
+description = "The integration test target that holds the test, as `cargo test --test` names it: `library` for `tests/library/main.rs`."
+
+[validator.schema.properties.test]
+type = "string"
+minLength = 1
+description = "The test's full path within its target, such as `schemas::pins_have_the_pattern_their_parser_enforces`. It must match exactly one test."
+
+[validator.schema.properties.features]
+type = "string"
+minLength = 1
+description = "The Cargo features to enable, as `cargo test --features` takes them: names separated by commas, such as `schemars`."
+
+[invoke]
+# Everything but `--features` is `cargo-insta`'s: `--check` asserts
+# snapshots without writing `.snap.new` files, so a validator never
+# changes the working tree, and `--unreferenced=ignore` keeps a run of one
+# test from acting on every other test's snapshots, whatever insta's
+# configuration says. Nextest runs the test, since libtest passes when its
+# filter matches nothing; `--exact` and `NEXTEST_NO_TESTS` make a test name
+# that matches no test red, which is also what a name that exists only
+# without the feature is, as the features are on. A red validator's report
+# ends with the last lines of its output, so `RUST_BACKTRACE` is off: a
+# backtrace through insta would push out the assertion that failed.
+argv = ["cargo", "insta", "test", "--check", "--unreferenced=ignore",
+        "--test-runner", "nextest", "--no-test-runner-fallback",
+        "--features", "{with.features}",
+        "--test", "{with.target}", "--", "--exact", "{with.test}"]
+cwd = { nearest = "Cargo.toml" }
+env = { NEXTEST_NO_TESTS = "fail", RUST_BACKTRACE = "0" }
+
+[results]
+pass = [0]

@@ -146,6 +146,39 @@ impl<K: Kind> Serialize for Id<K> {
     }
 }
 
+/// An ID of any kind is a string of its prefix, a dash, and its number, in
+/// the one spelling it has.
+#[cfg(feature = "schemars")]
+impl<K: Kind> schemars::JsonSchema for Id<K> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        let name: String = K::NAME
+            .split(' ')
+            .map(|word| {
+                let mut letters = word.chars();
+                let first = letters.next().map(|first| first.to_ascii_uppercase());
+                first.into_iter().chain(letters).collect::<String>()
+            })
+            .collect();
+        format!("{name}Id").into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        format!("{}::Id<{}>", module_path!(), K::PREFIX).into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::string(
+            &format!(
+                "An ID of the kind \"{}\": `{}-` and then three digits, or four or more without \
+                 a leading zero, of a number up to 4294967295.",
+                K::NAME,
+                K::PREFIX
+            ),
+            &format!("^{}$", crate::schema::id(K::PREFIX)),
+        )
+    }
+}
+
 impl<'de, K: Kind> Deserialize<'de> for Id<K> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;

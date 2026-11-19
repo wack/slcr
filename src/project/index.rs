@@ -48,10 +48,18 @@ pub(crate) struct Resolved<'a> {
 /// It serializes like a [Problem]: an object whose `code` names the
 /// failure in kebab-case, alongside the variant's fields.
 #[derive(Debug, Error, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(deny_unknown_fields, inline))]
 #[serde(
     tag = "code",
     rename_all = "kebab-case",
     rename_all_fields = "camelCase"
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "The ways a qualified ID can fail to resolve: an object whose kebab-case `code` names the failure, alongside the variant's fields."
+    )
 )]
 pub enum UnresolvedRequirement {
     #[error("`{id}` names the specification `{}`, which the project doesn't have", .id.spec())]
@@ -95,10 +103,27 @@ impl Diagnostic for UnresolvedRequirement {
 /// It serializes like an [UnresolvedRequirement], with the `code`
 /// `unknown-criterion`.
 #[derive(Debug, Error, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "UnknownCriterion",
+        deny_unknown_fields,
+        inline,
+        transform = crate::schema::tagged("code", "unknown-criterion"),
+        transform = crate::schema::omitted_not_null,
+    )
+)]
 #[serde(tag = "code", rename = "unknown-criterion", rename_all = "camelCase")]
 #[error(
     "`{criterion}` is not an acceptance criterion of `{requirement}` ({})",
     .path.display()
+)]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        description = "A requirement doesn't contain an acceptance criterion, as a validator's `criterion` must name one it does: `code` is `unknown-criterion`."
+    )
 )]
 pub struct UnknownCriterion {
     criterion: CriterionId,

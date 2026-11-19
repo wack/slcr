@@ -1,0 +1,11 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<ToolKey>())"
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The key a tool is declared under in the manifest: lowercase ASCII letters and digits in dash-separated words.",
+  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+  "title": "ToolKey",
+  "type": "string"
+}

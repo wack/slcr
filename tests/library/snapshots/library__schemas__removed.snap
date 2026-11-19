@@ -1,0 +1,41 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<ToolRemoved>())"
+---
+{
+  "$defs": {
+    "DescriptorVersion": {
+      "description": "A descriptor's SemVer 2.0.0 version, such as `1.2.0`.",
+      "pattern": "^(?:0|[1-9][0-9]{0,19})\\.(?:0|[1-9][0-9]{0,19})\\.(?:0|[1-9][0-9]{0,19})(?:-(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?$",
+      "type": "string"
+    },
+    "ToolKey": {
+      "description": "The key a tool is declared under in the manifest: lowercase ASCII letters and digits in dash-separated words.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What removing a tool did, which displays as the status `slcr tools remove`\nreports, e.g. `SLCR.toml: removed tool cargo-nextest 1.0.0`.\n\nIt serializes as an object with the `manifest` as it displays, the\n`tool`'s key, and the `version` it declared.",
+  "properties": {
+    "manifest": {
+      "description": "The manifest's path relative to the working directory.",
+      "type": "string"
+    },
+    "tool": {
+      "$ref": "#/$defs/ToolKey",
+      "description": "The key the tool was declared under."
+    },
+    "version": {
+      "$ref": "#/$defs/DescriptorVersion"
+    }
+  },
+  "required": [
+    "manifest",
+    "tool",
+    "version"
+  ],
+  "title": "ToolRemoved",
+  "type": "object"
+}

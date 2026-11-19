@@ -1,0 +1,1478 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<CheckReport>())"
+---
+{
+  "$defs": {
+    "AcceptanceCriterionId": {
+      "description": "An ID of the kind \"acceptance criterion\": `AC-` and then three digits, or four or more without a leading zero, of a number up to 4294967295.",
+      "pattern": "^AC-(?:[0-9]{3}|[1-9][0-9]{3,8}|[1-3][0-9]{9}|4[0-1][0-9]{8}|42[0-8][0-9]{7}|429[0-3][0-9]{6}|4294[0-8][0-9]{5}|42949[0-5][0-9]{4}|429496[0-6][0-9]{3}|4294967[0-1][0-9]{2}|42949672[0-8][0-9]|429496729[0-4]|4294967295)$",
+      "type": "string"
+    },
+    "CheckFinding": {
+      "additionalProperties": false,
+      "description": "An unsatisfied requirement.",
+      "properties": {
+        "absorbedBy": {
+          "description": "What the requirement refines, all satisfied, for an `absorbed`\nfinding.",
+          "items": {
+            "$ref": "#/$defs/RequirementId"
+          },
+          "type": "array"
+        },
+        "code": {
+          "$ref": "#/$defs/FindingCode"
+        },
+        "help": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "modality": {
+          "$ref": "#/$defs/Modality"
+        },
+        "requirement": {
+          "$ref": "#/$defs/RequirementId"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        }
+      },
+      "required": [
+        "code",
+        "requirement",
+        "modality",
+        "severity",
+        "message"
+      ],
+      "type": "object"
+    },
+    "Damage": {
+      "description": "What was wrong with a descriptor the store held.",
+      "enum": [
+        "corrupted",
+        "unreadable"
+      ],
+      "type": "string"
+    },
+    "Descriptor": {
+      "additionalProperties": false,
+      "description": "What installing one declared tool's descriptor did.",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorJson",
+          "description": "Why it couldn't be installed, shaped like an error of `vet`'s."
+        },
+        "pin": {
+          "$ref": "#/$defs/Pin",
+          "description": "The pin it was installed under, if it was installed."
+        },
+        "replaced": {
+          "$ref": "#/$defs/Damage",
+          "description": "The damaged copy it replaced, if any."
+        },
+        "status": {
+          "$ref": "#/$defs/InstallStatus"
+        },
+        "tool": {
+          "$ref": "#/$defs/ToolKey"
+        }
+      },
+      "required": [
+        "tool",
+        "status"
+      ],
+      "type": "object"
+    },
+    "DescriptorVersion": {
+      "description": "A descriptor's SemVer 2.0.0 version, such as `1.2.0`.",
+      "pattern": "^(?:0|[1-9][0-9]{0,19})\\.(?:0|[1-9][0-9]{0,19})\\.(?:0|[1-9][0-9]{0,19})(?:-(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?$",
+      "type": "string"
+    },
+    "ErrorJson": {
+      "additionalProperties": false,
+      "description": "Why a file couldn't be loaded, or any other error, as JSON: the one shape `slcr` writes an error in. It has the error's `message`, the `causes` beneath it, outermost first, its `help`, and its `labels`, which locate the problem in the source the error carries, if it carries one.",
+      "properties": {
+        "causes": {
+          "description": "The errors that caused this one, outermost first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "help": {
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "$ref": "#/$defs/ErrorLabel"
+          },
+          "type": "array"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "ErrorLabel": {
+      "additionalProperties": false,
+      "description": "A place in a file's source that an error points at.",
+      "properties": {
+        "column": {
+          "description": "1-based, in characters.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length": {
+          "description": "In bytes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line": {
+          "description": "1-based.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "offset": {
+          "description": "In bytes from the start of the file.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "line",
+        "column",
+        "offset",
+        "length"
+      ],
+      "type": "object"
+    },
+    "FindingCode": {
+      "description": "What kind of finding a finding of `slcr check` is.",
+      "enum": [
+        "unsatisfied",
+        "absorbed"
+      ],
+      "type": "string"
+    },
+    "InstallStatus": {
+      "description": "Whether a descriptor was installed.",
+      "enum": [
+        "already-installed",
+        "installed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "Modality": {
+      "description": "An RFC 2119 requirement level.",
+      "enum": [
+        "MUST",
+        "MUST NOT",
+        "SHOULD",
+        "SHOULD NOT",
+        "MAY"
+      ],
+      "type": "string"
+    },
+    "Pin": {
+      "description": "The BLAKE3 hash of a descriptor's bytes: `blake3:` and 64 lowercase hexadecimal digits.",
+      "pattern": "^blake3:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "QualifiedRequirementId": {
+      "description": "A requirement named from outside its specification: the specification's name, a slash, and the requirement's ID, such as `todo-api/REQ-002`.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*/REQ-(?:[0-9]{3}|[1-9][0-9]{3,8}|[1-3][0-9]{9}|4[0-1][0-9]{8}|42[0-8][0-9]{7}|429[0-3][0-9]{6}|4294[0-8][0-9]{5}|42949[0-5][0-9]{4}|429496[0-6][0-9]{3}|4294967[0-1][0-9]{2}|42949672[0-8][0-9]|429496729[0-4]|4294967295)$",
+      "type": "string"
+    },
+    "Reason": {
+      "description": "Why a validator is red.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "exit-code",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "terminated",
+              "type": "string"
+            },
+            "signal": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "timed-out",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "lost",
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "detail"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Relation": {
+      "description": "A cross edge between nodes.",
+      "enum": [
+        "refines",
+        "dependsOn",
+        "usesTerm"
+      ],
+      "type": "string"
+    },
+    "RequirementId": {
+      "description": "An ID of the kind \"requirement\": `REQ-` and then three digits, or four or more without a leading zero, of a number up to 4294967295.",
+      "pattern": "^REQ-(?:[0-9]{3}|[1-9][0-9]{3,8}|[1-3][0-9]{9}|4[0-1][0-9]{8}|42[0-8][0-9]{7}|429[0-3][0-9]{6}|4294[0-8][0-9]{5}|42949[0-5][0-9]{4}|429496[0-6][0-9]{3}|4294967[0-1][0-9]{2}|42949672[0-8][0-9]|429496729[0-4]|4294967295)$",
+      "type": "string"
+    },
+    "RequirementStatus": {
+      "additionalProperties": false,
+      "description": "One requirement's status.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequirementId"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        }
+      },
+      "required": [
+        "id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "RunOutcome": {
+      "description": "How running a validator ended.",
+      "enum": [
+        "green",
+        "red",
+        "could-not-run",
+        "interrupted"
+      ],
+      "type": "string"
+    },
+    "Severity": {
+      "description": "How much an unsatisfied requirement matters, from least to most.",
+      "oneOf": [
+        {
+          "enum": [
+            "violation"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "informational",
+          "description": "Never fails anything.",
+          "type": "string"
+        },
+        {
+          "const": "warning",
+          "description": "Fails only when warnings are denied.",
+          "type": "string"
+        }
+      ]
+    },
+    "Spec": {
+      "additionalProperties": false,
+      "description": "One specification, evaluated.",
+      "properties": {
+        "coverageGaps": {
+          "description": "The leaves no validator checks.",
+          "items": {
+            "$ref": "#/$defs/RequirementId"
+          },
+          "type": "array"
+        },
+        "file": {
+          "description": "The specification's file, relative to the working directory.",
+          "type": "string"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/CheckFinding"
+          },
+          "type": "array"
+        },
+        "name": {
+          "$ref": "#/$defs/SpecName"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "requirements": {
+          "description": "Each requirement's status, in document order.",
+          "items": {
+            "$ref": "#/$defs/RequirementStatus"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "$ref": "#/$defs/Summary"
+        }
+      },
+      "required": [
+        "name",
+        "file",
+        "passed",
+        "summary",
+        "requirements",
+        "findings",
+        "coverageGaps"
+      ],
+      "type": "object"
+    },
+    "SpecName": {
+      "description": "A specification's name: lowercase ASCII letters and digits in dash-separated words.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "Status": {
+      "description": "Whether a requirement holds, as far as its validators tell.",
+      "oneOf": [
+        {
+          "enum": [
+            "satisfied",
+            "unsatisfied"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "Not yet decided: some resolution of what no validator has settled\nwould satisfy it, and another would not.",
+          "type": "string"
+        }
+      ]
+    },
+    "Stream": {
+      "additionalProperties": false,
+      "description": "What slcr kept of one of a run's output streams.",
+      "properties": {
+        "bytes": {
+          "description": "How many bytes the stream carried in all.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cutOff": {
+          "type": "boolean"
+        },
+        "text": {
+          "description": "The last 64 KiB, with bytes that aren't UTF-8 replaced.",
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text",
+        "bytes",
+        "truncated",
+        "cutOff"
+      ],
+      "type": "object"
+    },
+    "Summary": {
+      "additionalProperties": false,
+      "description": "How many requirements have each status, and how many findings each\nseverity.",
+      "properties": {
+        "coverageGaps": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "informational": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "satisfied": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unknown": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unsatisfied": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "violations": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warnings": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "satisfied",
+        "unsatisfied",
+        "unknown",
+        "violations",
+        "warnings",
+        "informational",
+        "coverageGaps"
+      ],
+      "type": "object"
+    },
+    "TermId": {
+      "description": "An ID of the kind \"term\": `TERM-` and then three digits, or four or more without a leading zero, of a number up to 4294967295.",
+      "pattern": "^TERM-(?:[0-9]{3}|[1-9][0-9]{3,8}|[1-3][0-9]{9}|4[0-1][0-9]{8}|42[0-8][0-9]{7}|429[0-3][0-9]{6}|4294[0-8][0-9]{5}|42949[0-5][0-9]{4}|429496[0-6][0-9]{3}|4294967[0-1][0-9]{2}|42949672[0-8][0-9]|429496729[0-4]|4294967295)$",
+      "type": "string"
+    },
+    "ToolKey": {
+      "description": "The key a tool is declared under in the manifest: lowercase ASCII letters and digits in dash-separated words.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "type": "string"
+    },
+    "Validator": {
+      "additionalProperties": false,
+      "description": "One validator, and how running it ended.",
+      "properties": {
+        "criterion": {
+          "$ref": "#/$defs/AcceptanceCriterionId"
+        },
+        "durationMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error": {
+          "$ref": "#/$defs/ErrorJson",
+          "description": "Why a validator that couldn't run couldn't, shaped like an error of\n`vet`'s."
+        },
+        "exitCode": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "file": {
+          "description": "The validator file, relative to the working directory.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/RunOutcome"
+        },
+        "position": {
+          "description": "Its position in the file, from 1.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "$ref": "#/$defs/Reason",
+          "description": "Why a red validator is red."
+        },
+        "requirement": {
+          "$ref": "#/$defs/QualifiedRequirementId"
+        },
+        "stderr": {
+          "$ref": "#/$defs/Stream"
+        },
+        "stdout": {
+          "$ref": "#/$defs/Stream"
+        },
+        "tool": {
+          "$ref": "#/$defs/ToolKey"
+        }
+      },
+      "required": [
+        "file",
+        "position",
+        "requirement",
+        "tool",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "VetFile": {
+      "anyOf": [
+        {
+          "properties": {
+            "findings": {
+              "items": {
+                "$ref": "#/$defs/VetFinding"
+              },
+              "type": "array"
+            },
+            "violations": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "violations",
+            "warnings",
+            "findings"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ErrorJson"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The path, as given on the command line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "passed"
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "VetFinding": {
+      "anyOf": [
+        {
+          "description": "One broken invariant.\n\nIt serializes as an object whose `code` names the invariant in\nkebab-case, e.g. `dangling-reference`, alongside the variant's fields.",
+          "oneOf": [
+            {
+              "properties": {
+                "code": {
+                  "const": "duplicate-id",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "id"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "dangling-reference",
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "relation": {
+                  "$ref": "#/$defs/Relation"
+                },
+                "to": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "from",
+                "relation",
+                "to"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "cycle",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "The cycle's nodes, starting and ending with the same one.",
+                  "items": {
+                    "$ref": "#/$defs/RequirementId"
+                  },
+                  "type": "array"
+                },
+                "relation": {
+                  "$ref": "#/$defs/Relation"
+                }
+              },
+              "required": [
+                "code",
+                "relation",
+                "path"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "missing-refinement",
+                  "type": "string"
+                },
+                "refiner": {
+                  "$ref": "#/$defs/RequirementId"
+                },
+                "requirement": {
+                  "$ref": "#/$defs/RequirementId"
+                }
+              },
+              "required": [
+                "code",
+                "requirement",
+                "refiner"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "unexpected-refinement",
+                  "type": "string"
+                },
+                "requirement": {
+                  "$ref": "#/$defs/RequirementId"
+                }
+              },
+              "required": [
+                "code",
+                "requirement"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "term-out-of-order",
+                  "type": "string"
+                },
+                "previous": {
+                  "$ref": "#/$defs/TermId"
+                },
+                "term": {
+                  "$ref": "#/$defs/TermId"
+                }
+              },
+              "required": [
+                "code",
+                "term",
+                "previous"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        {
+          "description": "A finding that doesn't make the graph invalid. It serializes like a violation: an object whose `code` names the invariant in kebab-case, alongside the variant's fields.",
+          "oneOf": [
+            {
+              "properties": {
+                "code": {
+                  "const": "modality-not-stated",
+                  "type": "string"
+                },
+                "modality": {
+                  "$ref": "#/$defs/Modality"
+                },
+                "requirement": {
+                  "$ref": "#/$defs/RequirementId"
+                }
+              },
+              "required": [
+                "code",
+                "requirement",
+                "modality"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "vacuous-and",
+                  "type": "string"
+                },
+                "requirement": {
+                  "$ref": "#/$defs/RequirementId"
+                }
+              },
+              "required": [
+                "code",
+                "requirement"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
+      "description": "One thing vetting found in a specification, a broken invariant or a warning: its kebab-case `code` and the fields that go with it, its `severity`, its `message`, and any `help`.",
+      "properties": {
+        "help": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/VetSeverity"
+        }
+      },
+      "required": [
+        "severity",
+        "message"
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "VetProject": {
+      "anyOf": [
+        {
+          "properties": {
+            "problems": {
+              "items": {
+                "$ref": "#/$defs/VetProjectProblem"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "problems"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ErrorJson"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "manifest": {
+          "description": "The manifest's path, relative to the working directory.",
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "manifest",
+        "passed"
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "VetProjectProblem": {
+      "anyOf": [
+        {
+          "properties": {
+            "code": {
+              "const": "invalid-pattern",
+              "type": "string"
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "pattern",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A directory the walk couldn't read, which might hold a match.",
+          "properties": {
+            "code": {
+              "const": "unsearchable",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "path",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "matches-validator-file",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "patterns": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "code",
+            "patterns",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "unsupported-format",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "patterns": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "code",
+            "patterns",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "no-match",
+              "type": "string"
+            },
+            "pattern": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "pattern"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A specification of a project held in memory, such as one a server\nstores, that no pattern matches. On disk, such a file is not a\nspecification of the project, so `slcr vet` can't report it.",
+          "properties": {
+            "code": {
+              "const": "unlisted",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "duplicate-spec-name",
+              "type": "string"
+            },
+            "first": {
+              "type": "string"
+            },
+            "name": {
+              "$ref": "#/$defs/SpecName"
+            },
+            "second": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "first",
+            "second"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "duplicate-validator-file",
+              "type": "string"
+            },
+            "first": {
+              "type": "string"
+            },
+            "second": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "first",
+            "second"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A validator file whose counterpart, the directory at its path under\nthe project root, isn't a directory. Only a project root other than\nthe directory of `SLCR.toml` can lack one.",
+          "properties": {
+            "code": {
+              "const": "missing-counterpart",
+              "type": "string"
+            },
+            "counterpart": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "path",
+            "counterpart"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It serializes with a code of its own.",
+          "oneOf": [
+            {
+              "properties": {
+                "code": {
+                  "const": "descriptor-not-installed",
+                  "type": "string"
+                },
+                "pin": {
+                  "$ref": "#/$defs/Pin"
+                },
+                "tool": {
+                  "$ref": "#/$defs/ToolKey"
+                }
+              },
+              "required": [
+                "code",
+                "tool",
+                "pin"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "descriptor-corrupted",
+                  "type": "string"
+                },
+                "pin": {
+                  "$ref": "#/$defs/Pin"
+                },
+                "tool": {
+                  "$ref": "#/$defs/ToolKey"
+                }
+              },
+              "required": [
+                "code",
+                "tool",
+                "pin"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "descriptor-unreadable",
+                  "type": "string"
+                },
+                "pin": {
+                  "$ref": "#/$defs/Pin"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "tool": {
+                  "$ref": "#/$defs/ToolKey"
+                }
+              },
+              "required": [
+                "code",
+                "tool",
+                "pin",
+                "reason"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "invalid-descriptor",
+                  "type": "string"
+                },
+                "pin": {
+                  "$ref": "#/$defs/Pin"
+                },
+                "problems": {
+                  "description": "What is wrong with it: in JSON, each message, outermost first.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "tool": {
+                  "$ref": "#/$defs/ToolKey"
+                }
+              },
+              "required": [
+                "code",
+                "tool",
+                "pin",
+                "problems"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "actual": {
+                  "$ref": "#/$defs/DescriptorVersion"
+                },
+                "code": {
+                  "const": "descriptor-version-mismatch",
+                  "type": "string"
+                },
+                "declared": {
+                  "$ref": "#/$defs/DescriptorVersion"
+                },
+                "tool": {
+                  "$ref": "#/$defs/ToolKey"
+                }
+              },
+              "required": [
+                "code",
+                "tool",
+                "declared",
+                "actual"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
+      "description": "Something wrong with the project as a whole, rather than inside one of its files: a `specs` pattern that can't be honored, two specifications with the same name, two validator files in one directory, a validator file with nothing to check, or a declared tool whose descriptor can't be used. Paths are relative to the working directory. It is an object whose kebab-case `code` names the problem, alongside the variant's fields, then its `message` and any `help`.",
+      "properties": {
+        "help": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "VetReport": {
+      "additionalProperties": false,
+      "description": "The JSON document `slcr vet` writes, which `slcr check --format json`\nembeds.",
+      "properties": {
+        "files": {
+          "items": {
+            "$ref": "#/$defs/VetFile"
+          },
+          "type": "array"
+        },
+        "passed": {
+          "description": "Whether the project, if any, and every file passed.",
+          "type": "boolean"
+        },
+        "project": {
+          "$ref": "#/$defs/VetProject"
+        },
+        "validators": {
+          "description": "The project's validator files, in project mode only.",
+          "items": {
+            "$ref": "#/$defs/VetValidatorFile"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "passed",
+        "files"
+      ],
+      "type": "object"
+    },
+    "VetSeverity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "type": "string"
+    },
+    "VetValidatorFile": {
+      "anyOf": [
+        {
+          "properties": {
+            "problems": {
+              "items": {
+                "$ref": "#/$defs/VetValidatorProblem"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "problems"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ErrorJson"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The path, relative to the working directory.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "passed"
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "VetValidatorProblem": {
+      "anyOf": [
+        {
+          "description": "`with`, or an empty object if it is omitted, fails the validator\nschema of the descriptor its tool pins.",
+          "properties": {
+            "code": {
+              "const": "invalid-with",
+              "type": "string"
+            },
+            "pointer": {
+              "description": "Where in `with` the schema fails, as a JSON Pointer; empty for\n`with` itself.",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "tool": {
+              "$ref": "#/$defs/ToolKey"
+            }
+          },
+          "required": [
+            "code",
+            "tool",
+            "pointer",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "duplicate-validator",
+              "type": "string"
+            },
+            "first": {
+              "description": "The position of the first validator it repeats, from 1.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "code",
+            "first"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The ways a qualified ID can fail to resolve: an object whose kebab-case `code` names the failure, alongside the variant's fields.",
+          "oneOf": [
+            {
+              "properties": {
+                "code": {
+                  "const": "unknown-spec",
+                  "type": "string"
+                },
+                "id": {
+                  "$ref": "#/$defs/QualifiedRequirementId"
+                },
+                "known": {
+                  "description": "The specifications the project does have.",
+                  "items": {
+                    "$ref": "#/$defs/SpecName"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "code",
+                "id",
+                "known"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "code": {
+                  "const": "unknown-requirement",
+                  "type": "string"
+                },
+                "id": {
+                  "$ref": "#/$defs/QualifiedRequirementId"
+                },
+                "path": {
+                  "description": "The specification's file, relative to the working directory.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "id",
+                "path"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        {
+          "description": "A requirement doesn't contain an acceptance criterion, as a validator's `criterion` must name one it does: `code` is `unknown-criterion`.",
+          "properties": {
+            "code": {
+              "const": "unknown-criterion",
+              "type": "string"
+            },
+            "criteria": {
+              "description": "The requirement's own criteria.",
+              "items": {
+                "$ref": "#/$defs/AcceptanceCriterionId"
+              },
+              "type": "array"
+            },
+            "criterion": {
+              "$ref": "#/$defs/AcceptanceCriterionId"
+            },
+            "owner": {
+              "$ref": "#/$defs/RequirementId",
+              "description": "The requirement that does contain the criterion, if one does."
+            },
+            "path": {
+              "description": "The specification's file, relative to the working directory.",
+              "type": "string"
+            },
+            "requirement": {
+              "$ref": "#/$defs/QualifiedRequirementId"
+            }
+          },
+          "required": [
+            "code",
+            "criterion",
+            "requirement",
+            "path",
+            "criteria"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The manifest declares no tool under a name: `code` is `tool-not-declared`.",
+          "properties": {
+            "code": {
+              "const": "tool-not-declared",
+              "type": "string"
+            },
+            "declared": {
+              "description": "The keys the manifest does declare.",
+              "items": {
+                "$ref": "#/$defs/ToolKey"
+              },
+              "type": "array"
+            },
+            "key": {
+              "$ref": "#/$defs/ToolKey"
+            },
+            "manifest": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "manifest",
+            "key",
+            "declared"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "One way a validator breaks an invariant of the validator schema: the validator's `validator` position in its file, from 1, a kebab-case `code` and the fields that go with it, its `message` and any `help`, and `labels` that locate the validator in the file.",
+      "properties": {
+        "help": {
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "$ref": "#/$defs/ErrorLabel"
+          },
+          "type": "array"
+        },
+        "message": {
+          "type": "string"
+        },
+        "validator": {
+          "description": "The validator's position in the file, from 1.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "validator",
+        "message"
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Everything `slcr check` did, as far as it got.",
+  "properties": {
+    "descriptors": {
+      "description": "What installing each declared tool's descriptor did, unless\n`--offline` or the manifest couldn't be read.",
+      "items": {
+        "$ref": "#/$defs/Descriptor"
+      },
+      "type": "array"
+    },
+    "interrupted": {
+      "type": "boolean"
+    },
+    "passed": {
+      "description": "The command's verdict.",
+      "type": "boolean"
+    },
+    "specs": {
+      "description": "Every specification, evaluated; absent if `check` was interrupted\nor stopped before running validators.",
+      "items": {
+        "$ref": "#/$defs/Spec"
+      },
+      "type": "array"
+    },
+    "validators": {
+      "description": "Every validator, by validator file, then by position in the file.",
+      "items": {
+        "$ref": "#/$defs/Validator"
+      },
+      "type": "array"
+    },
+    "vet": {
+      "$ref": "#/$defs/VetReport",
+      "description": "The document `slcr vet --format json` writes for the project."
+    }
+  },
+  "required": [
+    "passed",
+    "interrupted"
+  ],
+  "title": "CheckReport",
+  "type": "object"
+}

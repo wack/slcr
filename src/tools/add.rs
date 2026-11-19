@@ -4,6 +4,7 @@ use std::{
 };
 
 use miette::{Diagnostic, Result};
+use serde::Serialize;
 use thiserror::Error;
 
 use super::{
@@ -13,6 +14,7 @@ use super::{
     pin::Pin,
     source::SourceArg,
 };
+use crate::project::problem::display;
 
 /// Fetch the descriptor at `source`, validate it, pin it, install it in the
 /// descriptor store, and declare it in the manifest under `key`, or else
@@ -84,7 +86,14 @@ pub struct AlreadyDeclared {
 }
 
 /// What [add] did to the manifest.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename = "ToolAddedChange"))]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(description = "What adding a tool did to the manifest.")
+)]
 pub(crate) enum Change {
     /// It declared the tool.
     Declared,
@@ -94,10 +103,22 @@ pub(crate) enum Change {
 
 /// What declaring a tool did, which displays as the status `slcr tools add` reports,
 /// e.g. `SLCR.toml: added tool cargo-nextest 1.0.0`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// It serializes as an object with the `manifest` as it displays, the
+/// `tool`'s key, its `version`, and the `change`: `declared`, or
+/// `already-declared` if the manifest already declared exactly this.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(rename = "ToolAdded", deny_unknown_fields)
+)]
 pub struct Added {
     /// The manifest's path relative to the working directory.
+    #[serde(serialize_with = "display")]
     manifest: PathBuf,
+    /// The key the tool is declared under.
+    #[serde(rename = "tool")]
     key: ToolKey,
     version: DescriptorVersion,
     change: Change,

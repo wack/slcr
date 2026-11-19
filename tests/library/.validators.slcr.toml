@@ -187,3 +187,157 @@ requirement = "slcr/REQ-105"
 criterion = "AC-257"
 tool = "cargo-insta"
 with = { target = "library", test = "projects::managing_tools_changes_nothing_when_it_fails" }
+
+# The schemas of the documents the library reads and writes. Their tests
+# exist only with the `schemars` feature, so these run with
+# `cargo-insta-features`, which turns it on.
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-258"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_vet_report_schema_accepts_every_document_slcr_vet_writes", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-258"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_vet_report_schema_accepts_what_the_library_writes", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-258"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_vet_report_schema_accepts_every_finding_and_problem_the_library_reports", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-259"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_check_report_schema_accepts_every_document_slcr_check_writes", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-259"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_check_report_schema_accepts_what_the_library_checks", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-260"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_vet_report_schema_rejects_wrong_documents", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-260"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_check_report_schema_rejects_wrong_documents", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-107"
+criterion = "AC-260"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_check_report_schema_and_its_reader_agree", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::spec_names_and_tool_keys_have_the_pattern_their_parsers_enforce", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::titles_have_the_pattern_their_parser_enforces", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::pins_have_the_pattern_their_parser_enforces", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::versions_have_the_pattern_their_parser_enforces", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::ids_have_the_pattern_their_parser_enforces", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::qualified_requirement_ids_have_the_pattern_their_parser_enforces", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-109"
+criterion = "AC-262"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::initializing_serializes_as_camel_case_and_matches_its_schema", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-109"
+criterion = "AC-263"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::managing_tools_serializes_each_result_and_matches_its_schema", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-110"
+criterion = "AC-264"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::any_error_the_library_returns_is_written_as_slcr_writes_an_error", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-111"
+criterion = "AC-265"
+tool = "cargo-insta"
+with = { target = "library", test = "schemars_is_an_optional_dependency_that_is_off_by_default" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-266"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_vet_report_schema_is_snapshotted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-266"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_check_report_schema_is_snapshotted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-266"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_error_schema_is_snapshotted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-266"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_tool_result_schemas_are_snapshotted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-266"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_init_result_schema_is_snapshotted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-266"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_string_schemas_are_snapshotted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-267"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::every_type_of_the_documents_has_a_schema", features = "schemars" }

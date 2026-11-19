@@ -1,0 +1,11 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<Title>())"
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A node's human-facing name: a single line with no leading or trailing whitespace.",
+  "pattern": "^\\S(?:[^\\r\\n]*\\S)?$",
+  "title": "Title",
+  "type": "string"
+}

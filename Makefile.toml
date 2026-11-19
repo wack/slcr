@@ -92,6 +92,54 @@ args = [
   "warnings",
 ]
 
+# `slcr`'s `schemars` feature, off by default, derives `JsonSchema` for the
+# types of the JSON documents the library reads and writes, and adds the
+# schema tests to the library suite (tests/library/schemas.rs). It rots
+# unless CI also lints and tests it: the first is [tasks.clippy] for `slcr`
+# alone plus the feature, the second runs `slcr`'s whole suite with it on,
+# under nextest as `test` does, so that turning it on is shown to change no
+# other test either. The validators of the schema tests in the repository's
+# own specification run it too, through `cargo-insta-features`.
+[tasks.clippy-schemars]
+description = "Canonical clippy command for slcr's schemars feature."
+category = "Development"
+workspace = false
+command = "cargo"
+args = [
+  "clippy",
+  "--all-targets",
+  "--package",
+  "slcr",
+  "--locked",
+  "--features",
+  "schemars",
+  "--",
+  "-D",
+  "warnings",
+]
+
+[tasks.test-schemars]
+description = "Run slcr's test suite with the schemars feature (adds the schema tests)."
+category = "Test"
+workspace = false
+command = "cargo"
+args = [
+  "nextest",
+  "run",
+  "--locked",
+  "--package",
+  "slcr",
+  "--features",
+  "schemars",
+  "@@remove-empty(CARGO_MAKE_CARGO_VERBOSE_FLAGS)",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+]
+
+# One task for CI's schemars job (see on-merge.yml), kept out of `ci-flow`
+# so it runs as a job in parallel with it.
+[tasks.ci-schemars-flow]
+dependencies = ["clippy-schemars", "test-schemars"]
+
 [tasks.ci-flow]
 dependencies = [
   "pre-ci-flow",
