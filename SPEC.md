@@ -2162,7 +2162,7 @@ Declaring a tool whose source serves an invalid descriptor, and one whose path i
 <a id="REQ-106"></a>
 ### 3.3 Describes its documents with JSON Schemas
 
-When built with its `schemars` feature, the `slcr` crate MUST implement `schemars::JsonSchema` for the types of the JSON documents it reads and writes (the `vet` and `check` reports, the results of `init` and of managing tools, the JSON of an error, and the strings they hold), and each schema MUST describe exactly the JSON its type serializes to.
+When built with its `schemars` feature, the `slcr` crate MUST implement `schemars::JsonSchema` for the types of the JSON documents it reads and writes (the specification document itself and everything it holds, the `vet` and `check` reports, the results of `init` and of managing tools, the JSON of an error, and the strings they hold), and each schema MUST describe exactly the JSON its type serializes to.
 
 *Rationale:* A desktop application written partly in Rust and partly in another language passes these documents between the two, and generates the other language's types from the Rust ones, so that a change to a document can't leave the two disagreeing.
 
@@ -2178,11 +2178,23 @@ All of the following must hold:
 
 <a id="AC-266"></a>**Keeps each schema in a committed snapshot**
 
-The schemas of the `vet` and `check` reports, of an error, of the results of `init` and of managing tools, and of each validated string are committed as snapshots, so that a change to one fails its test until the new schema is reviewed and accepted.
+The schemas of the specification document, of the `vet` and `check` reports, of an error, of the results of `init` and of managing tools, and of each validated string are committed as snapshots, so that a change to one fails its test until the new schema is reviewed and accepted.
 
 <a id="AC-267"></a>**Has a schema for every type of the documents**
 
-Each type of the `check` report, the `vet` report, the invariants, warnings, and relations of a specification, and the problems of a project generates a root schema with a name of its own, and the schema of an invariant or a problem, which a document writes more beside, rejects a field it doesn't name.
+Each type of the specification document (its metadata and format version, its sections, requirements, acceptance criteria, glossary, and terms, and what a section contains), of the `check` report, the `vet` report, the invariants, warnings, and relations of a specification, and the problems of a project generates a root schema with a name of its own, and the schema of an invariant or a problem, which a document writes more beside, rejects a field it doesn't name.
+
+<a id="AC-268"></a>**Accepts every specification the library writes**
+
+The canonical example read from its JSON, YAML, and TOML files, this repository's own specification, and a new specification each validate against the schema of the specification document, as JSON, and so does the schema of an unvetted document, which is the same schema.
+
+<a id="AC-269"></a>**Rejects a specification the reader rejects**
+
+A specification with a node that has no `kind` or the wrong one, an optional field written as `null`, an array that is empty where it must be omitted, an element repeated in a set, a field the schema doesn't name, a malformed ID, a modality or refinement outside its keywords, empty Markdown, a missing required field, or a `formatVersion` other than `"1"` is rejected by the schema, and by the reader of the document.
+
+<a id="AC-270"></a>**Leaves the invariants of vetting to vetting**
+
+A specification with a dangling reference, a cycle, a requirement that is refined but has no `refinement`, or a `refinement` that nothing refines validates against the schema, which describes the grammar of a document and can't relate one node to another, and vetting reports each of them.
 
 <a id="REQ-107"></a>
 #### 3.3.1 Describes the vet and check reports
@@ -2208,7 +2220,7 @@ A `vet` or `check` document with an unknown field added to any object, any value
 <a id="REQ-108"></a>
 #### 3.3.2 Describes each validated string by its grammar
 
-The schema of each validated string, a specification name, a tool key, a title, a pin, a descriptor version, and the ID of a requirement, an acceptance criterion, a section, or a term, and a qualified requirement ID, MUST be a string with a pattern that accepts exactly the strings its parser reads, or, where no pattern says it exactly, one that rejects nothing the parser accepts and says what else it accepts.
+The schema of each validated string, a specification name, a tool key, a title, Markdown prose, a pin, a descriptor version, and the ID of a requirement, an acceptance criterion, a section, or a term, an ID that a `dependsOn` names, and a qualified requirement ID, MUST be a string with a pattern that accepts exactly the strings its parser reads, or, where no pattern says it exactly, one that rejects nothing the parser accepts and says what else it accepts.
 
 *Rationale:* A schema that described only a string's type would lose the grammar, and the program that generates types from it would accept what `slcr` rejects.
 

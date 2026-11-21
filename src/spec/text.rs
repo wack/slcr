@@ -114,6 +114,26 @@ impl From<Markdown> for String {
     }
 }
 
+/// Markdown is any string that isn't empty: the one rule its parser has.
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Markdown {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Markdown".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::Markdown").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "Non-empty, Markdown-formatted prose: a body, rationale, or definition.",
+            "minLength": 1,
+        })
+    }
+}
+
 impl Display for Markdown {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)

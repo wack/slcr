@@ -1,0 +1,11 @@
+---
+source: tests/library/schemas.rs
+expression: "pretty(&schema_of::<Markdown>())"
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Non-empty, Markdown-formatted prose: a body, rationale, or definition.",
+  "minLength": 1,
+  "title": "Markdown",
+  "type": "string"
+}

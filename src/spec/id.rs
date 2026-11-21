@@ -233,6 +233,32 @@ impl Serialize for DependencyId {
     }
 }
 
+/// A dependency's ID is a Section's or a Requirement's, in the spelling
+/// each has.
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for DependencyId {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "DependencyId".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::DependencyId").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::string(
+            "The ID of a section or a requirement, which a `dependsOn` names: `SEC-` or `REQ-` \
+             and then three digits, or four or more without a leading zero, of a number up to \
+             4294967295.",
+            &format!(
+                "^(?:{}|{})$",
+                crate::schema::id(<kind::Section as Kind>::PREFIX),
+                crate::schema::id(<kind::Requirement as Kind>::PREFIX)
+            ),
+        )
+    }
+}
+
 impl<'de> Deserialize<'de> for DependencyId {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
