@@ -21,6 +21,16 @@ pub const SCHEMA_URL: &str = "https://slcr.dev/reference/schemas/spec/v1.schema.
 /// JSON Schema and every invariant listed in its `x-vetInvariants`, other
 /// than those that are only warnings; see [SlcrRequirementsDocument::warnings].
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "SpecDocument",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null,
+        description = "One SLCR specification: a requirements document, stored as a graph. The `root` section holds a tree of sections and requirements in sibling order, and the `glossary` holds the terms. The cross edges `refines`, `dependsOn`, and `usesTerm` are ID references held on their source node. The schema describes the grammar of a document; the invariants it can't express (every reference names a node that exists, `refines` and `dependsOn` form no cycle, each requirement has a `refinement` exactly when another requirement refines it) are checked by vetting."
+    )
+)]
 #[serde(remote = "Self", rename_all = "camelCase", deny_unknown_fields)]
 pub struct SlcrRequirementsDocument {
     /// The JSON Schema this document claims to conform to.
@@ -34,6 +44,7 @@ pub struct SlcrRequirementsDocument {
     /// The version of the serialization format, not of the specification's
     /// content.
     format_version: FormatVersion,
+    /// Facts about the specification as a whole.
     spec: SpecMetadata,
     /// The top of the containment tree.
     root: Section,
@@ -153,6 +164,23 @@ impl Serialize for UnvettedDocument {
     }
 }
 
+/// An unvetted document is written as its document is, so it has its
+/// document's schema.
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for UnvettedDocument {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        <SlcrRequirementsDocument as schemars::JsonSchema>::schema_name()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        <SlcrRequirementsDocument as schemars::JsonSchema>::schema_id()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        <SlcrRequirementsDocument as schemars::JsonSchema>::json_schema(generator)
+    }
+}
+
 impl<'de> Deserialize<'de> for UnvettedDocument {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         // The inherent function `remote = "Self"` derives, which reads the
@@ -163,6 +191,7 @@ impl<'de> Deserialize<'de> for UnvettedDocument {
 
 /// The version of the serialization format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum FormatVersion {
     #[serde(rename = "1")]
     V1,
@@ -179,6 +208,8 @@ impl FormatVersion {
 
 /// Facts about the specification as a whole.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(deny_unknown_fields))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SpecMetadata {
     /// The qualifier in references such as `todo-api/REQ-002`.

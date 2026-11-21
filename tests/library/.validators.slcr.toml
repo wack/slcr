@@ -274,6 +274,18 @@ with = { target = "library", test = "schemas::ids_have_the_pattern_their_parser_
 requirement = "slcr/REQ-108"
 criterion = "AC-261"
 tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::dependency_ids_have_the_pattern_their_parser_enforces", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::markdown_has_the_rule_its_parser_enforces", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-108"
+criterion = "AC-261"
+tool = "cargo-insta-features"
 with = { target = "library", test = "schemas::qualified_requirement_ids_have_the_pattern_their_parser_enforces", features = "schemars" }
 
 [[validator]]
@@ -338,6 +350,96 @@ with = { target = "library", test = "schemas::the_string_schemas_are_snapshotted
 
 [[validator]]
 requirement = "slcr/REQ-106"
+criterion = "AC-266"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_is_snapshotted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
 criterion = "AC-267"
 tool = "cargo-insta-features"
 with = { target = "library", test = "schemas::every_type_of_the_documents_has_a_schema", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-268"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_accepts_every_document_the_library_writes", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-268"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_unvetted_document_schema_is_the_schema_of_its_document", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_a_node_without_a_kind", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_a_node_of_the_wrong_kind", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_an_optional_field_written_as_null", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_an_empty_array_that_must_be_omitted", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_a_set_with_a_repeated_element", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_an_unknown_property", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_a_malformed_id", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_a_modality_outside_the_enum", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_empty_markdown", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_a_format_version_other_than_one", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-269"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_rejects_a_document_missing_a_required_field", features = "schemars" }
+
+[[validator]]
+requirement = "slcr/REQ-106"
+criterion = "AC-270"
+tool = "cargo-insta-features"
+with = { target = "library", test = "schemas::the_spec_document_schema_leaves_the_invariants_to_vetting", features = "schemars" }

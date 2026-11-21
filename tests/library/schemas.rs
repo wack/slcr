@@ -14,15 +14,17 @@ use schemars::{JsonSchema, SchemaGenerator};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 use slcr::check::Report as CheckReport;
+use slcr::spec::id::DependencyId;
+use slcr::spec::text::Markdown;
 use slcr::vet::{self, ErrorJson};
 use slcr::{
     CriterionId, DescriptorStore, DescriptorVersion, Fetcher, Format, Initialized, Installed,
-    Manifest, Pin, Project, RequirementId, SectionId, SpecName, TermId, Title, ToolAdded, ToolKey,
-    ToolRemoved, ToolUpdated, UnvettedDocument,
+    Manifest, Pin, Project, RequirementId, SectionId, SlcrRequirementsDocument, SpecName, TermId,
+    Title, ToolAdded, ToolKey, ToolRemoved, ToolUpdated, UnvettedDocument,
 };
 use tempfile::TempDir;
 
-use super::{TODO_API_YAML, block_on};
+use super::{TODO_API_JSON, TODO_API_TOML, TODO_API_YAML, block_on};
 
 /// The schema of `T`, as a program that generates types gets it with
 /// `schema_for!`, which is the schema of how `T` is read.
@@ -717,8 +719,13 @@ fn assert_rejects_every_corruption(
 
 #[test]
 fn every_type_of_the_documents_has_a_schema() {
+    use slcr::FormatVersion;
     use slcr::check;
-    use slcr::spec::node::Modality;
+    use slcr::spec::graph::SpecMetadata;
+    use slcr::spec::node::{
+        AcceptanceCriterion, Glossary, Modality, Refinement, Requirement, Section, SectionChild,
+        Term,
+    };
     use slcr::spec::vet::{Finding, Relation, Violation, Warning};
 
     // Each is a root that a program can generate a type from, whatever
@@ -747,6 +754,18 @@ fn every_type_of_the_documents_has_a_schema() {
         schema_of::<Warning>(),
         schema_of::<Relation>(),
         schema_of::<Finding<'static>>(),
+        schema_of::<SlcrRequirementsDocument>(),
+        schema_of::<SpecMetadata>(),
+        schema_of::<FormatVersion>(),
+        schema_of::<Section>(),
+        schema_of::<SectionChild>(),
+        schema_of::<Requirement>(),
+        schema_of::<Refinement>(),
+        schema_of::<AcceptanceCriterion>(),
+        schema_of::<Glossary>(),
+        schema_of::<Term>(),
+        schema_of::<Markdown>(),
+        schema_of::<DependencyId>(),
     ];
     let titles: std::collections::BTreeSet<&str> = schemas
         .iter()
@@ -1277,25 +1296,28 @@ fn id_samples(prefix: &str) -> Vec<String> {
     samples
 }
 
+/// The numbers of an ID that its parser reads.
+const ACCEPTED_ID_NUMBERS: [&str; 10] = [
+    "000",
+    "001",
+    "042",
+    "999",
+    "1000",
+    "1001",
+    "12345",
+    "999999999",
+    "1000000000",
+    "4294967295",
+];
+
 #[track_caller]
 fn assert_ids_agree<T: JsonSchema + DeserializeOwned>(prefix: &str) {
     let samples = id_samples(prefix);
     let borrowed: Vec<&str> = samples.iter().map(String::as_str).collect();
-    let accepted: Vec<String> = [
-        "000",
-        "001",
-        "042",
-        "999",
-        "1000",
-        "1001",
-        "12345",
-        "999999999",
-        "1000000000",
-        "4294967295",
-    ]
-    .iter()
-    .map(|n| format!("{prefix}-{n}"))
-    .collect();
+    let accepted: Vec<String> = ACCEPTED_ID_NUMBERS
+        .iter()
+        .map(|n| format!("{prefix}-{n}"))
+        .collect();
     let accepted: Vec<&str> = accepted.iter().map(String::as_str).collect();
     assert_pattern_agrees::<T>(&borrowed, &accepted);
 }
@@ -1306,6 +1328,30 @@ fn ids_have_the_pattern_their_parser_enforces() {
     assert_ids_agree::<CriterionId>("AC");
     assert_ids_agree::<SectionId>("SEC");
     assert_ids_agree::<TermId>("TERM");
+}
+
+#[test]
+fn markdown_has_the_rule_its_parser_enforces() {
+    // Prose is any string that isn't empty, however little it holds.
+    let samples = ["a", " ", "\n", "# Heading\n\nProse.", "é", "", "\u{0}"];
+    let accepted = ["a", " ", "\n", "# Heading\n\nProse.", "é", "\u{0}"];
+    assert_pattern_agrees::<Markdown>(&samples, &accepted);
+}
+
+#[test]
+fn dependency_ids_have_the_pattern_their_parser_enforces() {
+    // A dependency is a section's ID or a requirement's, and no other.
+    let samples: Vec<String> = ["SEC", "REQ", "TERM", "AC"]
+        .into_iter()
+        .flat_map(id_samples)
+        .collect();
+    let samples: Vec<&str> = samples.iter().map(String::as_str).collect();
+    let accepted: Vec<String> = ["SEC", "REQ"]
+        .into_iter()
+        .flat_map(|prefix| ACCEPTED_ID_NUMBERS.map(|number| format!("{prefix}-{number}")))
+        .collect();
+    let accepted: Vec<&str> = accepted.iter().map(String::as_str).collect();
+    assert_pattern_agrees::<DependencyId>(&samples, &accepted);
 }
 
 #[test]
@@ -1744,6 +1790,399 @@ fn slcr_help(error: &dyn miette::Diagnostic) -> Option<String> {
     error.help().map(|help| help.to_string())
 }
 
+// The specification document
+
+/// The specifications the schema describes, as the library writes them
+/// as JSON, by name: the canonical example read from each of its formats,
+/// the repository's own specification, and a new one.
+fn spec_documents() -> Vec<(String, Value)> {
+    fn json(document: &SlcrRequirementsDocument) -> Value {
+        serde_json::to_value(document).unwrap()
+    }
+    let read = |format: Format, path: &str, source: &str| -> SlcrRequirementsDocument {
+        format
+            .parse(Path::new(path), source.to_owned())
+            .unwrap_or_else(|error| panic!("{path}: {error:?}"))
+    };
+    let own = include_str!("../../SPEC.slcr.toml");
+    let new = SlcrRequirementsDocument::new(
+        spec_name("new-spec"),
+        Title::try_from("A new specification".to_owned()).unwrap(),
+    );
+    vec![
+        (
+            "todo-api.spec.json".to_owned(),
+            json(&read(Format::Json, "todo-api.spec.json", TODO_API_JSON)),
+        ),
+        (
+            "todo-api.spec.yaml".to_owned(),
+            json(&read(Format::Yaml, "todo-api.spec.yaml", TODO_API_YAML)),
+        ),
+        (
+            "todo-api.spec.toml".to_owned(),
+            json(&read(Format::Toml, "todo-api.spec.toml", TODO_API_TOML)),
+        ),
+        (
+            "SPEC.slcr.toml".to_owned(),
+            json(&read(Format::Toml, "SPEC.slcr.toml", own)),
+        ),
+        ("a new document".to_owned(), json(&new)),
+    ]
+}
+
+/// The canonical example, as the JSON the library writes.
+fn todo_api() -> Value {
+    spec_documents().remove(0).1
+}
+
+#[test]
+fn the_spec_document_schema_accepts_every_document_the_library_writes() {
+    let schema = schema_of::<SlcrRequirementsDocument>();
+    let validator = validator(&schema);
+    let documents = spec_documents();
+    assert_eq!(documents.len(), 5);
+    for (name, document) in &documents {
+        assert_valid(&validator, document, name);
+        // The same JSON, read without vetting, is what the document is.
+        let unvetted: UnvettedDocument = serde_json::from_value(document.clone()).unwrap();
+        assert_eq!(
+            &serde_json::to_value(&unvetted).unwrap(),
+            document,
+            "{name}"
+        );
+    }
+    // Between them, the documents use every optional field and keyword the
+    // format has, or they would not tell a schema that left one out from
+    // one that has it.
+    for needle in [
+        "\"$schema\"",
+        "\"rationale\"",
+        "\"refinement\"",
+        "\"refines\"",
+        "\"dependsOn\"",
+        "\"usesTerm\"",
+        "\"acceptanceCriteria\"",
+        "\"aliases\"",
+        "\"terms\"",
+        "\"MUST NOT\"",
+    ] {
+        assert!(
+            documents
+                .iter()
+                .any(|(_, document)| document.to_string().contains(needle)),
+            "no document has {needle}"
+        );
+    }
+}
+
+#[test]
+fn the_unvetted_document_schema_is_the_schema_of_its_document() {
+    assert_eq!(
+        schema_of::<UnvettedDocument>(),
+        schema_of::<SlcrRequirementsDocument>()
+    );
+    let validator = validator(&schema_of::<UnvettedDocument>());
+    for (name, document) in spec_documents() {
+        assert_valid(&validator, &document, &name);
+    }
+}
+
+/// The canonical example, corrupted by `corrupt`, which the schema rejects
+/// and so does the reader of the document.
+#[track_caller]
+fn assert_spec_rejected(corrupt: impl FnOnce(&mut Value)) {
+    let validator = validator(&schema_of::<SlcrRequirementsDocument>());
+    let mut document = todo_api();
+    assert!(validator.is_valid(&document));
+    corrupt(&mut document);
+    assert!(
+        !validator.is_valid(&document),
+        "the schema accepts {}",
+        pretty(&document)
+    );
+    // The grammar is the reader's, so the two never disagree.
+    assert!(
+        serde_json::from_value::<UnvettedDocument>(document).is_err(),
+        "the reader accepts what the schema rejects"
+    );
+}
+
+/// REQ-001, a requirement with `children`, in the canonical example.
+const ENDPOINT: &str = "/root/children/0/children/0";
+/// REQ-005, which depends on REQ-001 and REQ-007.
+const CONTROLLER: &str = "/root/children/1/children/0";
+/// REQ-007, which uses a term and has an acceptance criterion.
+const TABLE: &str = "/root/children/2/children/0";
+
+#[test]
+fn the_spec_document_schema_rejects_a_node_without_a_kind() {
+    for node in [
+        "/root",
+        "/glossary",
+        ENDPOINT,
+        &format!("{TABLE}/acceptanceCriteria/0"),
+        "/glossary/terms/0",
+    ] {
+        assert_spec_rejected(|document| {
+            document
+                .pointer_mut(node)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove("kind");
+        });
+    }
+}
+
+#[test]
+fn the_spec_document_schema_rejects_a_node_of_the_wrong_kind() {
+    for (node, kind) in [
+        ("/root", "requirement"),
+        ("/root", "Section"),
+        ("/glossary", "term"),
+        (ENDPOINT, "section"),
+        (ENDPOINT, "acceptanceCriterion"),
+        (&format!("{TABLE}/acceptanceCriteria/0"), "requirement"),
+        ("/glossary/terms/0", "section"),
+    ] {
+        assert_spec_rejected(|document| document.pointer_mut(node).unwrap()["kind"] = json!(kind));
+    }
+}
+
+#[test]
+fn the_spec_document_schema_rejects_an_optional_field_written_as_null() {
+    for (node, field) in [
+        ("", "$schema"),
+        ("/root", "body"),
+        ("/root", "usesTerm"),
+        ("/root", "children"),
+        ("/glossary", "terms"),
+        (ENDPOINT, "rationale"),
+        (ENDPOINT, "refinement"),
+        (ENDPOINT, "refines"),
+        (ENDPOINT, "dependsOn"),
+        (ENDPOINT, "usesTerm"),
+        (ENDPOINT, "acceptanceCriteria"),
+        (ENDPOINT, "children"),
+        ("/glossary/terms/0", "aliases"),
+    ] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(node).unwrap()[field] = Value::Null;
+        });
+    }
+}
+
+#[test]
+fn the_spec_document_schema_rejects_an_empty_array_that_must_be_omitted() {
+    for (node, field) in [
+        ("/root", "usesTerm"),
+        ("/root", "children"),
+        ("/glossary", "terms"),
+        (ENDPOINT, "refines"),
+        (ENDPOINT, "dependsOn"),
+        (ENDPOINT, "usesTerm"),
+        (ENDPOINT, "acceptanceCriteria"),
+        (ENDPOINT, "children"),
+        ("/glossary/terms/0", "aliases"),
+    ] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(node).unwrap()[field] = json!([]);
+        });
+    }
+}
+
+#[test]
+fn the_spec_document_schema_rejects_a_set_with_a_repeated_element() {
+    for (node, field, repeated) in [
+        ("/root", "usesTerm", "TERM-001"),
+        (ENDPOINT, "refines", "REQ-002"),
+        (ENDPOINT, "dependsOn", "SEC-002"),
+        (ENDPOINT, "dependsOn", "REQ-002"),
+        (ENDPOINT, "usesTerm", "TERM-001"),
+        ("/glossary/terms/0", "aliases", "Item"),
+    ] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(node).unwrap()[field] = json!([repeated, repeated]);
+        });
+    }
+    // Whether an element repeats is not about the first two.
+    assert_spec_rejected(|document| {
+        document.pointer_mut(CONTROLLER).unwrap()["dependsOn"] =
+            json!(["REQ-001", "REQ-007", "REQ-001"]);
+    });
+}
+
+#[test]
+fn the_spec_document_schema_rejects_an_unknown_property() {
+    for node in [
+        "",
+        "/spec",
+        "/root",
+        "/glossary",
+        ENDPOINT,
+        &format!("{TABLE}/acceptanceCriteria/0"),
+        "/glossary/terms/0",
+        // Deep in the tree, in a node that only `$ref`s reach.
+        "/root/children/0/children/0/children/0/children/0",
+    ] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(node).unwrap()["unknownField"] = json!(true);
+        });
+    }
+}
+
+#[test]
+fn the_spec_document_schema_rejects_a_malformed_id() {
+    for (node, field, id) in [
+        ("/root", "id", "SEC-1"),
+        ("/root", "id", "REQ-001"),
+        ("/glossary", "id", "SEC-0001"),
+        (ENDPOINT, "id", "REQ-1"),
+        (ENDPOINT, "id", "req-001"),
+        (&format!("{TABLE}/acceptanceCriteria/0"), "id", "AC-01"),
+        ("/glossary/terms/0", "id", "TERM-4294967296"),
+    ] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(node).unwrap()[field] = json!(id);
+        });
+    }
+    for (field, id) in [
+        ("refines", "REQ-1"),
+        ("refines", "SEC-001"),
+        ("dependsOn", "TERM-001"),
+        ("dependsOn", "AC-001"),
+        ("dependsOn", "REQ-0001"),
+        ("usesTerm", "REQ-001"),
+    ] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(ENDPOINT).unwrap()[field] = json!([id]);
+        });
+    }
+}
+
+#[test]
+fn the_spec_document_schema_rejects_a_modality_outside_the_enum() {
+    for modality in ["must", "MAYBE", "MUST_NOT", "", " MUST"] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(ENDPOINT).unwrap()["modality"] = json!(modality);
+        });
+    }
+    assert_spec_rejected(|document| {
+        document.pointer_mut(ENDPOINT).unwrap()["modality"] = json!(1);
+    });
+    assert_spec_rejected(|document| {
+        document
+            .pointer_mut(ENDPOINT)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove("modality");
+    });
+    // A refinement is a keyword too.
+    assert_spec_rejected(|document| {
+        document.pointer_mut(ENDPOINT).unwrap()["refinement"] = json!("NAND");
+    });
+}
+
+#[test]
+fn the_spec_document_schema_rejects_empty_markdown() {
+    for (node, field) in [
+        ("/root", "body"),
+        (ENDPOINT, "body"),
+        (ENDPOINT, "rationale"),
+        (&format!("{TABLE}/acceptanceCriteria/0"), "body"),
+        ("/glossary", "body"),
+        ("/glossary/terms/0", "definition"),
+    ] {
+        assert_spec_rejected(|document| {
+            document.pointer_mut(node).unwrap()[field] = json!("");
+        });
+    }
+}
+
+#[test]
+fn the_spec_document_schema_rejects_a_format_version_other_than_one() {
+    for version in [json!("2"), json!("1.0"), json!(""), json!(1), json!(null)] {
+        assert_spec_rejected(|document| document["formatVersion"] = version);
+    }
+    assert_spec_rejected(|document| {
+        document.as_object_mut().unwrap().remove("formatVersion");
+    });
+}
+
+#[test]
+fn the_spec_document_schema_rejects_a_document_missing_a_required_field() {
+    for field in ["formatVersion", "spec", "root", "glossary"] {
+        assert_spec_rejected(|document| {
+            document.as_object_mut().unwrap().remove(field);
+        });
+    }
+    for (node, field) in [
+        ("/spec", "name"),
+        ("/root", "id"),
+        ("/root", "title"),
+        (ENDPOINT, "body"),
+        (ENDPOINT, "title"),
+        ("/glossary/terms/0", "definition"),
+    ] {
+        assert_spec_rejected(|document| {
+            document
+                .pointer_mut(node)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+        });
+    }
+}
+
+/// A way to break an invariant of a document.
+type Break = fn(&mut Value);
+
+// The schema describes a document's grammar and nothing more. The
+// invariants of vetting relate one node to another (every reference names
+// a node that exists, `refines` and `dependsOn` form no cycle, a
+// requirement has a `refinement` exactly when another one refines it, and
+// the glossary's terms are in ID order), which JSON Schema can't say, so a
+// document that breaks one is valid to the schema, and vetting is what
+// finds it.
+#[test]
+fn the_spec_document_schema_leaves_the_invariants_to_vetting() {
+    let validator = validator(&schema_of::<SlcrRequirementsDocument>());
+    let breaks: [(&str, Break); 4] = [
+        ("a dangling reference", |document| {
+            document.pointer_mut(CONTROLLER).unwrap()["dependsOn"] = json!(["REQ-099"]);
+        }),
+        ("a cycle", |document| {
+            document.pointer_mut(ENDPOINT).unwrap()["refines"] = json!(["REQ-002"]);
+        }),
+        ("a refinement nothing refines", |document| {
+            document.pointer_mut(TABLE).unwrap()["refinement"] = json!("AND");
+        }),
+        ("a requirement refined without a refinement", |document| {
+            document
+                .pointer_mut(ENDPOINT)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove("refinement");
+        }),
+    ];
+    for (name, break_it) in breaks {
+        let mut document = todo_api();
+        break_it(&mut document);
+        assert_valid(&validator, &document, name);
+        // The reader of the grammar accepts it, and finds what is wrong.
+        let unvetted: UnvettedDocument = serde_json::from_value(document.clone()).unwrap();
+        assert!(!unvetted.report().violations().is_empty(), "{name}");
+        // Reading it as a vetted document fails.
+        assert!(
+            serde_json::from_value::<SlcrRequirementsDocument>(document).is_err(),
+            "{name}"
+        );
+    }
+}
+
 // The schemas themselves, for review when one changes.
 
 #[test]
@@ -1770,6 +2209,11 @@ fn the_tool_result_schemas_are_snapshotted() {
 }
 
 #[test]
+fn the_spec_document_schema_is_snapshotted() {
+    insta::assert_snapshot!(pretty(&schema_of::<SlcrRequirementsDocument>()));
+}
+
+#[test]
 fn the_init_result_schema_is_snapshotted() {
     insta::assert_snapshot!(pretty(&schema_of::<Initialized>()));
 }
@@ -1785,4 +2229,6 @@ fn the_string_schemas_are_snapshotted() {
     insta::assert_snapshot!("criterion_id", pretty(&schema_of::<CriterionId>()));
     insta::assert_snapshot!("section_id", pretty(&schema_of::<SectionId>()));
     insta::assert_snapshot!("term_id", pretty(&schema_of::<TermId>()));
+    insta::assert_snapshot!("markdown", pretty(&schema_of::<Markdown>()));
+    insta::assert_snapshot!("dependency_id", pretty(&schema_of::<DependencyId>()));
 }

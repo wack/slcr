@@ -56,6 +56,16 @@ tagged!(Term, "term");
 /// Document structure and freeform prose: preambles, background, and
 /// motivation. A Section groups other nodes and has no satisfaction value.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "Section",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null,
+        transform = crate::schema::tagged("kind", "section"),
+    )
+)]
 #[serde(
     remote = "Self",
     tag = "kind",
@@ -64,8 +74,11 @@ tagged!(Term, "term");
     deny_unknown_fields
 )]
 pub struct Section {
+    /// The section's ID, unique in the specification.
     id: SectionId,
+    /// The heading of the section.
     title: Title,
+    /// Prose introducing the section.
     #[serde(
         default,
         deserialize_with = "optional::some",
@@ -73,6 +86,10 @@ pub struct Section {
     )]
     body: Option<Markdown>,
     /// Terms whose definitions this node's slice pulls in.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(extend("minItems" = 1, "uniqueItems" = true))
+    )]
     #[serde(
         default,
         deserialize_with = "optional::non_empty_set",
@@ -80,6 +97,7 @@ pub struct Section {
     )]
     uses_term: Vec<TermId>,
     /// Contained Sections and Requirements, in document order.
+    #[cfg_attr(feature = "schemars", schemars(extend("minItems" = 1)))]
     #[serde(
         default,
         deserialize_with = "optional::non_empty",
@@ -103,6 +121,14 @@ impl Section {
 
 /// A node contained by a [Section].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        untagged,
+        description = "A node contained by a section: a section or a requirement, told apart by its `kind`."
+    )
+)]
 pub enum SectionChild {
     Section(Section),
     Requirement(Requirement),
@@ -149,6 +175,16 @@ impl Serialize for SectionChild {
 
 /// A satisfiable statement.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "Requirement",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null,
+        transform = crate::schema::tagged("kind", "requirement"),
+    )
+)]
 #[serde(
     remote = "Self",
     tag = "kind",
@@ -157,16 +193,20 @@ impl Serialize for SectionChild {
     deny_unknown_fields
 )]
 pub struct Requirement {
+    /// The requirement's ID, unique in the specification.
     id: RequirementId,
+    /// A short name for the requirement.
     title: Title,
     /// The primary statement, which should contain the modality keyword.
     body: Markdown,
+    /// Why the requirement exists.
     #[serde(
         default,
         deserialize_with = "optional::some",
         skip_serializing_if = "Option::is_none"
     )]
     rationale: Option<Markdown>,
+    /// The requirement level of the statement.
     modality: Modality,
     /// How the requirements that refine this one combine. Present exactly
     /// when at least one requirement refines this one.
@@ -178,6 +218,10 @@ pub struct Requirement {
     refinement: Option<Refinement>,
     /// Requirements this one helps satisfy. Always explicit: nesting never
     /// implies refinement.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(extend("minItems" = 1, "uniqueItems" = true))
+    )]
     #[serde(
         default,
         deserialize_with = "optional::non_empty_set",
@@ -186,6 +230,10 @@ pub struct Requirement {
     refines: Vec<RequirementId>,
     /// Requirements or Sections needed to understand or implement this one.
     /// Context only; never affects satisfaction.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(extend("minItems" = 1, "uniqueItems" = true))
+    )]
     #[serde(
         default,
         deserialize_with = "optional::non_empty_set",
@@ -193,6 +241,10 @@ pub struct Requirement {
     )]
     depends_on: Vec<DependencyId>,
     /// Terms whose definitions this node's slice pulls in.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(extend("minItems" = 1, "uniqueItems" = true))
+    )]
     #[serde(
         default,
         deserialize_with = "optional::non_empty_set",
@@ -200,6 +252,7 @@ pub struct Requirement {
     )]
     uses_term: Vec<TermId>,
     /// Advisory statements of what done looks like, in order.
+    #[cfg_attr(feature = "schemars", schemars(extend("minItems" = 1)))]
     #[serde(
         default,
         deserialize_with = "optional::non_empty",
@@ -208,6 +261,7 @@ pub struct Requirement {
     acceptance_criteria: Vec<AcceptanceCriterion>,
     /// Contained Requirements, in document order. Containment only: a child
     /// refines this requirement only if its `refines` says so.
+    #[cfg_attr(feature = "schemars", schemars(extend("minItems" = 1)))]
     #[serde(
         default,
         deserialize_with = "optional::non_empty",
@@ -253,6 +307,7 @@ impl Display for Modality {
 
 /// How the requirements that refine a requirement combine to satisfy it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Refinement {
     And,
@@ -280,6 +335,16 @@ impl Display for Refinement {
 /// A speculative, advisory statement of what done looks like for its
 /// containing requirement. It asserts nothing.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "AcceptanceCriterion",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null,
+        transform = crate::schema::tagged("kind", "acceptanceCriterion"),
+    )
+)]
 #[serde(
     remote = "Self",
     tag = "kind",
@@ -288,7 +353,9 @@ impl Display for Refinement {
     deny_unknown_fields
 )]
 pub struct AcceptanceCriterion {
+    /// The criterion's ID, unique in the specification.
     id: CriterionId,
+    /// A short name for the criterion.
     title: Title,
     /// May contain a formal sketch in a code block; the engine never reads it.
     body: Markdown,
@@ -297,6 +364,16 @@ pub struct AcceptanceCriterion {
 /// The auto-created Glossary Section. It contains every Term and nothing
 /// else, and is logically the root's last child.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "Glossary",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null,
+        transform = crate::schema::tagged("kind", "section"),
+    )
+)]
 #[serde(
     remote = "Self",
     tag = "kind",
@@ -305,8 +382,11 @@ pub struct AcceptanceCriterion {
     deny_unknown_fields
 )]
 pub struct Glossary {
+    /// The Glossary's ID, a section ID unique in the specification.
     id: SectionId,
+    /// The Glossary's heading, `Glossary` unless the document renames it.
     title: Title,
+    /// Prose introducing the Glossary.
     #[serde(
         default,
         deserialize_with = "optional::some",
@@ -314,6 +394,7 @@ pub struct Glossary {
     )]
     body: Option<Markdown>,
     /// Serialized in ID order; rendered alphabetically by title.
+    #[cfg_attr(feature = "schemars", schemars(extend("minItems" = 1)))]
     #[serde(
         default,
         deserialize_with = "optional::non_empty",
@@ -339,6 +420,16 @@ impl Glossary {
 
 /// A glossary entry.
 #[derive(Clone, Debug, PartialEq, Eq, Getters, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(
+        rename = "Term",
+        deny_unknown_fields,
+        transform = crate::schema::omitted_not_null,
+        transform = crate::schema::tagged("kind", "term"),
+    )
+)]
 #[serde(
     remote = "Self",
     tag = "kind",
@@ -347,14 +438,22 @@ impl Glossary {
     deny_unknown_fields
 )]
 pub struct Term {
+    /// The term's ID, unique in the specification.
     id: TermId,
+    /// The term as the specification names it.
     title: Title,
+    /// Other names for the term.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(extend("minItems" = 1, "uniqueItems" = true))
+    )]
     #[serde(
         default,
         deserialize_with = "optional::non_empty_set",
         skip_serializing_if = "Vec::is_empty"
     )]
     aliases: Vec<Title>,
+    /// What the term means.
     definition: Markdown,
 }
 
